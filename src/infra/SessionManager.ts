@@ -1,5 +1,5 @@
-import { ISessionManager } from '../../interfaces/infra/ISessionManager';
-import { ISession } from '../../interfaces/session/ISession';
+import type { ISessionManager } from '../../interfaces/infra/ISessionManager';
+import type { ISession } from '../../interfaces/session/ISession';
 import { BaseSession } from '../session/BaseSession';
 
 /**
@@ -55,5 +55,16 @@ export class SessionManager implements ISessionManager {
   deleteSession(id: string): void {
     console.log(`[SessionManager] Deleting session: ${id}`);
     this.sessions.delete(id);
+  }
+
+  /**
+   * 獲取當前所有活動中的會話
+   */
+  getActiveSessions(): Record<string, ISession> {
+    const result: Record<string, ISession> = {};
+    this.sessions.forEach((session, id) => {
+      result[id] = session;
+    });
+    return result;
   }
 }

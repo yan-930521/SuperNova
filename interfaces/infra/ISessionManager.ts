@@ -1,4 +1,4 @@
-import { ISession } from '../session/ISession';
+import type { ISession } from '../session/ISession';
 
 /**
  * 會話生命週期管理器
@@ -28,4 +28,9 @@ export interface ISessionManager {
    * @param id 會話 ID
    */
   deleteSession(id: string): void;
+
+  /**
+   * 獲取當前所有活動中的會話
+   */
+  getActiveSessions(): Record<string, ISession>;
 }
