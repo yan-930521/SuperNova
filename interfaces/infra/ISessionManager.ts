@@ -16,4 +16,16 @@ export interface ISessionManager {
    * @param snapshot 序列化後的會話快照
    */
   restoreFromSnapshot(snapshot: string): Promise<ISession>;
+
+  /**
+   * 獲取指定 ID 的會話
+   * @param id 會話 ID
+   */
+  getSession(id: string): ISession | undefined;
+
+  /**
+   * 刪除指定 ID 的會話
+   * @param id 會話 ID
+   */
+  deleteSession(id: string): void;
 }

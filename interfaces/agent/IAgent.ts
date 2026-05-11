@@ -7,8 +7,10 @@ import { IMutationRequest } from '../models/IMutationRequest';
 export interface IAgent {
   /** Agent 唯一識別碼 */
   id: string;
-  /** Agent 的角色名稱 (靜態確定) */
+  /** Agent 的角色名稱 */
   role: string;
+  /** Agent 具備的能力標籤 */
+  readonly capabilities: string[];
 
   /** 
    * 接收並處理分派的任務 
