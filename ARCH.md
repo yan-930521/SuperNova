@@ -31,8 +31,8 @@ SESSION LAYER (EXECUTION CONTEXT)
 │   ├── Goal
 │   │   → 任務初始輸入（玩家 / 系統）
 │   │
-│   ├── ContextView
-│   │   → Session 可見世界狀態切片（受 Scope 控制）
+│   ├── ContextView (Memory Tiering & Compression)
+│   │   → 混合記憶體機制：Active Context (最近摘要指針) + Checkpoint Archive (關鍵任務節點強制歸檔)
 │   │
 │   ├── TaskGraph (DAG)
 │   │   → 任務拆解結構（Planner 產生）
@@ -46,8 +46,8 @@ SESSION LAYER (EXECUTION CONTEXT)
 │   ├── MutationPolicy
 │   │   → 控制 Agent 是否可修改 Hook / Event 行為
 │   │
-│   ├── OpLog
-│   │   → 用於追蹤因果鏈
+│   ├── OpLog (Periodic Compression)
+│   │   → 週期性壓縮 Operation Log 為結構化摘要，確保上下文效率
 │   │
 │   ├── ReadyQueue
 │   │   → 用於並行調度
@@ -55,8 +55,31 @@ SESSION LAYER (EXECUTION CONTEXT)
 │   ├── MutationBuffer
 │   │   → 用於暫存修改請求
 │   │
+│   ├── SnapshotManager (Strict Rollback Recovery)
+│   │   → 基於快照的強一致性恢復策略；當發生不可修復錯誤時，自動 Rollback 到最近一個 Task 完成點
+│   │
 │   └── SessionRuntime
 │       → Session tick 執行核心循環
+
+---
+
+MIDDLEWARE PIPELINE (中間件流水線)
+│
+├── ExecutionChain
+│   → 所有核心行為（Tool 調用、Mutation 提交）必須經過一個由 Vertical System 或插件註冊的處理鏈
+│
+├── Interceptors (攔截點)
+│   ├── Pre-Execution
+│   │   → 負責 Input 預檢、安全評估及初始日誌記錄
+│   │
+│   ├── Post-Execution
+│   │   → 負責結果轉換、Data-Only Output 表現分離處理
+│   │
+│   └── Error-Handling
+│       → 負責異常捕獲、重試邏輯及觸發 Rollback 策略
+│
+└── Registration
+    → 允許動態掛載領域特定的中間件邏輯
 
 ---
 
@@ -96,8 +119,11 @@ AGENT LAYER (EXECUTION CORE)
 ├── ManagerAgent
 │   → 管理 Worker 群組執行狀態
 │
-└── WorkerAgent
-    → 最底層執行單位（只執行 Task → Intent → Tool）
+└── WorkerAgent (Specialized Identities)
+    → 最底層執行單位（執行 Task → Intent → Tool）
+    │
+    └── Specialized Identity (專職化身份)
+        → 不同角色的 Worker 為獨立的特化物件（如 CoderAgent, ResearcherAgent），具備特定的能力集與行為邏輯，由系統根據 Task 類型進行精確分配。
 
 ---
 
@@ -182,8 +208,17 @@ CAPABILITY & TOOL SYSTEM
 ├── ToolSet
 │   → 分配給 Worker 的工具子集
 │
-└── Tool
+└── Tool (Tool Dimensions)
     → 最底層執行單元（Move / Compute / Query / Act）
+    │
+    ├── Input Validation
+    │   → 具備 Schema 驗證與邏輯預檢，確保調用參數合法性
+    │
+    ├── Safety Tiering (風險評級)
+    │   → 分為 TIER_1 (Read-Only), TIER_2 (Side-Effect), TIER_3 (Destructive)
+    │
+    ├── Data-Only Output
+    │   → 核心 Tool 只輸出純數據結構，由 Middleware 負責表現分離
     │
     └── Guardian Interface (穩定性守護接口)
         ├── Timeout Control
@@ -229,14 +264,17 @@ RUNTIME LOOP
 ├── Dispatch Phase
 │   → 分配 Task 給 Agent
 │
-├── Execution Phase
-│   → 從 Ready Queue 中並行分發任務給 WorkerAgent 執行對應 Tool
+├── Execution Phase (Middleware Integrated)
+│   → 任務執行流：Intent → Pre-Execution Middleware → Tool Execution → Post-Execution Middleware
 │
 ├── Event Processing Phase
 │   → Event → Hook → Action
 │
 ├── Mutation Phase
-│   → 裁決流程：Mutation Request → MutationValidator (靜態檢測) → CoordinatorAgent (動態衝突裁決) → RootAgent (升級裁決)
+│   → 裁決流程：Mutation Request → MutationValidator → CoordinatorAgent → RootAgent
+│
+├── Recovery Phase (Strict Rollback)
+│   → 若發生不可修復異常，觸發 SnapshotManager 回退到最近一個 Task 快照點
 │
 └── Aggregation Phase
-    → 結果回寫 Session 狀態
+    → 結果回寫 Session 狀態，並觸發 OpLog 週期性壓縮摘要
