@@ -93,7 +93,21 @@ export class BaseSession implements ISession {
             metadata: metadata
           },
           async () => {
-            // 中間件鏈結點：如果所有中間件都調用了 next()，則視為執行成功
+            // 中間件鏈結點：執行實際的 Agent 委派
+            if (this.agentRegistry) {
+              const role = metadata.assignedRole || 'default';
+              const agent = this.agentRegistry.getAgent(role);
+              
+              if (agent && 'executeIntent' in agent) {
+                console.log(`[BaseSession] Delegating task ${id} to agent ${agent.id} (role: ${role})`);
+                await (agent as any).executeIntent({
+                  toolName: metadata.type || 'default',
+                  input: metadata
+                });
+              } else {
+                console.warn(`[BaseSession] No suitable worker agent found for role: ${role}. Task ${id} executed via middleware only.`);
+              }
+            }
             console.log(`[BaseSession] Tool execution completed for task: ${id}`);
           }
         );
