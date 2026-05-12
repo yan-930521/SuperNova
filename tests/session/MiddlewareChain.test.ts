@@ -1,5 +1,5 @@
 import { MiddlewareChain } from '../../src/session/MiddlewareChain';
-import { IMiddlewareContext } from '../../interfaces/session/IMiddleware';
+import type { IMiddlewareContext } from '../../interfaces/session/IMiddleware';
 
 describe('MiddlewareChain', () => {
   test('should execute middlewares in order', async () => {

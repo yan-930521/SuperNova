@@ -1,0 +1,15 @@
+{
+  "runtime": {
+    "tick_rate_ms": 100,
+    "max_active_sessions": 10
+  },
+  "observability": {
+    "mode": "DEVELOPMENT",
+    "enable_tracing": true,
+    "oplog_compression_threshold": 100
+  },
+  "security": {
+    "default_tool_timeout_ms": 30000,
+    "allow_tier_3_tools": false
+  }
+}

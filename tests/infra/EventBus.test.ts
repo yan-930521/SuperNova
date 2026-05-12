@@ -1,5 +1,5 @@
 import { EventBus } from '../../src/infra/EventBus';
-import { IEvent } from '../../interfaces/models/IEvent';
+import type { IEvent } from '../../interfaces/models/IEvent';
 
 describe('EventBus', () => {
   let eventBus: EventBus;

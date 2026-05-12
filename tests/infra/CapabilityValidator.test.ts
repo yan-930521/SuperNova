@@ -1,6 +1,6 @@
 import { CapabilityValidator } from '../../src/infra/CapabilityValidator';
-import { IAgent } from '../../interfaces/agent/IAgent';
-import { ITool } from '../../interfaces/tool/ITool';
+import type { IAgent } from '../../interfaces/agent/IAgent';
+import type { ITool } from '../../interfaces/tool/ITool';
 
 describe('CapabilityValidator', () => {
   // 建立 Mock 工具
@@ -16,6 +16,7 @@ describe('CapabilityValidator', () => {
   // 建立 Mock Agent
   const createMockAgent = (id: string, caps: string[]): IAgent => ({
     id,
+    capabilities: caps,
     toJSON: () => ({ capabilities: caps })
   } as any);
 

@@ -1,5 +1,5 @@
 import { ToolRegistry } from '../../src/infra/ToolRegistry';
-import { ITool } from '../../interfaces/tool/ITool';
+import type { ITool } from '../../interfaces/tool/ITool';
 
 describe('ToolRegistry', () => {
   let registry: ToolRegistry;

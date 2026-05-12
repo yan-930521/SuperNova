@@ -1,5 +1,5 @@
-import { IAgent } from '../../interfaces/agent/IAgent';
-import { ITool } from '../../interfaces/tool/ITool';
+import type { IAgent } from '../../interfaces/agent/IAgent';
+import type { ITool } from '../../interfaces/tool/ITool';
 
 /**
  * 能力驗證器 (Capability Validator)

@@ -1,5 +1,5 @@
-import { IHook } from './IHook';
-import { IMutationRequest } from '../models/IMutationRequest';
+import type { IHook } from './IHook';
+import type { IMutationRequest } from '../models/IMutationRequest';
 
 /**
  * 變更校驗器接口

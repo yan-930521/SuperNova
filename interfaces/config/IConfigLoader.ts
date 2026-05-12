@@ -1,4 +1,4 @@
-import { IConfig, DeepPartial } from './IConfig';
+import type { IConfig, DeepPartial } from './IConfig';
 
 /**
  * 配置加載器介面

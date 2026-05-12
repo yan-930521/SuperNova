@@ -1,4 +1,4 @@
-import { IAgent } from './IAgent';
+import type { IAgent } from './IAgent';
 
 /**
  * 根級 Agent 接口 (Root Agent)

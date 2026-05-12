@@ -1,5 +1,5 @@
-import { IAgent } from './IAgent';
-import { IMutationRequest } from '../models/IMutationRequest';
+import type { IAgent } from './IAgent';
+import type { IMutationRequest } from '../models/IMutationRequest';
 
 /**
  * 協調者 Agent 接口 (Coordinator)

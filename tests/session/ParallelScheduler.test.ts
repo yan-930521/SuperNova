@@ -1,6 +1,6 @@
 import { ParallelScheduler } from '../../src/session/ParallelScheduler';
 import { TaskGraph } from '../../src/session/TaskGraph';
-import { IReadyQueue } from '../../interfaces/session/IReadyQueue';
+import type { IReadyQueue } from '../../interfaces/session/IReadyQueue';
 
 /**
  * 簡易的 ReadyQueue 實作，用於測試。
@@ -22,6 +22,10 @@ class MockReadyQueue implements IReadyQueue {
 
   get items(): string[] {
     return [...this.queue];
+  }
+
+  clear(): void {
+    this.queue = [];
   }
 }
 
@@ -119,5 +123,35 @@ describe('ParallelScheduler', () => {
     scheduler.onTaskCompleted('P2', graph, queue);
     expect(queue.items).toContain('End');
     expect(queue.length).toBe(4);
+  });
+
+  test('已開始執行的任務不應被重複調度', () => {
+    graph.addTask('A');
+    scheduler.schedule(graph, queue);
+    expect(queue.items).toEqual(['A']);
+
+    // 模擬從隊列取出並開始執行
+    queue.pop();
+    scheduler.onTaskStarted('A');
+
+    // 再次調度，不應重複將 A 加入隊列
+    scheduler.schedule(graph, queue);
+    expect(queue.length).toBe(0);
+  });
+
+  test('任務失敗後應清理狀態以便重新調度或停止', () => {
+    graph.addTask('A');
+    scheduler.schedule(graph, queue);
+    expect(queue.items).toEqual(['A']);
+
+    queue.pop();
+    scheduler.onTaskStarted('A');
+
+    // 失敗
+    scheduler.onTaskFailed('A', graph, queue);
+
+    // 再次調度，由於 queuedTaskIds 已清理，A 應該可以被重新調度
+    scheduler.schedule(graph, queue);
+    expect(queue.items).toEqual(['A']);
   });
 });

@@ -1,4 +1,4 @@
-import { IWorkerAgent } from './IWorkerAgent';
+import type { IWorkerAgent } from './IWorkerAgent';
 
 /**
  * 研究者 Agent 接口 (Researcher Agent)

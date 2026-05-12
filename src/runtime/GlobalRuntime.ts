@@ -1,7 +1,9 @@
-import { IRuntime } from '../../interfaces/runtime/IRuntime';
-import { IEvent } from '../../interfaces/models/IEvent';
-import { IEventBus } from '../../interfaces/infra/IEventBus';
-import { ISessionManager } from '../../interfaces/infra/ISessionManager';
+import type { IRuntime } from '../../interfaces/runtime/IRuntime';
+import type { IEvent } from '../../interfaces/models/IEvent';
+import type { IEventBus } from '../../interfaces/infra/IEventBus';
+import type { ISessionManager } from '../../interfaces/infra/ISessionManager';
+import type { IConfig } from '../../interfaces/config/IConfig';
+import { ConfigLoader } from '../config/ConfigLoader';
 
 /**
  * 全局運行時實作類 (Global Runtime)
@@ -10,11 +12,11 @@ import { ISessionManager } from '../../interfaces/infra/ISessionManager';
 export class GlobalRuntime implements IRuntime {
   private timer: NodeJS.Timeout | null = null;
   private isRunning: boolean = false;
+  public config?: IConfig;
 
   constructor(
     private sessionManager: ISessionManager,
-    private eventBus: IEventBus,
-    private tickRate: number = 100
+    private eventBus: IEventBus
   ) {}
 
   /**
@@ -22,13 +24,23 @@ export class GlobalRuntime implements IRuntime {
    */
   async start(): Promise<void> {
     if (this.isRunning) return;
+
+    // 若未手動注入配置，則從預設檔案加載
+    if (!this.config) {
+      const loader = new ConfigLoader();
+      this.config = await loader.bootstrap('./supernova.json');
+    }
+
     this.isRunning = true;
+    
+    // 從配置中獲取 Tick 頻率
+    const tickRate = this.config.runtime.tick_rate_ms;
     
     this.timer = setInterval(async () => {
       await this.runTick();
-    }, this.tickRate);
+    }, tickRate);
     
-    console.log('[GlobalRuntime] Runtime started.');
+    console.log(`[GlobalRuntime] Runtime started with tick rate: ${tickRate}ms.`);
   }
 
   /**
@@ -60,14 +72,9 @@ export class GlobalRuntime implements IRuntime {
 
   /**
    * 獲取當前活躍的 Session 集合
-   * (這裡暫時轉型為 any 以支援 getActiveSessions 方法，未來需在 ISessionManager 中擴充)
    */
-  async getActiveSessions(): Promise<Record<string, any>> {
-    const sm = this.sessionManager as any;
-    if (sm.getActiveSessions) {
-      return sm.getActiveSessions();
-    }
-    return {};
+  getActiveSessions(): Record<string, any> {
+    return this.sessionManager.getActiveSessions();
   }
 
   /**

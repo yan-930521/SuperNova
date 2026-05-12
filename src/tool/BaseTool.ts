@@ -1,4 +1,5 @@
-import { ITool, ToolSafetyTier } from '../../interfaces/tool/ITool';
+import type { ITool, ToolSafetyTier } from '../../interfaces/tool/ITool';
+import type { IToolContext } from '../../interfaces/tool/IToolContext';
 
 /**
  * BaseTool 抽象基類
@@ -31,6 +32,7 @@ export abstract class BaseTool<TIn = any, TOut = any> implements ITool<TIn, TOut
   /**
    * 執行工具的核心邏輯 (由子類實作)
    * @param input 工具輸入數據
+   * @param context 工具執行上下文
    */
-  abstract run(input: TIn): Promise<TOut>;
+  abstract run(input: TIn, context: IToolContext): Promise<TOut>;
 }

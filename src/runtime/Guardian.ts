@@ -1,4 +1,4 @@
-import { IGuardian } from '../../interfaces/runtime/IGuardian';
+import type { IGuardian } from '../../interfaces/runtime/IGuardian';
 
 /**
  * 超時錯誤類

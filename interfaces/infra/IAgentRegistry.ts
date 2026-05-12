@@ -1,4 +1,4 @@
-import { IAgent } from '../agent/IAgent';
+import type { IAgent } from '../agent/IAgent';
 
 /**
  * Agent 註冊與動態加載中心

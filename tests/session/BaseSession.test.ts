@@ -1,5 +1,5 @@
 import { BaseSession } from '../../src/session/BaseSession';
-import { IMiddleware } from '../../interfaces/session/IMiddleware';
+import type { IMiddleware } from '../../interfaces/session/IMiddleware';
 
 describe('BaseSession', () => {
   it('should allow registering middlewares to different pipelines', () => {

@@ -8,6 +8,8 @@ export interface IMiddlewareContext {
   target: string;
   /** 傳遞的數據 */
   data: any;
+  /** 額外的元數據 (例如任務 metadata) */
+  metadata?: any;
 }
 
 /**

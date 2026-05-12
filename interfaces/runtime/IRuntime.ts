@@ -1,11 +1,15 @@
-import { IEvent } from '../models/IEvent';
-import { ISession } from '../session/ISession';
+import type { IEvent } from '../models/IEvent';
+import type { ISession } from '../session/ISession';
+import type { IConfig } from '../config/IConfig';
 
 /**
  * 全局運行時大腦接口 (Runtime Brain)
  * 負責協調整個 SuperNova 系統的生命週期與全局事件分發。
  */
 export interface IRuntime {
+  /** 系統全局配置 */
+  readonly config?: IConfig;
+
   /** 啟動運行時環境 */
   start(): Promise<void>;
   

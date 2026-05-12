@@ -106,6 +106,14 @@ export class TaskGraph {
   }
 
   /**
+   * 獲取任務元數據。
+   * @param taskId 任務唯一標識
+   */
+  getTask(taskId: string): any {
+    return this.nodes.get(taskId);
+  }
+
+  /**
    * 序列化為 JSON
    */
   toJSON(): Record<string, any> {

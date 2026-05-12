@@ -1,4 +1,4 @@
-import { IAgent } from './IAgent';
+import type { IAgent } from './IAgent';
 
 /**
  * 基礎 Worker Agent 接口

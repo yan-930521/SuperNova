@@ -1,7 +1,7 @@
 import { GlobalRuntime } from '../../src/runtime/GlobalRuntime';
-import { IEventBus } from '../../interfaces/infra/IEventBus';
-import { ISessionManager } from '../../interfaces/infra/ISessionManager';
-import { ISession } from '../../interfaces/session/ISession';
+import type { IEventBus } from '../../interfaces/infra/IEventBus';
+import type { ISessionManager } from '../../interfaces/infra/ISessionManager';
+import type { ISession } from '../../interfaces/session/ISession';
 
 describe('GlobalRuntime', () => {
   let runtime: GlobalRuntime;
@@ -16,7 +16,15 @@ describe('GlobalRuntime', () => {
       getActiveSessions: jest.fn().mockReturnValue({})
     };
     mockEventBus = { publish: jest.fn(), subscribe: jest.fn() } as any;
-    runtime = new GlobalRuntime(mockSessionManager as ISessionManager, mockEventBus, 100);
+    runtime = new GlobalRuntime(mockSessionManager as ISessionManager, mockEventBus);
+    
+    // 手動注入 Mock Config，避免 start() 觸發檔案系統操作
+    runtime.config = {
+      runtime: {
+        tick_rate_ms: 100,
+        max_active_sessions: 10
+      }
+    } as any;
   });
 
   afterEach(() => {
@@ -28,7 +36,7 @@ describe('GlobalRuntime', () => {
     mockSessionManager.getActiveSessions.mockReturnValue({ 's1': mockSession });
 
     await runtime.start();
-    jest.advanceTimersByTime(150); // 觸發第一個 Tick
+    await jest.advanceTimersByTimeAsync(150); // 觸發第一個 Tick
 
     expect(mockSession.tick).toHaveBeenCalled();
   });
@@ -39,7 +47,7 @@ describe('GlobalRuntime', () => {
 
     await runtime.start();
     await runtime.stop();
-    jest.advanceTimersByTime(200);
+    await jest.advanceTimersByTimeAsync(200);
 
     expect(mockSession.tick).not.toHaveBeenCalled();
   });

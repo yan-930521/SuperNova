@@ -1,4 +1,4 @@
-import { IMiddleware, IMiddlewareContext } from '../../interfaces/session/IMiddleware';
+import type { IMiddleware, IMiddlewareContext } from '../../interfaces/session/IMiddleware';
 
 /**
  * 中間件鏈管理器
@@ -26,7 +26,9 @@ export class MiddlewareChain {
         return coreTask();
       }
       const middleware = this.middlewares[index];
-      await middleware.execute(ctx, () => dispatch(index + 1));
+      if (middleware) {
+        await middleware.execute(ctx, () => dispatch(index + 1));
+      }
     };
 
     return dispatch(0);

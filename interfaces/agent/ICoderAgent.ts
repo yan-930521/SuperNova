@@ -1,4 +1,4 @@
-import { IWorkerAgent } from './IWorkerAgent';
+import type { IWorkerAgent } from './IWorkerAgent';
 
 /**
  * 程式碼專家 Agent 接口

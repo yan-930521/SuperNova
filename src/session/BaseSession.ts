@@ -63,7 +63,7 @@ export class BaseSession implements ISession {
    * 核心循環
    * 調用調度器填充隊列，並模擬並行執行就緒任務。
    */
-  async tick(): Promise<void> {
+  async asyncTick(): Promise<void> {
     console.log(`Session ${this.id} ticking...`);
 
     // 1. 調用調度器，根據 TaskGraph 狀態填充 ReadyQueue
@@ -76,13 +76,43 @@ export class BaseSession implements ISession {
       tasksToExecute.push(taskId);
     }
 
-    // 3. 執行任務
+    // 3. 執行任務 (目前採順序執行以確保錯誤時能立即中斷並回滾)
+    // TODO: 未來可引入並行執行與取消機制以優化性能
     for (const id of tasksToExecute) {
       console.log(`[BaseSession] Executing task: ${id}`);
+      this.scheduler.onTaskStarted(id);
+
+      const metadata = this.taskGraph.getTask(id);
       
-      // 模擬任務成功完成
-      await this.onTaskSuccess(id);
+      try {
+        await this.toolChain.execute(
+          {
+            session_id: this.id,
+            target: id,
+            data: {}, // 預設空數據
+            metadata: metadata
+          },
+          async () => {
+            // 中間件鏈結點：如果所有中間件都調用了 next()，則視為執行成功
+            console.log(`[BaseSession] Tool execution completed for task: ${id}`);
+          }
+        );
+
+        // 任務成功完成
+        await this.onTaskSuccess(id);
+      } catch (error) {
+        // 任務失敗
+        await this.onTaskFailure(id, error);
+        throw error; // 重新拋出以讓 tick() 捕捉
+      }
     }
+  }
+
+  /**
+   * 核心循環 (同步包裝器，保持接口一致性，但內部支持並發)
+   */
+  async tick(): Promise<void> {
+    await this.asyncTick();
   }
 
   /**
@@ -100,6 +130,23 @@ export class BaseSession implements ISession {
         lastTaskId: taskId,
         taskIndex: this.completedTaskCount
       });
+    }
+  }
+
+  /**
+   * 處理任務失敗
+   */
+  private async onTaskFailure(taskId: string, error: any): Promise<void> {
+    console.error(`[BaseSession] Task ${taskId} failed:`, error);
+    this.scheduler.onTaskFailed(taskId, this.taskGraph, this.readyQueue);
+    
+    // 如果有 SnapshotManager，嘗試執行回滾到上一個成功狀態
+    if (this.snapshotManager) {
+      const lastSuccessful = await this.snapshotManager.getLatestSnapshotId(this.id);
+      if (lastSuccessful) {
+        console.log(`[BaseSession] Rolling back to last successful snapshot: ${lastSuccessful}`);
+        await this.rollback(lastSuccessful);
+      }
     }
   }
 
@@ -154,6 +201,7 @@ export class BaseSession implements ISession {
 
     // 重新填充 ReadyQueue
     this.readyQueue.clear();
+    this.scheduler.reset();
     this.scheduler.schedule(this.taskGraph, this.readyQueue);
   }
 
@@ -173,9 +221,6 @@ export class BaseSession implements ISession {
     }
     console.log(`[BaseSession] Rolling back to ${checkpointId}`);
     await this.snapshotManager.rollback(this, checkpointId);
-    
-    // Rollback 後必須重置隊列並重新調度
-    this.readyQueue.clear();
-    this.scheduler.schedule(this.taskGraph, this.readyQueue);
+    // 狀態恢復邏輯已在 loadFromJSON 中處理 (包含 ReadyQueue 的重新填充)
   }
 }

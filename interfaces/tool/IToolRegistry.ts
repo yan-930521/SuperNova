@@ -1,4 +1,4 @@
-import { ITool } from './ITool';
+import type { ITool } from './ITool';
 
 /**
  * 工具註冊表接口

@@ -1,5 +1,5 @@
-import { IToolRegistry } from '../../interfaces/tool/IToolRegistry';
-import { ITool } from '../../interfaces/tool/ITool';
+import type { IToolRegistry } from '../../interfaces/tool/IToolRegistry';
+import type { ITool } from '../../interfaces/tool/ITool';
 
 /**
  * ToolRegistry 實作

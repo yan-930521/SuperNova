@@ -1,4 +1,4 @@
-import { IEvent } from '../models/IEvent';
+import type { IEvent } from '../models/IEvent';
 
 /**
  * 事件總線接口

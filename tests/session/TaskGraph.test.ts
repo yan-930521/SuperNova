@@ -81,4 +81,10 @@ describe('TaskGraph', () => {
     newGraph.completeTask('task2');
     expect(newGraph.getReadyTasks()).toEqual(['task3']);
   });
+
+  test('should return task metadata via getTask', () => {
+    const metadata = { goal: 'test goal' };
+    graph.addTask('task1', metadata);
+    expect(graph.getTask('task1')).toEqual(metadata);
+  });
 });

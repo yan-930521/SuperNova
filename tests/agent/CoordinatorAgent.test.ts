@@ -1,5 +1,5 @@
 import { CoordinatorAgent } from '../../src/agent/CoordinatorAgent';
-import { IMutationRequest } from '../../interfaces/models/IMutationRequest';
+import type { IMutationRequest } from '../../interfaces/models/IMutationRequest';
 
 describe('CoordinatorAgent', () => {
   let coordinator: CoordinatorAgent;

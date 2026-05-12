@@ -1,5 +1,5 @@
-import { IEventBus } from '../../interfaces/infra/IEventBus';
-import { IEvent } from '../../interfaces/models/IEvent';
+import type { IEventBus } from '../../interfaces/infra/IEventBus';
+import type { IEvent } from '../../interfaces/models/IEvent';
 
 /**
  * 事件總線實作
