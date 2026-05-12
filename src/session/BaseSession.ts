@@ -1,10 +1,12 @@
-import { ISession } from '../../interfaces/session/ISession';
-import { IMiddleware } from '../../interfaces/session/IMiddleware';
+import type { ISession } from '../../interfaces/session/ISession';
+import type { IMiddleware } from '../../interfaces/session/IMiddleware';
 import { MiddlewareChain } from './MiddlewareChain';
 import { TaskGraph } from './TaskGraph';
 import { ParallelScheduler } from './ParallelScheduler';
 import { ReadyQueue } from './ReadyQueue';
-import { IReadyQueue } from '../../interfaces/session/IReadyQueue';
+import type { IReadyQueue } from '../../interfaces/session/IReadyQueue';
+import type { ISnapshotManager } from '../../interfaces/infra/ISnapshotManager';
+import type { IAgentRegistry } from '../../interfaces/infra/IAgentRegistry';
 
 /**
  * 會話基礎實作類
@@ -22,10 +24,29 @@ export class BaseSession implements ISession {
   /** 就緒任務隊列 */
   public readyQueue: IReadyQueue = new ReadyQueue();
 
+  /** 參與此會話的 Agent ID 列表 */
+  protected agentIds: string[] = [];
+  /** 快照管理器 */
+  public snapshotManager?: ISnapshotManager;
+  /** Agent 註冊表 (用於快照時獲取 Agent 狀態) */
+  public agentRegistry?: IAgentRegistry;
+
+  /** 任務完成計數 (用於快照索引) */
+  private completedTaskCount: number = 0;
+
   constructor(
     public id: string,
     public goal: string
   ) {}
+
+  /**
+   * 註冊參與會話的 Agent
+   */
+  addAgent(agentId: string): void {
+    if (!this.agentIds.includes(agentId)) {
+      this.agentIds.push(agentId);
+    }
+  }
 
   /**
    * 註冊中間件
@@ -55,12 +76,30 @@ export class BaseSession implements ISession {
       tasksToExecute.push(taskId);
     }
 
-    // 3. 模擬並行執行（目前僅打印 Log 並標記完成）
-    // 注意：在實際場景中，這些任務可能會異步並行執行
+    // 3. 執行任務
     for (const id of tasksToExecute) {
       console.log(`[BaseSession] Executing task: ${id}`);
-      // 任務完成後通知調度器，這會進一步更新 TaskGraph 並可能解鎖更多任務
-      this.scheduler.onTaskCompleted(id, this.taskGraph, this.readyQueue);
+      
+      // 模擬任務成功完成
+      await this.onTaskSuccess(id);
+    }
+  }
+
+  /**
+   * 處理任務成功完成
+   */
+  private async onTaskSuccess(taskId: string): Promise<void> {
+    // 1. 更新調度器與 TaskGraph
+    this.scheduler.onTaskCompleted(taskId, this.taskGraph, this.readyQueue);
+    this.completedTaskCount++;
+
+    // 2. 自動觸發快照
+    if (this.snapshotManager) {
+      console.log(`[BaseSession] Task ${taskId} completed. Triggering snapshot...`);
+      await this.snapshotManager.snapshot(this, {
+        lastTaskId: taskId,
+        taskIndex: this.completedTaskCount
+      });
     }
   }
 
@@ -69,24 +108,74 @@ export class BaseSession implements ISession {
   }
 
   toJSON(): Record<string, any> {
+    const agentsData: Record<string, any> = {};
+    if (this.agentRegistry) {
+      for (const aid of this.agentIds) {
+        const agent = this.agentRegistry.getAgent(aid);
+        if (agent) {
+          agentsData[aid] = agent.toJSON();
+        }
+      }
+    }
+
     return {
       id: this.id,
       goal: this.goal,
-      status: this.status
+      status: this.status,
+      taskGraph: this.taskGraph.toJSON(),
+      agentIds: this.agentIds,
+      agents: agentsData, // 快照時保存 Agent 狀態
+      completedTaskCount: this.completedTaskCount
     };
   }
 
   async loadFromJSON(data: Record<string, any>): Promise<void> {
-    this.id = data.id;
-    this.goal = data.goal;
-    this.status = data.status;
+    this.id = data.id || this.id;
+    this.goal = data.goal || this.goal;
+    this.status = data.status || this.status;
+    this.agentIds = data.agentIds || [];
+    this.completedTaskCount = data.completedTaskCount || 0;
+
+    if (data.taskGraph) {
+      this.taskGraph.loadFromJSON(data.taskGraph);
+    }
+
+    // 恢復 Agent 狀態
+    if (data.agents && this.agentRegistry) {
+      for (const [aid, agentData] of Object.entries(data.agents)) {
+        let agent = this.agentRegistry.getAgent(aid);
+        if (!agent) {
+          console.warn(`[BaseSession] Agent ${aid} not found in registry during load.`);
+        } else {
+          await agent.initFromJSON(agentData as Record<string, any>);
+        }
+      }
+    }
+
+    // 重新填充 ReadyQueue
+    this.readyQueue.clear();
+    this.scheduler.schedule(this.taskGraph, this.readyQueue);
   }
 
   async snapshot(): Promise<string> {
-    return "snapshot-id";
+    if (!this.snapshotManager) {
+      throw new Error("SnapshotManager not configured for this session.");
+    }
+    return await this.snapshotManager.snapshot(this, { 
+      manual: true,
+      taskIndex: this.completedTaskCount 
+    });
   }
 
   async rollback(checkpointId: string): Promise<void> {
-    console.log(`Rolling back to ${checkpointId}`);
+    if (!this.snapshotManager) {
+      throw new Error("SnapshotManager not configured for this session.");
+    }
+    console.log(`[BaseSession] Rolling back to ${checkpointId}`);
+    await this.snapshotManager.rollback(this, checkpointId);
+    
+    // Rollback 後必須重置隊列並重新調度
+    this.readyQueue.clear();
+    this.scheduler.schedule(this.taskGraph, this.readyQueue);
   }
 }

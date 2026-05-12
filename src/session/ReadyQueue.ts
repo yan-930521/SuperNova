@@ -1,4 +1,4 @@
-import { IReadyQueue } from '../../interfaces/session/IReadyQueue';
+import type { IReadyQueue } from '../../interfaces/session/IReadyQueue';
 
 /**
  * 簡單的就緒隊列實作
@@ -18,5 +18,9 @@ export class ReadyQueue implements IReadyQueue {
 
   get length(): number {
     return this.queue.length;
+  }
+
+  clear(): void {
+    this.queue = [];
   }
 }

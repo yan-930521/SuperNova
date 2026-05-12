@@ -9,4 +9,7 @@ export interface IReadyQueue {
   pop(): string | null;
   /** 獲取當前隊列中積壓的任務總數 */
   readonly length: number;
-}
+  /** 清空隊列 */
+  clear(): void;
+  }
+
