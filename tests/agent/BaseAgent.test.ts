@@ -1,5 +1,5 @@
 import { BaseAgent } from '../../src/agent/BaseAgent';
-import { IMutationRequest } from '../../interfaces/models/IMutationRequest';
+import type { IMutationRequest } from '../../interfaces/models/IMutationRequest';
 
 describe('BaseAgent', () => {
   let agent: BaseAgent;
@@ -12,6 +12,8 @@ describe('BaseAgent', () => {
     const config = {
       id: 'agent-001',
       role: 'worker',
+      identity: '',
+      capabilities: [],
       customSetting: 'enabled',
       nest: { key: 'value' }
     };
@@ -21,6 +23,29 @@ describe('BaseAgent', () => {
     expect(agent.id).toBe('agent-001');
     expect(agent.role).toBe('worker');
     expect(agent.toJSON()).toEqual(config);
+  });
+
+  test('should preserve complex state during re-initialization', async () => {
+    const config = {
+      id: 'agent-001',
+      role: 'worker',
+      prompts: { identity: 'I am a tester' },
+      capabilities: ['test'],
+      state: {
+        memory: ['item1', 'item2'],
+        metadata: { lastActive: 123456 }
+      }
+    };
+
+    await agent.initFromJSON(config);
+    const json = agent.toJSON();
+    
+    const newAgent = new BaseAgent();
+    await newAgent.initFromJSON(json);
+    
+    expect(newAgent.toJSON()).toEqual(json);
+    expect(newAgent.id).toBe('agent-001');
+    expect(newAgent.identity).toBe('I am a tester');
   });
 
   test('should handle missing id and role in config', async () => {

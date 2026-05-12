@@ -1,5 +1,6 @@
-import { IAgent } from '../../interfaces/agent/IAgent';
-import { IMutationRequest } from '../../interfaces/models/IMutationRequest';
+import type { IAgent } from '../../interfaces/agent/IAgent';
+import type { IMutationRequest } from '../../interfaces/models/IMutationRequest';
+import { PromptLoader } from '../utils/PromptLoader';
 
 /**
  * BaseAgent 類
@@ -8,6 +9,7 @@ import { IMutationRequest } from '../../interfaces/models/IMutationRequest';
 export class BaseAgent implements IAgent {
   protected _id: string = '';
   protected _role: string = '';
+  protected _identity: string = '';
   protected _capabilities: string[] = [];
   protected _config: Record<string, any> = {};
 
@@ -19,6 +21,10 @@ export class BaseAgent implements IAgent {
     return this._role;
   }
 
+  get identity(): string {
+    return this._identity;
+  }
+
   get capabilities(): string[] {
     return this._capabilities;
   }
@@ -28,11 +34,20 @@ export class BaseAgent implements IAgent {
    * @param config 配置對象
    */
   async initFromJSON(config: Record<string, any>): Promise<void> {
-    const { id, role, capabilities, ...rest } = config;
-    this._id = id || '';
-    this._role = role || '';
-    this._capabilities = capabilities || [];
-    this._config = rest;
+    // 預處理：解析長文本連結
+    const resolvedConfig = await PromptLoader.resolvePrompts(config);
+    
+    const { id, role, capabilities, type, prompts, ...rest } = resolvedConfig;
+    this._id = id || this._id;
+    this._role = role || this._role;
+    this._identity = prompts?.identity || this._identity;
+    this._capabilities = capabilities || this._capabilities;
+    this._config = {
+      ...this._config,
+      ...rest,
+      prompts: prompts || this._config.prompts,
+      type: type || this._config.type
+    };
   }
 
   /**
@@ -43,6 +58,9 @@ export class BaseAgent implements IAgent {
       id: this._id,
       role: this._role,
       capabilities: this._capabilities,
+      prompts: {
+        identity: this._identity
+      },
       ...this._config,
     };
   }
