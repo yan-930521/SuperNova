@@ -1,6 +1,6 @@
-# SuperNova: Industrial-Grade AI Agent Runtime
+# SuperNova: A Reliable AI Agent Orchestration Framework
 
-SuperNova 是一個基於 TypeScript 構建的高性能、數據驅動且具備工業級穩定性的 AI Agent 運行時架構。其設計核心借鑑了頂尖 Agent 系統（如 Claude Code）的先進實踐，旨在提供一個可靠的、可觀測的、且支持複雜任務編排的底座。
+SuperNova 是一個基於 TypeScript 構建的高性能、模組化且具備高度可觀測性的 AI Agent 執行時框架。設計核心旨在提供一個結構化、可靠且易於擴展的任務編排底座。
 
 ---
 
