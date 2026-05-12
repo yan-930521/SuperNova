@@ -1,5 +1,13 @@
-import { IAgentRegistry } from '../../interfaces/infra/IAgentRegistry';
-import { IAgent } from '../../interfaces/agent/IAgent';
+import type { IAgentRegistry } from '../../interfaces/infra/IAgentRegistry';
+import type { IAgent } from '../../interfaces/agent/IAgent';
+import type { IModelRegistry } from '../../interfaces/runtime/IModelRegistry';
+import type { ITaskPlanEngine } from '../../interfaces/agent/ITaskPlanEngine';
+import { BaseAgent } from '../agent/BaseAgent';
+import { CoordinatorAgent } from '../agent/CoordinatorAgent';
+import { EvaluatorAgent } from '../agent/EvaluatorAgent';
+import { TaskPlanEngine } from '../agent/TaskPlanEngine';
+import * as fs from 'fs';
+import * as path from 'path';
 
 /**
  * AgentRegistry 類
@@ -7,10 +15,16 @@ import { IAgent } from '../../interfaces/agent/IAgent';
  */
 export class AgentRegistry implements IAgentRegistry {
   private agents: Map<string, IAgent> = new Map();
+  private taskPlanEngine?: ITaskPlanEngine;
+
+  constructor(private modelRegistry?: IModelRegistry) {
+    if (this.modelRegistry) {
+      this.taskPlanEngine = new TaskPlanEngine(this.modelRegistry);
+    }
+  }
 
   /**
    * 手動註冊一個 Agent 實例
-   * @param agent 實現了 IAgent 接口的實例
    */
   register(agent: IAgent): void {
     console.log(`[AgentRegistry] Registering agent: ${agent.id} (role: ${agent.role})`);
@@ -19,10 +33,26 @@ export class AgentRegistry implements IAgentRegistry {
 
   /**
    * 根據 ID 獲取已註冊的 Agent 實例
-   * @param id Agent 的唯一識別碼
    */
   getAgent(id: string): IAgent | undefined {
     return this.agents.get(id);
+  }
+
+  /**
+   * 根據 ID 從檔案加載並實例化 Agent
+   * @param id Agent ID
+   */
+  async loadAgentById(id: string): Promise<IAgent> {
+    const filePath = path.resolve(process.cwd(), `agents/${id}.json`);
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`Agent config not found for ID: ${id} at ${filePath}`);
+    }
+
+    const config = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    // 強制將檔案中的 ID 與請求的 ID 對齊，若檔案中未定義則補上
+    config.id = config.id || id;
+    
+    return await this.loadAgentFromJSON(config);
   }
 
   /**
@@ -33,14 +63,22 @@ export class AgentRegistry implements IAgentRegistry {
     const { type } = agentJson;
     let agent: IAgent;
 
-    if (type === 'BASE') {
-      const { BaseAgent } = await import('../agent/BaseAgent');
-      agent = new BaseAgent();
-    } else if (type === 'COORDINATOR') {
-      const { CoordinatorAgent } = await import('../agent/CoordinatorAgent');
-      agent = new CoordinatorAgent();
-    } else {
-      throw new Error(`Unknown agent type: ${type}`);
+    // 根據 type 映射具體的實作類
+    switch (type) {
+      case 'COORDINATOR':
+        agent = new CoordinatorAgent(this.taskPlanEngine);
+        break;
+      case 'EVALUATOR':
+        if (!this.modelRegistry) {
+          throw new Error('ModelRegistry is required to instantiate EVALUATOR agent.');
+        }
+        agent = new EvaluatorAgent(this.modelRegistry);
+        break;
+      case 'BASE':
+        agent = new BaseAgent();
+        break;
+      default:
+        throw new Error(`Unknown agent type: ${type}`);
     }
 
     await agent.initFromJSON(agentJson);
