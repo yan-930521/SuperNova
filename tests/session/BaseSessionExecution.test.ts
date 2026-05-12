@@ -127,4 +127,26 @@ describe('BaseSession Real Execution', () => {
       input: expect.objectContaining({ assignedRole: 'worker' })
     });
   });
+
+  it('should handle agent execution failure correctly', async () => {
+    const mockAgent = {
+      id: 'fail-agent',
+      role: 'worker',
+      executeIntent: jest.fn().mockRejectedValue(new Error('Agent execution failed')),
+      toJSON: jest.fn(),
+      initFromJSON: jest.fn(),
+      receiveTask: jest.fn(),
+      proposeMutation: jest.fn(),
+      capabilities: []
+    };
+
+    const mockRegistry = {
+      getAgent: jest.fn().mockReturnValue(mockAgent)
+    };
+
+    session.agentRegistry = mockRegistry as any;
+    session.taskGraph.addTask('task_fail', { assignedRole: 'worker' });
+
+    await expect(session.tick()).rejects.toThrow('Agent execution failed');
+  });
 });
