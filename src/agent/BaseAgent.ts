@@ -1,4 +1,5 @@
 import type { IAgent } from '../../interfaces/agent/IAgent';
+import type { IAgentComponent } from '../../interfaces/agent/IAgentComponent';
 import type { IMutationRequest } from '../../interfaces/models/IMutationRequest';
 import { PromptLoader } from '../utils/PromptLoader';
 
@@ -12,6 +13,7 @@ export class BaseAgent implements IAgent {
   protected _identity: string = '';
   protected _capabilities: string[] = [];
   protected _config: Record<string, any> = {};
+  private _components = new Map<string, IAgentComponent>();
 
   get id(): string {
     return this._id;
@@ -27,6 +29,27 @@ export class BaseAgent implements IAgent {
 
   get capabilities(): string[] {
     return this._capabilities;
+  }
+
+  /**
+   * 獲取指定名稱的組件
+   * @param name 組件名稱
+   * @throws 如果組件不存在則拋出錯誤
+   */
+  getComponent<T extends IAgentComponent>(name: string): T {
+    const component = this._components.get(name);
+    if (!component) {
+      throw new Error(`Component ${name} not found on Agent ${this.id}`);
+    }
+    return component as T;
+  }
+
+  /**
+   * 添加組件到 Agent
+   * @param component 組件實例
+   */
+  addComponent(component: IAgentComponent): void {
+    this._components.set(component.name, component);
   }
 
   /**
