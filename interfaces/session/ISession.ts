@@ -1,4 +1,4 @@
-import { IMiddleware } from './IMiddleware';
+import type { IMiddleware } from './IMiddleware';
 
 /**
  * 會話核心接口

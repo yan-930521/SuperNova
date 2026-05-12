@@ -1,4 +1,4 @@
-import { IMutationRequest } from '../models/IMutationRequest';
+import type { IMutationRequest } from '../models/IMutationRequest';
 
 /**
  * 基礎 Agent 接口
@@ -9,6 +9,8 @@ export interface IAgent {
   id: string;
   /** Agent 的角色名稱 */
   role: string;
+  /** Agent 的身分描述文本 (Prompt) */
+  identity: string;
   /** Agent 具備的能力標籤 */
   readonly capabilities: string[];
 
