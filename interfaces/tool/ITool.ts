@@ -1,3 +1,5 @@
+import { IToolContext } from './IToolContext';
+
 /**
  * 工具安全等級 (Safety Tier)
  * 用於定義工具執行的風險評估與權限要求。
@@ -34,8 +36,9 @@ export interface ITool<TIn = any, TOut = any> {
    * 執行工具的核心邏輯
    * 建議在 Guardian 防護下執行，以提供隔離與穩定性。
    * @param input 工具輸入數據
+   * @param context 工具執行上下文 (包含 sessionId, agentId 等)
    */
-  run(input: TIn): Promise<TOut>;
+  run(input: TIn, context: IToolContext): Promise<TOut>;
   
   /** 執行此工具所需的最小能力標籤 */
   required_capabilities: string[];
