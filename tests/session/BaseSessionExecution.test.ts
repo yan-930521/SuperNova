@@ -89,4 +89,42 @@ describe('BaseSession Real Execution', () => {
     // In real scenario, it might rollback to the last successful task's snapshot.
     expect(mockSnapshotManager.rollback).toHaveBeenCalled();
   });
+
+  it('should delegate task execution to a worker agent from the registry', async () => {
+    const mockAgent = {
+      id: 'test-agent',
+      role: 'worker',
+      executeIntent: jest.fn().mockResolvedValue({ success: true }),
+      toJSON: jest.fn(),
+      initFromJSON: jest.fn(),
+      receiveTask: jest.fn(),
+      proposeMutation: jest.fn(),
+      capabilities: []
+    };
+
+    const mockRegistry = {
+      getAgent: jest.fn().mockReturnValue(mockAgent),
+      registerAgent: jest.fn(),
+      unregisterAgent: jest.fn(),
+      getAllAgents: jest.fn(),
+      getAgentsByCapability: jest.fn()
+    };
+
+    session.agentRegistry = mockRegistry as any;
+    
+    // Add task with assignedRole
+    session.taskGraph.addTask('task_1', { 
+      goal: 'test delegation',
+      assignedRole: 'worker',
+      type: 'test-tool'
+    });
+
+    await session.tick();
+
+    expect(mockRegistry.getAgent).toHaveBeenCalledWith('worker');
+    expect(mockAgent.executeIntent).toHaveBeenCalledWith({
+      toolName: 'test-tool',
+      input: expect.objectContaining({ assignedRole: 'worker' })
+    });
+  });
 });
