@@ -62,4 +62,23 @@ describe('TaskGraph', () => {
     graph.completeTask('task2');
     expect(graph.getReadyTasks()).toEqual(['task3']);
   });
+
+  test('should serialize and deserialize correctly', () => {
+    graph.addTask('task1', { info: 'T1' });
+    graph.addTask('task2', { info: 'T2' });
+    graph.addTask('task3', { info: 'T3' });
+    graph.addDependency('task1', 'task2');
+    graph.addDependency('task2', 'task3');
+    graph.completeTask('task1');
+
+    const json = graph.toJSON();
+    const newGraph = new TaskGraph();
+    newGraph.loadFromJSON(json);
+
+    expect(newGraph.getReadyTasks()).toEqual(['task2']);
+    expect(newGraph.getInDegree('task3')).toBe(1);
+    
+    newGraph.completeTask('task2');
+    expect(newGraph.getReadyTasks()).toEqual(['task3']);
+  });
 });

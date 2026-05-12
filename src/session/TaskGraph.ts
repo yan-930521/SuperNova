@@ -104,4 +104,24 @@ export class TaskGraph {
     this.adjList.delete(taskId);
     this.inDegreeMap.delete(taskId);
   }
+
+  /**
+   * 序列化為 JSON
+   */
+  toJSON(): Record<string, any> {
+    return {
+      nodes: Array.from(this.nodes.entries()),
+      adjList: Array.from(this.adjList.entries()).map(([k, v]) => [k, Array.from(v)]),
+      inDegreeMap: Array.from(this.inDegreeMap.entries())
+    };
+  }
+
+  /**
+   * 從 JSON 加載狀態
+   */
+  loadFromJSON(data: Record<string, any>): void {
+    this.nodes = new Map(data.nodes);
+    this.adjList = new Map(data.adjList.map(([k, v]: [string, string[]]) => [k, new Set(v)]));
+    this.inDegreeMap = new Map(data.inDegreeMap);
+  }
 }
