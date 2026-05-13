@@ -26,11 +26,11 @@ describe('WriteFileTool', () => {
 
   it('should block writing to project root', async () => {
     await expect(tool.run({ path: 'README.md', content: 'hack' }))
-      .rejects.toThrow(/PERMISSION_DENIED/);
+      .rejects.toThrow(/Access denied: Write\/Delete operation restricted to workspace/);
   });
 
   it('should block writing to blacklisted files', async () => {
     await expect(tool.run({ path: 'workspace/.env', content: 'SECRET=123' }))
-      .rejects.toThrow(/PERMISSION_DENIED/);
+      .rejects.toThrow(/Access denied: Path is blacklisted/);
   });
 });
