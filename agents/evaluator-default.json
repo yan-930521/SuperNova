@@ -9,7 +9,7 @@
     "plan_review": "planning/plan_review.md"
   },
   "parameters": {
-    "temperature": 0.2,
+    "temperature": 0,
     "max_tokens": 1024
   }
 }

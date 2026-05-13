@@ -16,6 +16,11 @@ export interface IAgentRegistry {
    * @param id Agent 的唯一識別碼
    */
   getAgent(id: string): IAgent | undefined;
+
+  /**
+   * 獲取所有已註冊的 Agent 實例
+   */
+  getAllAgents(): IAgent[];
   
   /** 
    * 從 JSON 數據動態加載並實例化 Agent

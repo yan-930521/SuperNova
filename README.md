@@ -24,16 +24,13 @@ SuperNova 是一個基於 TypeScript 構建的高性能、模組化且具備高�
 
 ---
 
-## 🏗️ 系統架構 (Architecture)
+## 🏗️ 核心架構：組件化執行模型 (Component-Based Architecture)
 
-```
-SYSTEM ARCHITECTURE
-├── GlobalRuntime (心臟：驅動全局 Tick 與事件)
-├── AgentRegistry (檔案：Agent 的唯一真相來源)
-├── SessionManager (容器：管理會話隔離與生命週期)
-├── EventBus (神經：異步事件驅動核心)
-└── ToolRuntime (手腳：與外部世界的交互接口)
-```
+SuperNova 採用 **組件化容器 (Component Container)** 設計。Agent 本身是一個輕量級容器，透過 JSON 配置動態裝載具備特定能力的行為組件 (Behaviors)，實現了「大腦 (思維/規劃) 與身體 (執行) 分離」。
+
+- **Identity (身份):** 由 JSON 定義的靜態特徵。
+- **Behavior Layer (組件層):** 可插拔的行為插件 (Planner, Reasoner, Arbitrator)。
+- **Execution Layer (執行層):** 透過標準化 Intent 與 Data-Only Output 與世界交互。
 
 詳細架構設計請參閱 [ARCH.md](./ARCH.md)。
 
@@ -44,7 +41,7 @@ SYSTEM ARCHITECTURE
 - **核心：** TypeScript 5.x
 - **環境：** Node.js
 - **測試：** Jest + ts-jest
-- **設計模式：** Interface-Driven Development, Factory Pattern, Middleware (Onion Model), DAG-based Scheduling.
+- **設計模式：** Interface-Driven Development, Component-Based Container, Middleware (Onion Model), DAG-based Scheduling.
 
 ---
 
@@ -55,10 +52,10 @@ SYSTEM ARCHITECTURE
 npm install
 ```
 
-### 2. 運行全鏈路集成測試 (E2E)
-驗證整個架構（從註冊到並行執行）是否運作正常：
+### 2. 運行集成測試
+驗證組件化架構是否運作正常：
 ```bash
-npm test tests/integration/EndToEnd.test.ts
+npm test tests/
 ```
 
 ---
@@ -74,20 +71,8 @@ npm test tests/integration/EndToEnd.test.ts
 
 ## 📅 開發進度 (Roadmap)
 
-- [x] **Phase 1: 基礎設施與運行時** (Guardian, EventBus, BaseSession)
-- [x] **Phase 2: Agent 體系** (BaseAgent, Registry, Coordinator)
-- [x] **Phase 3: 工具與權限** (ToolRegistry, BaseTool, CapabilityValidator)
-- [x] **Phase 4: 規劃與調度** (TaskGraph, ParallelScheduler)
-- [x] **Phase 5: 全局編排與 E2E** (GlobalRuntime, SessionManager, EndToEnd Flow)
-- [x] **Phase 6: 規劃智力與結構化推理** (TaskPlanEngine, InferenceEngine, System-Level Planning)
-- [ ] **Phase 7: 真實執行閉環與 Worker Agent** (Ongoing)
+- [x] **Phase 1-6:** 核心運行時與基礎架構落地
+- [x] **Phase 7:** Agent 組件化重構 (Component-Based Refactor)
+- [ ] **Phase 8:** 行為插件集擴展與實戰應用 (Ongoing)
 
 ---
-
-### 🧪 系統級測試 (System Tests)
-我們現在支持使用真實 LLM (OpenAI) 進行全自動任務規劃測試：
-```bash
-npx jest tests/e2e/SystemPlanning.test.ts
-```
-
-Created by Gemini CLI @ 2026.

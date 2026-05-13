@@ -39,26 +39,83 @@ export class CoordinatorAgent extends BaseAgent implements ICoordinator {
   /**
    * 基於目標生成任務的有向無環圖 (DAG)
    * @param goal 任務目標描述
+   * @param availableAgents 當前系統中可用的 Agent 列表 (可選)
    */
-  async planTaskGraph(goal: string): Promise<any> {
+  async planTaskGraph(goal: string, availableAgents?: any[]): Promise<ITaskGraph> {
     console.log(`[CoordinatorAgent ${this.id}] Planning task graph for goal: ${goal}`);
     
     if (!this.planEngine) {
       throw new Error(`TaskPlanEngine not injected into CoordinatorAgent ${this.id}`);
     }
 
-    // 1. 建立初始狀態
+    // 1. 建立初始狀態，並注入可用 Agent 資訊
     const initialState = this.createInitialState(goal);
+    if (availableAgents) {
+      initialState.metadata = {
+        ...initialState.metadata,
+        available_agents: availableAgents.map(a => ({
+          id: a.id,
+          role: a.role,
+          capabilities: a.capabilities || []
+        }))
+      };
+    }
 
     // 2. 執行規劃引擎 (LangGraph 流程)
     const finalState = await this.planEngine.run(initialState);
 
-    // 3. 轉換為 Session Runtime 可用的格式
+    // 3. 檢查規劃結果
     if (!finalState.planning.taskGraph) {
       throw new Error(`TaskPlanEngine failed to produce a TaskGraph for goal: ${goal}`);
     }
 
-    return this.convertToRuntimeGraph(finalState.planning.taskGraph);
+    return finalState.planning.taskGraph;
+  }
+
+  /**
+   * 當任務失敗時，請求重新規劃任務圖
+   * @param goal 原始目標
+   * @param failedTaskId 失敗的任務 ID
+   * @param error 錯誤訊息
+   * @param currentState 當前 Agent 狀態
+   * @param availableAgents 當前系統中可用的 Agent 列表 (可選)
+   */
+  async requestReplan(
+    goal: string, 
+    failedTaskId: string, 
+    error: string, 
+    currentState: IAgentState,
+    availableAgents?: any[]
+  ): Promise<ITaskGraph> {
+    console.log(`[CoordinatorAgent ${this.id}] Requesting replan for failed task: ${failedTaskId}`);
+
+    if (!this.planEngine) {
+      throw new Error(`TaskPlanEngine not injected into CoordinatorAgent ${this.id}`);
+    }
+
+    // 注入可用 Agent 資訊到當前狀態（如果提供）
+    if (availableAgents) {
+      currentState.metadata = {
+        ...currentState.metadata,
+        available_agents: availableAgents.map(a => ({
+          id: a.id,
+          role: a.role,
+          capabilities: a.capabilities || []
+        }))
+      };
+    }
+
+    // 1. 執行規劃引擎的重新規劃邏輯
+    const replanResult = await this.planEngine.replan(currentState, failedTaskId, error);
+
+    // 2. 獲取更新後的任務圖
+    const updatedTaskGraph = replanResult.planning?.taskGraph;
+
+    if (!updatedTaskGraph) {
+      throw new Error(`TaskPlanEngine failed to produce an updated TaskGraph during replan for goal: ${goal}`);
+    }
+
+    return updatedTaskGraph;
   }
 
   /**
@@ -90,50 +147,4 @@ export class CoordinatorAgent extends BaseAgent implements ICoordinator {
     };
   }
 
-  /**
-   * 將邏輯 TaskGraph 轉換為 Session Runtime 的數據結構
-   */
-  private convertToRuntimeGraph(logicalGraph: ITaskGraph): any {
-    const nodes: [string, any][] = [];
-    const adjList: [string, string[]][] = [];
-    const inDegreeMap: [string, number][] = [];
-
-    // 用於構建鄰接表 (Successors)
-    const successorMap = new Map<string, string[]>();
-    
-    // 1. 初始化所有節點
-    logicalGraph.nodes.forEach(node => {
-      nodes.push([node.id, { 
-        goal: node.goal, 
-        type: node.type,
-        assignedRole: node.assignedRole,
-        metadata: node.metadata 
-      }]);
-      successorMap.set(node.id, []);
-      inDegreeMap.push([node.id, node.dependencies.length]);
-    });
-
-    // 2. 建立邊的關係 (從依賴列表反轉為鄰接表)
-    logicalGraph.nodes.forEach(node => {
-      node.dependencies.forEach(parentId => {
-        const successors = successorMap.get(parentId);
-        if (successors) {
-          successors.push(node.id);
-        } else {
-          console.warn(`[CoordinatorAgent] Task ${node.id} depends on non-existent task ${parentId}`);
-        }
-      });
-    });
-
-    // 3. 轉換為數組格式
-    successorMap.forEach((successors, parentId) => {
-      adjList.push([parentId, successors]);
-    });
-
-    return {
-      nodes,
-      adjList,
-      inDegreeMap
-    };
-  }
 }

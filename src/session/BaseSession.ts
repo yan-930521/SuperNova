@@ -7,6 +7,7 @@ import { ReadyQueue } from './ReadyQueue';
 import type { IReadyQueue } from '../../interfaces/session/IReadyQueue';
 import type { ISnapshotManager } from '../../interfaces/infra/ISnapshotManager';
 import type { IAgentRegistry } from '../../interfaces/infra/IAgentRegistry';
+import type { ICoordinator } from '../../interfaces/agent/ICoordinator';
 
 /**
  * 會話基礎實作類
@@ -82,30 +83,43 @@ export class BaseSession implements ISession {
       console.log(`[BaseSession] Executing task: ${id}`);
       this.scheduler.onTaskStarted(id);
 
-      const metadata = this.taskGraph.getTask(id);
+      const taskNode = this.taskGraph.getTask(id);
+      if (!taskNode) {
+        console.error(`[BaseSession] Task node ${id} not found in graph during execution.`);
+        continue;
+      }
       
       try {
         await this.toolChain.execute(
           {
             session_id: this.id,
             target: id,
-            data: {}, // 預設空數據
-            metadata: metadata
+            data: taskNode.metadata || {}, // 使用 metadata 擴充數據
+            metadata: taskNode
           },
           async () => {
             // 中間件鏈結點：執行實際的 Agent 委派
             if (this.agentRegistry) {
-              const role = metadata.assignedRole || 'default';
-              const agent = this.agentRegistry.getAgent(role);
+              const assignedId = taskNode.assignedAgentId;
+              const assignedRole = taskNode.assignedRole || 'default';
+              
+              // 優先級：1. 指定 ID, 2. 指定 Role, 3. 預設 Role
+              let agent = assignedId ? this.agentRegistry.getAgent(assignedId) : undefined;
+              if (!agent) {
+                agent = this.agentRegistry.getAgent(assignedRole);
+              }
+              if (!agent) {
+                agent = this.agentRegistry.getAllAgents().find(a => a.role === assignedRole);
+              }
               
               if (agent && 'executeIntent' in agent) {
-                console.log(`[BaseSession] Delegating task ${id} to agent ${agent.id} (role: ${role})`);
+                console.log(`[BaseSession] Delegating task ${id} to agent ${agent.id} (role: ${agent.role})`);
                 await (agent as any).executeIntent({
-                  toolName: metadata.type || 'default',
-                  input: metadata
+                  toolName: taskNode.type || 'default',
+                  input: taskNode
                 });
               } else {
-                console.warn(`[BaseSession] No suitable worker agent found for role: ${role}. Task ${id} executed via middleware only.`);
+                console.warn(`[BaseSession] No suitable worker agent found for ID: ${assignedId} or Role: ${assignedRole}. Task ${id} executed via middleware only.`);
               }
             }
             console.log(`[BaseSession] Tool execution completed for task: ${id}`);
@@ -154,6 +168,49 @@ export class BaseSession implements ISession {
     console.error(`[BaseSession] Task ${taskId} failed:`, error);
     this.scheduler.onTaskFailed(taskId, this.taskGraph, this.readyQueue);
     
+    // 1. 嘗試進行自適應重新規劃
+    if (this.agentRegistry) {
+      const coordinator = this.agentRegistry.getAgentByRole('COORDINATOR') as ICoordinator | undefined;
+      if (coordinator && 'requestReplan' in coordinator) {
+        try {
+          console.log(`[BaseSession] Triggering adaptive replanning for task ${taskId}...`);
+          
+          const errorMessage = error instanceof Error ? error.message : String(error);
+
+          // 構建當前狀態 (IAgentState 的基礎版本)
+          const currentState = {
+            goal: this.goal,
+            currentTask: taskId,
+            planning: {
+              taskGraph: this.taskGraph.toJSON()
+            },
+            errors: [errorMessage]
+          };
+
+          // 獲寫當前所有可用的 Agent 資訊以供重新規劃
+          const availableAgents = this.agentRegistry.getAllAgents();
+
+          const newGraph = await coordinator.requestReplan(
+            this.goal,
+            taskId,
+            errorMessage,
+            currentState as any,
+            availableAgents
+          );
+
+          if (newGraph) {
+            console.log(`[BaseSession] Replanning successful. Loading new task graph.`);
+            await this.loadFromJSON({ taskGraph: newGraph });
+            return; // 重新規劃成功，跳過回滾
+          }
+        } catch (replanError) {
+          console.warn(`[BaseSession] Adaptive replanning failed:`, replanError);
+          // 繼續執行回滾邏輯
+        }
+      }
+    }
+
+    // 2. 如果重新規劃不可用或失敗，則執行標準回滾
     // 如果有 SnapshotManager，嘗試執行回滾到上一個成功狀態
     if (this.snapshotManager) {
       const lastSuccessful = await this.snapshotManager.getLatestSnapshotId(this.id);

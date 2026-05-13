@@ -1,6 +1,6 @@
-import { IMutationValidator } from '../interfaces/hook/IMutationValidator';
-import { IMutationRequest } from '../interfaces/models/IMutationRequest';
-import { IHook } from '../interfaces/hook/IHook';
+import { IMutationValidator } from '../../interfaces/hook/IMutationValidator';
+import { IMutationRequest } from '../../interfaces/models/IMutationRequest';
+import { IHook } from '../../interfaces/hook/IHook';
 
 /**
  * 變更校驗器實作

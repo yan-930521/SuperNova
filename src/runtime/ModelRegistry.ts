@@ -5,6 +5,7 @@ import { HumanMessage, AIMessage, BaseMessage } from '@langchain/core/messages';
 import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { ChatOpenAI } from '@langchain/openai';
+import { PromptLoader } from '../utils/PromptLoader';
 
 /**
  * 具體的推理引擎實現
@@ -21,17 +22,24 @@ export class InferenceEngine implements IInferenceEngine {
    * 這裡採用 LangGraph 內核風格：將 prompt 視為 Template，並自動從 state 注入變量。
    */
   async infer<T>(prompt: string, state: IAgentState, schema: z.ZodSchema<T>, options?: InferenceOptions): Promise<T> {
-    console.log(`[InferenceEngine] Invoking model for goal: ${state.goal}`);
+    // 1. 渲染 Prompt 並自動維護 state.messages (添加 HumanMessage)
+    const renderedPrompt = PromptLoader.render(prompt, {
+      ...state,
+      ...options?.variables,
+      goal: state.goal
+    });
 
-    // 1. 自動維護 state.messages (添加 HumanMessage)
-    // 注意：prompt 可能包含變量占位符，但在這裡我們記錄原始 prompt
-    state.messages.push(new HumanMessage(prompt));
+    // 嘗試從 Prompt 中提取 Role 名稱 (例如 # Role\n你是一個「...」)
+    const roleMatch = renderedPrompt.match(/# Role\n(?:你是一個)?(.+?)(?:\s|$)/);
+    const roleName = roleMatch ? roleMatch[1].replace(/[「」]/g, '') : (state.metadata?.role || 'Assistant');
+    const promptSnippet = renderedPrompt.split('\n').find(line => line.trim().length > 0 && !line.startsWith('#')) || '';
+    
+    // console.log(`[InferenceEngine] [${roleName}] Goal: ${state.goal.substring(0, 30)}... | ${promptSnippet.substring(0, 50)}...`);
+    
+    state.messages.push(new HumanMessage(renderedPrompt));
 
     try {
       // 2. 定義標準對話模板
-      // 注意：prompt 已經被推入 state.messages，所以 MessagesPlaceholder 會包含它。
-      // 我們不需要額外的 ["human", prompt] 欄位，除非我們想特別強調。
-      // 為了避免重複，我們這裡只使用 MessagesPlaceholder。
       const promptTemplate = ChatPromptTemplate.fromMessages([
         ["system", state.metadata?.identity || "You are a helpful AI assistant. Global goal: {goal}"],
         new MessagesPlaceholder("messages"),

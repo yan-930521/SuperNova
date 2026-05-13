@@ -1,4 +1,4 @@
-import type { IHook } from '../interfaces/hook/IHook';
+import type { IHook } from '../../interfaces/hook/IHook';
 
 /**
  * Hook 註冊表

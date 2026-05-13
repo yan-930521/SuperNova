@@ -35,7 +35,8 @@ export class TaskPlanEngine implements ITaskPlanEngine {
       (state: typeof AgentStateAnnotation.State) => {
         // 如果評分通過，進入展開階段；否則重規
         const lastEval = state.lastEvaluations[state.lastEvaluations.length - 1];
-        return (lastEval && lastEval.score >= 7) ? "expand" : "plan_milestones";
+        // 降低過審門檻至 6 分，減少無效循環
+        return (lastEval && lastEval.score >= 6) ? "expand" : "plan_milestones";
       },
       {
         expand: "expand",
@@ -49,7 +50,8 @@ export class TaskPlanEngine implements ITaskPlanEngine {
   }
 
   async run(state: IAgentState): Promise<IAgentState> {
-    return await this.graph.invoke(state);
+    // 增加遞迴限制至 50
+    return await this.graph.invoke(state, { recursionLimit: 50 });
   }
 
   /**
@@ -106,7 +108,8 @@ export class TaskPlanEngine implements ITaskPlanEngine {
     const result = await this.smartInference.infer(prompt, state as any, TaskExpandResponseSchema, {
       variables: {
         milestone: milestone,
-        projected_context: state.planning.projectedContext
+        projected_context: state.planning.projectedContext,
+        available_agents: JSON.stringify(state.metadata?.available_agents || [])
       }
     });
 
@@ -128,16 +131,37 @@ export class TaskPlanEngine implements ITaskPlanEngine {
     };
   }
 
-  async replan(failedNodeId: string): Promise<ITaskGraph> {
-    // 基礎實現：紀錄失敗並重新啟動規劃流程
-    console.log(`[TaskPlanEngine] Replanning due to failure at node: ${failedNodeId}`);
+  async replan(state: IAgentState, failedNodeId: string, error: string): Promise<Partial<IAgentState>> {
+    const failedNode = state.planning.taskGraph?.nodes.find(n => n.id === failedNodeId);
     
-    // 這裡我們模擬一個簡單的重規行為：直接回傳目前的圖，但在實際應用中，
-    // 可能需要更新 state 並重新 run graph。
-    return { 
-      nodes: [], 
-      milestones: [], 
-      currentMilestoneIndex: 0 
+    const prompt = PromptLoader.load('prompts/planning/replan.md', 'Replan for failed task: {failed_task_id}');
+    const result = await this.smartInference.infer(prompt, state as any, TaskExpandResponseSchema, {
+      variables: {
+        goal: state.goal,
+        failed_task_id: failedNodeId,
+        failed_task_goal: failedNode?.goal || 'Unknown',
+        error: error,
+        history: JSON.stringify(state.messages),
+        current_graph: JSON.stringify(state.planning.taskGraph),
+        available_agents: JSON.stringify(state.metadata?.available_agents || [])
+      }
+    });
+
+    // 為模型回傳的任務生成 UUID (如果模型沒產出的話) 並初始化狀態
+    const nodes: ITaskNode[] = result.nodes.map(n => ({
+      ...n,
+      id: n.id || uuidv4(),
+      status: 'pending' as const
+    }));
+
+    return {
+      planning: {
+        ...state.planning,
+        taskGraph: {
+          ...state.planning.taskGraph!,
+          nodes
+        }
+      }
     };
   }
 }

@@ -7,10 +7,14 @@ export interface IMutationRequest<T = any> {
   requester_id: string;
   /** 打算修改的 Hook 名稱 */
   target_hook: string;
+  /** 修改類型 (如: 'UPDATE', 'DELETE', 'APPEND') */
+  mutation_type: string;
   /** 提議變更的數據載體 */
   proposed_change: T;
   /** 優先級 (1-100) */
   priority: number;
   /** 版本參考標識 (MVCC) */
   version_ref: string;
+  /** 額外元數據 (如 base_version) */
+  metadata?: Record<string, any>;
 }

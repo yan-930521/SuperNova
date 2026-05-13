@@ -35,6 +35,7 @@ export const TaskNodeSchema = z.object({
   id: z.string().describe("任務唯一識別碼 (如 task_1)"),
   type: z.enum(["analysis", "code", "search", "test", "work"]).describe("任務執行類型"),
   goal: z.string().describe("該任務具體要達成的目標"),
+  assignedAgentId: z.string().optional().describe("指定執行的具體 Agent ID (若可用)"),
   assignedRole: z.string().describe("最適合執行此任務的 Agent 角色"),
   dependencies: z.array(z.string()).describe("此任務所依賴的前置任務 ID 列表")
 }).describe("DAG 中的單個任務節點");

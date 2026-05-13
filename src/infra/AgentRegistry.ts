@@ -39,6 +39,20 @@ export class AgentRegistry implements IAgentRegistry {
   }
 
   /**
+   * 獲取所有已註冊的 Agent 實例
+   */
+  getAllAgents(): IAgent[] {
+    return Array.from(this.agents.values());
+  }
+
+  /**
+   * 根據 Role 獲取第一個匹配的 Agent 實例 (內部工具方法)
+   */
+  getAgentByRole(role: string): IAgent | undefined {
+    return this.getAllAgents().find(agent => agent.role === role);
+  }
+
+  /**
    * 根據 ID 從檔案加載並實例化 Agent
    * @param id Agent ID
    */

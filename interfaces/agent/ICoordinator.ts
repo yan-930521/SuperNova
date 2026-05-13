@@ -17,4 +17,13 @@ export interface ICoordinator extends IAgent {
    * @param goal 任務目標描述
    */
   planTaskGraph(goal: string): Promise<any>;
+
+  /**
+   * 當任務失敗時，請求重新規劃任務圖
+   * @param goal 原始目標
+   * @param failedTaskId 失敗的任務 ID
+   * @param error 錯誤訊息
+   * @param currentState 當前 Agent 狀態
+   */
+  requestReplan(goal: string, failedTaskId: string, error: string, currentState: any): Promise<any>;
 }
