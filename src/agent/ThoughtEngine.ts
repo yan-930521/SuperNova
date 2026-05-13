@@ -11,12 +11,20 @@ import { StateGraph, END, START } from '@langchain/langgraph';
  */
 export class ThoughtEngine implements IThoughtEngine {
   private graph: any;
-  private fastInference: IInferenceEngine;
-  private evalInference: IInferenceEngine;
+  private generationEngine: IInferenceEngine;
+  private evaluationEngine: IInferenceEngine;
 
   constructor(private modelRegistry: IModelRegistry) {
-    this.fastInference = this.modelRegistry.getModel(ModelPreset.FAST);
-    this.evalInference = this.modelRegistry.getModel(ModelPreset.EVAL);
+    const fast = this.modelRegistry.getModel(ModelPreset.FAST);
+    const evalModel = this.modelRegistry.getModel(ModelPreset.EVAL);
+
+    this.generationEngine = fast.withSystemPrompt(
+      PromptLoader.load('prompts/reasoning/thought_gen.md', 'Generate {count} next steps for goal: {goal}')
+    );
+    this.evaluationEngine = evalModel.withSystemPrompt(
+      PromptLoader.load('prompts/reasoning/thought_eval.md', 'Evaluate these thoughts: {items}')
+    );
+
     this.graph = this.buildGraph();
   }
 
@@ -57,13 +65,7 @@ export class ThoughtEngine implements IThoughtEngine {
     const parentId = state.thoughtTree.activeNodeId;
     const depth = parentId ? (state.thoughtTree.nodes.find(n => n.id === parentId)?.depth || 0) + 1 : 0;
     
-    // 安全加載原始 Template (不手動渲染)
-    const prompt = PromptLoader.load(
-      'prompts/reasoning/thought_gen.md',
-      'Generate {count} next steps for goal: {goal}'
-    );
-
-    const rawBranches = await this.fastInference.infer(prompt, state as any, ThoughtGenResponseSchema, {
+    const rawBranches = await this.generationEngine.infer(state as any, ThoughtGenResponseSchema, {
       variables: {
         task: state.currentTask || 'N/A',
         count: '3'
@@ -95,12 +97,7 @@ export class ThoughtEngine implements IThoughtEngine {
     const pendingNodes = state.thoughtTree.nodes.filter(n => n.status === 'pending' && n.score === 0);
     if (pendingNodes.length === 0) return {};
 
-    const prompt = PromptLoader.load(
-      'prompts/reasoning/thought_eval.md',
-      'Evaluate these thoughts: {items}'
-    );
-
-    const evaluations = await this.evalInference.infer(prompt, state as any, ThoughtEvalResponseSchema, {
+    const evaluations = await this.evaluationEngine.infer(state as any, ThoughtEvalResponseSchema, {
       variables: {
         items: pendingNodes
       }

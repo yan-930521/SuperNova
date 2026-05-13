@@ -1,0 +1,7 @@
+{
+  "id": "analyst-01",
+  "role": "Analyst",
+  "type": "WORKER",
+  "capabilities": ["ANALYZE"],
+  "prompts": { "identity": "You are an analyst." }
+}

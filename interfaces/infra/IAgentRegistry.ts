@@ -23,9 +23,33 @@ export interface IAgentRegistry {
   getAllAgents(): IAgent[];
   
   /** 
+   * 根據角色名稱獲取 Agent 實例列表 
+   * @param role Agent 的角色名稱
+   */
+  getAgentByRole(role: string): IAgent[];
+
+  /** 
    * 從 JSON 數據動態加載並實例化 Agent
    * 通常用於從配置或持久化存儲中恢復 Agent。
    * @param agentJson Agent 的序列化數據
    */
   loadAgentFromJSON(agentJson: Record<string, any>): Promise<IAgent>;
+
+  /**
+   * 從指定目錄加載所有 Agent 配置
+   * @param dirPath 目錄路徑 (選擇性，若不傳入則使用預設配置)
+   */
+  loadAllAgentsFromDir(dirPath?: string): Promise<void>;
+
+  /**
+   * 確保存在預設的 Worker Agent
+   */
+  ensureDefaultWorker(): Promise<IAgent>;
+
+  /**
+   * 更新註冊表的運行時配置
+   * @param agentsDir Agent 配置目錄
+   * @param defaultId 預設 Agent ID
+   */
+  updateConfig(agentsDir: string, defaultId: string): void;
 }

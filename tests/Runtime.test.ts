@@ -1,4 +1,6 @@
 import { GlobalRuntime } from '../src/runtime/GlobalRuntime';
+import { SessionManager } from '../src/infra/SessionManager';
+import { EventBus } from '../src/infra/EventBus';
 import { Guardian, TimeoutError } from '../src/runtime/Guardian';
 import { InferenceEngine } from '../src/runtime/ModelRegistry';
 import { z } from 'zod';
@@ -22,25 +24,21 @@ describe('Runtime Theme Tests', () => {
 
   describe('GlobalRuntime', () => {
     let runtime: GlobalRuntime;
-    let mockSessionManager: any;
-    let mockEventBus: jest.Mocked<IEventBus>;
+    let sessionManager: SessionManager;
+    let eventBus: EventBus;
 
     beforeEach(() => {
-      mockSessionManager = {
-        createFromJSON: jest.fn(),
-        restoreFromSnapshot: jest.fn(),
-        getActiveSessions: jest.fn().mockReturnValue({})
-      };
-      mockEventBus = { publish: jest.fn(), subscribe: jest.fn() } as any;
-      runtime = new GlobalRuntime(mockSessionManager as ISessionManager, mockEventBus);
+      sessionManager = new SessionManager();
+      eventBus = new EventBus();
+      runtime = new GlobalRuntime(sessionManager, eventBus);
       runtime.config = {
         runtime: { tick_rate_ms: 100, max_active_sessions: 10 }
       } as any;
     });
 
     test('should trigger session ticks on interval', async () => {
-      const mockSession: Partial<ISession> = { tick: jest.fn().mockResolvedValue(undefined) };
-      mockSessionManager.getActiveSessions.mockReturnValue({ 's1': mockSession });
+      const session = await sessionManager.createFromJSON({ id: 's1', goal: 'test' });
+      const tickSpy = jest.spyOn(session, 'tick').mockResolvedValue(undefined);
 
       await runtime.start();
       
@@ -49,13 +47,13 @@ describe('Runtime Theme Tests', () => {
       await Promise.resolve();
       await Promise.resolve();
 
-      expect(mockSession.tick).toHaveBeenCalled();
+      expect(tickSpy).toHaveBeenCalled();
       await runtime.stop();
     });
 
     test('should stop when stop is called', async () => {
-      const mockSession: Partial<ISession> = { tick: jest.fn().mockResolvedValue(undefined) };
-      mockSessionManager.getActiveSessions.mockReturnValue({ 's1': mockSession });
+      const session = await sessionManager.createFromJSON({ id: 's1', goal: 'test' });
+      const tickSpy = jest.spyOn(session, 'tick').mockResolvedValue(undefined);
 
       await runtime.start();
       await runtime.stop();
@@ -63,7 +61,7 @@ describe('Runtime Theme Tests', () => {
       jest.advanceTimersByTime(200);
       await Promise.resolve();
 
-      expect(mockSession.tick).not.toHaveBeenCalled();
+      expect(tickSpy).not.toHaveBeenCalled();
     });
   });
 
@@ -104,13 +102,10 @@ describe('Runtime Theme Tests', () => {
 
     beforeEach(() => {
       mockInvoke = jest.fn();
-      const mockChain = { invoke: mockInvoke };
-      const mockTemplate = { pipe: jest.fn().mockReturnValue(mockChain) };
-
-      jest.spyOn(ChatPromptTemplate, 'fromMessages').mockReturnValue(mockTemplate as any);
-
       mockModel = { 
-        withStructuredOutput: jest.fn().mockReturnValue({})
+        withStructuredOutput: jest.fn().mockReturnValue({
+          invoke: mockInvoke
+        })
       };
 
       engine = new InferenceEngine(mockModel as any);
@@ -128,24 +123,26 @@ describe('Runtime Theme Tests', () => {
       mockInvoke.mockResolvedValue({ answer: "Hello" });
     });
 
-    it('should update state.messages on success', async () => {
+    it('should NOT update state.messages (stateless)', async () => {
       const schema = z.object({ answer: z.string() });
-      const prompt = "Say hello";
-      const result = await engine.infer(prompt, initialState, schema);
+      const boundEngine = engine.withSystemPrompt("You are {role}");
+      const result = await boundEngine.infer(initialState, schema, { variables: { role: "assistant" } });
 
       expect(result).toEqual({ answer: "Hello" });
-      expect(initialState.messages).toHaveLength(2);
-      expect(initialState.messages[0].content).toBe(prompt);
-      expect(initialState.messages[1].content).toContain("Hello");
+      expect(initialState.messages).toHaveLength(0); // Should remain 0
+      
+      // Check if invoke was called with SystemMessage and role rendered
+      const calledMessages = mockInvoke.mock.calls[0][0];
+      expect(calledMessages[0].constructor.name).toBe('SystemMessage');
+      expect(calledMessages[0].content).toBe('You are assistant');
     });
 
-    it('should update state.errors on failure', async () => {
+    it('should throw error on failure but NOT update state.errors', async () => {
       const schema = z.object({ answer: z.string() });
       mockInvoke.mockRejectedValue(new Error("LLM Error"));
 
-      await expect(engine.infer("Say hello", initialState, schema)).rejects.toThrow("LLM Error");
-      expect(initialState.errors).toHaveLength(1);
-      expect(initialState.errors[0]).toContain("LLM Error");
+      await expect(engine.infer(initialState, schema)).rejects.toThrow("LLM Error");
+      expect(initialState.errors).toHaveLength(0); // Should remain 0
     });
   });
 });

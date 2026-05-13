@@ -44,33 +44,37 @@ describe('Coordinator Theme Tests', () => {
     });
 
     test('should request replan from engine and return updated task graph', async () => {
-      const mockTaskGraph = {
-        nodes: [
-          { id: 'task-1', goal: 'Replanned Task', type: 'worker', dependencies: [], status: 'pending' as const }
-        ],
-        milestones: ['M1'],
-        currentMilestoneIndex: 0
+      const mockSmartInference = { 
+        infer: jest.fn().mockResolvedValue({
+          nodes: [
+            { id: 'task-1', goal: 'Replanned Task', type: 'worker', dependencies: [], status: 'pending' as const }
+          ]
+        }) 
       };
+      const mockModelRegistry = {
+        getModel: jest.fn().mockReturnValue(mockSmartInference),
+        registerModel: jest.fn()
+      } as any;
 
-      const mockPlanEngine: ITaskPlanEngine = {
-        planMilestones: jest.fn(),
-        expandMilestone: jest.fn(),
-        reviewAndProject: jest.fn(),
-        run: jest.fn(),
-        replan: jest.fn().mockResolvedValue({
-          planning: {
-            taskGraph: mockTaskGraph
-          }
-        })
-      };
-
-      const coordinatorWithEngine = new CoordinatorAgent(mockPlanEngine);
+      const realPlanEngine = new TaskPlanEngine(mockModelRegistry);
+      const coordinatorWithEngine = new CoordinatorAgent(realPlanEngine);
       await coordinatorWithEngine.initFromJSON({ id: 'coord-1', role: 'coordinator' });
 
-      const currentState: any = { goal: 'Test Goal', planning: { taskGraph: { nodes: [] } } };
+      const currentState: any = { 
+        goal: 'Test Goal', 
+        planning: { 
+          taskGraph: { nodes: [] },
+          milestones: ['M1'],
+          currentMilestoneIdx: 0
+        },
+        messages: [],
+        errors: [],
+        lastEvaluations: [],
+        thoughtTree: { nodes: [], iterationCount: 0, rootId: null, activeNodeId: null }
+      };
       const result = await coordinatorWithEngine.requestReplan('Test Goal', 'task-0', 'Some error', currentState);
 
-      expect(mockPlanEngine.replan).toHaveBeenCalledWith(currentState, 'task-0', 'Some error');
+      expect(mockSmartInference.infer).toHaveBeenCalled();
       expect(result.nodes).toHaveLength(1);
       expect(result.nodes[0].goal).toBe('Replanned Task');
     });

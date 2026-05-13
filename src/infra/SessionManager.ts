@@ -7,13 +7,13 @@ import { BaseSession } from '../session/BaseSession';
  * 負責管理 Session 的生命週期，包括創建、恢復與銷毀。
  */
 export class SessionManager implements ISessionManager {
-  private sessions: Map<string, ISession> = new Map();
+  private sessions: Map<string, BaseSession> = new Map();
 
   /**
    * 從 JSON 數據創建一個新的會話實例
    * @param json 會話的序列化數據
    */
-  async createFromJSON(json: Record<string, any>): Promise<ISession> {
+  async createFromJSON(json: Record<string, any>): Promise<BaseSession> {
     const id = json.id || `session-${Date.now()}`;
     const goal = json.goal || 'No goal specified';
     
@@ -29,7 +29,7 @@ export class SessionManager implements ISessionManager {
    * 從快照恢復會話
    * @param snapshot 序列化後的會話快照（目前預期為 JSON 字符串）
    */
-  async restoreFromSnapshot(snapshot: string): Promise<ISession> {
+  async restoreFromSnapshot(snapshot: string): Promise<BaseSession> {
     console.log(`[SessionManager] Restoring session from snapshot`);
     try {
       const json = JSON.parse(snapshot);
@@ -44,7 +44,7 @@ export class SessionManager implements ISessionManager {
    * 獲取指定 ID 的會話
    * @param id 會話 ID
    */
-  getSession(id: string): ISession | undefined {
+  getSession(id: string): BaseSession | undefined {
     return this.sessions.get(id);
   }
 
@@ -60,8 +60,8 @@ export class SessionManager implements ISessionManager {
   /**
    * 獲取當前所有活動中的會話
    */
-  getActiveSessions(): Record<string, ISession> {
-    const result: Record<string, ISession> = {};
+  getActiveSessions(): Record<string, BaseSession> {
+    const result: Record<string, BaseSession> = {};
     this.sessions.forEach((session, id) => {
       result[id] = session;
     });

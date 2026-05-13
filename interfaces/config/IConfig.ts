@@ -19,6 +19,10 @@ export interface IRuntimeConfig {
   readonly tick_rate_ms: number;
   /** 系統允許同時存在的最大活動會話數 */
   readonly max_active_sessions: number;
+  /** Agent 設定存放目錄 (相對路徑) */
+  readonly agents_dir: string;
+  /** 預設的保底 Worker Agent ID */
+  readonly default_fallback_agent_id: string;
 }
 
 /**

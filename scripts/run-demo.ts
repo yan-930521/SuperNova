@@ -1,106 +1,135 @@
-import { GlobalRuntime } from '../src/runtime/GlobalRuntime';
-import { SessionManager } from '../src/infra/SessionManager';
-import { EventBus } from '../src/infra/EventBus';
+import * as dotenv from 'dotenv';
+import { z } from 'zod';
+
+import { ChatOpenAI } from '@langchain/openai';
+
+import { ModelPreset } from '../interfaces/runtime/IModelRegistry';
+import { CoordinatorAgent } from '../src/agent/CoordinatorAgent';
+import { TaskPlanEngine } from '../src/agent/TaskPlanEngine';
+import { WorkerAgent } from '../src/agent/WorkerAgent';
 import { AgentRegistry } from '../src/infra/AgentRegistry';
+import { EventBus } from '../src/infra/EventBus';
+import { SessionManager } from '../src/infra/SessionManager';
 import { ToolRegistry } from '../src/infra/ToolRegistry';
-import { BaseAgent } from '../src/agent/BaseAgent';
+import { GlobalRuntime } from '../src/runtime/GlobalRuntime';
+import { InferenceEngine, ModelRegistry } from '../src/runtime/ModelRegistry';
+import { BaseSession } from '../src/session/BaseSession';
 import { BaseTool } from '../src/tool/BaseTool';
 
-// 1. 建立一個模擬的工具 (Mock Tool)
-class WebSearchTool extends BaseTool<string, string> {
-  constructor() {
-    super('WebSearch', 'Search the web for information', 'TIER_1', ['SEARCH']);
-  }
-  async run(input: string): Promise<string> {
-    console.log(`\n🔍 [WebSearchTool] 正在搜尋: "${input}"...`);
-    await new Promise(resolve => setTimeout(resolve, 800)); // 模擬網路延遲
-    console.log(`✅ [WebSearchTool] 找到結果!`);
-    return `Results for ${input}: SuperNova is awesome.`;
-  }
+dotenv.config();
+
+// 1. 建立具有 Zod 驗證的工具
+class MockSearchTool extends BaseTool<{ query: string }, string> {
+	constructor() {
+		super(
+			'WebSearch',
+			'Search the web for a specific query',
+			'TIER_1',
+			['SEARCH'],
+			z.object({ query: z.string().describe("The search query") })
+		);
+	}
+	async run(input: { query: string }): Promise<string> {
+		console.log(`\n🔍 [WebSearchTool] 執行搜尋: "${input.query}"`);
+		return `Results for ${input.query}: SuperNova is a modular AI runtime that integrates LangGraph and LangChain.`;
+	}
 }
 
-// 2. 建立一個模擬的分析工具 (Mock Tool)
-class AnalyzeTool extends BaseTool<string, string> {
-  constructor() {
-    super('Analyze', 'Analyze data', 'TIER_1', ['ANALYZE']);
-  }
-  async run(input: string): Promise<string> {
-    console.log(`\n🧠 [AnalyzeTool] 正在分析數據...`);
-    await new Promise(resolve => setTimeout(resolve, 1000)); // 模擬計算延遲
-    console.log(`✅ [AnalyzeTool] 分析完成!`);
-    return `Analysis: The data indicates success.`;
-  }
+class MockAnalyzeTool extends BaseTool<{ data: string }, string> {
+	constructor() {
+		super(
+			'Analyze',
+			'Analyze provided data and extract insights',
+			'TIER_1',
+			['ANALYZE'],
+			z.object({ data: z.string().describe("The data to analyze") })
+		);
+	}
+	async run(input: { data: string }): Promise<string> {
+		console.log(`\n🧠 [AnalyzeTool] 執行分析: "${input.data}"`);
+		return `Analysis: The data describes SuperNova's core architecture and integration capabilities.`;
+	}
 }
 
 async function runDemo() {
-  console.log("🚀 [SuperNova Demo] 正在初始化系統核心組件...\n");
+	console.log("🚀 [SuperNova Demo] 系統初始化 (Real Planning & ReAct Execution)...\n");
 
-  // 初始化基礎設施
-  const eventBus = new EventBus();
-  const sessionManager = new SessionManager();
-  const agentRegistry = new AgentRegistry();
-  const toolRegistry = new ToolRegistry();
-  const runtime = new GlobalRuntime(sessionManager, eventBus);
+	// A. 初始化核心基礎設施
+	const eventBus = new EventBus();
+	const sessionManager = new SessionManager();
+	const toolRegistry = new ToolRegistry();
+	
+	// B. 配置真實模型
+	const realModel = new ChatOpenAI({ 
+		modelName: "gpt-4o-mini", 
+		temperature: 0,
+		apiKey: process.env.OPENAI_API_KEY
+	});
+	const modelRegistry = new ModelRegistry();
+	const inference = new InferenceEngine(realModel as any);
+	modelRegistry.registerModel(ModelPreset.SMART, inference);
+	modelRegistry.registerModel(ModelPreset.FAST, inference);
+	modelRegistry.registerModel(ModelPreset.EVAL, inference);
 
-  // 註冊工具
-  toolRegistry.register(new WebSearchTool());
-  toolRegistry.register(new AnalyzeTool());
+	const agentRegistry = new AgentRegistry(modelRegistry, toolRegistry);
+	const runtime = new GlobalRuntime(sessionManager, eventBus, agentRegistry);
 
-  // 初始化並註冊 Agent
-  const searchAgent = new BaseAgent();
-  await searchAgent.initFromJSON({ id: 'agent-007', role: 'Researcher', capabilities: ['SEARCH'] });
-  agentRegistry.register(searchAgent);
+	// C. 註冊工具
+	toolRegistry.register(new MockSearchTool());
+	toolRegistry.register(new MockAnalyzeTool());
 
-  const analystAgent = new BaseAgent();
-  await analystAgent.initFromJSON({ id: 'agent-008', role: 'Analyst', capabilities: ['ANALYZE'] });
-  agentRegistry.register(analystAgent);
+	// D. 註冊 Agent
+	const coordinator = new CoordinatorAgent(new TaskPlanEngine(modelRegistry));
+	await coordinator.initFromJSON({ id: 'coord-01', role: 'COORDINATOR' });
+	agentRegistry.register(coordinator);
 
-  // 建立 Session
-  const session = await sessionManager.createFromJSON({
-    id: 'demo-session',
-    goal: 'Research latest AI trends and analyze them'
-  });
+	// 2. 啟動 Runtime
+	await runtime.start();
 
-  // 手動構造 TaskGraph (模擬 CoordinatorAgent 的工作)
-  const taskGraph = (session as any).taskGraph;
-  taskGraph.addTask('Task_Search', { tool: 'WebSearch', input: 'AI trends 2026' });
-  taskGraph.addTask('Task_Analyze', { tool: 'Analyze', input: 'search_results' });
-  taskGraph.addDependency('Task_Search', 'Task_Analyze'); // Analyze 必須等 Search 完成
+	// 3. 建立 Session 並讓 Coordinator 規劃任務
+	const goal = "Search for information about SuperNova AI runtime and analyze its core features.";
+	console.log(`🎯 目標: "${goal}"`);
+	
+	const session = await sessionManager.createFromJSON({
+		id: 'demo-session',
+		goal: goal
+	}) as BaseSession;
+	session.agentRegistry = agentRegistry;
 
-  console.log("\n▶️ [SuperNova Demo] 啟動全局運行時 (GlobalRuntime)...");
-  await runtime.start();
+	console.log("\n📝 [Coordinator] 正在自動規劃任務圖...");
+	const taskGraph = await coordinator.planTaskGraph(goal);
+	await session.loadFromJSON({ taskGraph });
 
-  // 監控系統狀態，當沒有活躍任務時自動停止
-  // 為了這個 Demo，我們手動觸發任務執行邏輯 (原本應由 Session.tick 內部與 Agent 互動處理)
-  
-  // 攔截 BaseSession 的 tick 以注入自定義的展示邏輯 (因為我們沒有實作真正的 Agent 推理大腦)
-  const originalTick = session.tick.bind(session);
-  (session as any).tick = async () => {
-    await originalTick();
-    
-    // 檢查 ReadyQueue 看看有沒有可以執行的任務
-    const readyQueue = (session as any).readyQueue;
-    const nextTask = readyQueue.pop();
-    
-    if (nextTask) {
-        console.log(`\n⚡ [系統調度] 發現就緒任務: [${nextTask}]，開始分派執行...`);
-        
-        if (nextTask === 'Task_Search') {
-            const tool = toolRegistry.getTool('WebSearch');
-            await tool!.run('AI trends 2026');
-            (session as any).scheduler.onTaskCompleted(nextTask, taskGraph, readyQueue);
-        } else if (nextTask === 'Task_Analyze') {
-            const tool = toolRegistry.getTool('Analyze');
-            await tool!.run('search_results');
-            (session as any).scheduler.onTaskCompleted(nextTask, taskGraph, readyQueue);
-            
-            // 任務鏈執行完畢，停止系統
-            console.log("\n🎉 [SuperNova Demo] 所有任務執行完畢！");
-            await runtime.stop();
-            process.exit(0);
-        }
-    }
-  };
+	console.log(`\n✅ 規劃完成，共 ${session.taskGraph.size} 個任務。`);
+	console.log("\n▶️ [SuperNova Demo] 啟動執行循環...");
+
+	// 4. 執行循環
+	let tickCount = 0;
+	const maxTicks = 20;
+
+	while (session.taskGraph.size > 0 || session.readyQueue.length > 0) {
+		await session.tick();
+		tickCount++;
+		if (tickCount >= maxTicks) {
+			console.warn("\n⚠️ 達到最大 Tick 限制，停止執行。");
+			break;
+		}
+		// 等待一點時間模擬異步執行
+		await new Promise(resolve => setTimeout(resolve, 500));
+	}
+
+	console.log("\n🎉 [SuperNova Demo] 任務執行流程結束！");
+	
+	// 5. 輸出結果 (模擬)
+	console.log("\n--- 執行結果摘要 ---");
+	console.log("Session ID:", session.id);
+	console.log("Final Status:", session.status);
+
+	await runtime.stop();
 }
 
-runDemo().catch(console.error);
+if (process.env.OPENAI_API_KEY) {
+	runDemo().catch(console.error);
+} else {
+	console.error("❌ 錯誤: 請在 .env 中配置 OPENAI_API_KEY。");
+}

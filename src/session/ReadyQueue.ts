@@ -20,6 +20,10 @@ export class ReadyQueue implements IReadyQueue {
     return this.queue.length;
   }
 
+  getItems(): string[] {
+    return [...this.queue];
+  }
+
   clear(): void {
     this.queue = [];
   }

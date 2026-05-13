@@ -19,8 +19,12 @@ SuperNova 是一個基於 TypeScript 構建的高性能、模組化且具備高�
 *   **TraceContext 傳播：** 強制要求所有跨組件通訊攜帶 `session_id` 與 `trace_id`。
 
 ### 4. 模組化與擴展性 (Modularity)
+*   **無狀態推理引擎 (Stateless Inference)：** 重構後的 `InferenceEngine` 採用無副作用設計，與 Agent 狀態解耦，提升了系統的純粹性與並行能力。
+*   **提示詞模板快取 (Prompt Template Caching)：** 支持 `ChatPromptTemplate` 預編譯與綁定，避免重複讀取磁碟，顯著降低推理延遲。
+
+### 5. 結構化輸出與安全性 (Structured Output & Safety)
+*   **OpenAI Strict Mode 支持：** 全面優化 JSON Schema，確保在 OpenAI 強制模式下具備 100% 的生成可靠性。
 *   **中間件流水線 (Middleware Pipeline)：** 核心行為（如工具執行、Mutation 提交）支持 Pre/Post/Error 三層攔截器。
-*   **領域系統隔離 (Vertical Systems)：** 透過 `IVerticalSystem` 接口隔離具體的業務邏輯（如 RTS、RPG 或程式開發）。
 
 ---
 
@@ -29,19 +33,18 @@ SuperNova 是一個基於 TypeScript 構建的高性能、模組化且具備高�
 SuperNova 採用 **組件化容器 (Component Container)** 設計。Agent 本身是一個輕量級容器，透過 JSON 配置動態裝載具備特定能力的行為組件 (Behaviors)，實現了「大腦 (思維/規劃) 與身體 (執行) 分離」。
 
 - **Identity (身份):** 由 JSON 定義的靜態特徵。
-- **Behavior Layer (組件層):** 可插拔的行為插件 (Planner, Reasoner, Arbitrator)。
+- **Behavior Layer (組件層):** 基於 LangGraph 實作的可插拔行為插件 (Planner, Reasoner, Evaluator)。
 - **Execution Layer (執行層):** 透過標準化 Intent 與 Data-Only Output 與世界交互。
-
-詳細架構設計請參閱 [ARCH.md](./ARCH.md)。
 
 ---
 
 ## 🛠️ 技術棧 (Tech Stack)
 
-- **核心：** TypeScript 5.x
+- **語言：** TypeScript 5.x
+- **LLM 框架：** LangChain / LangGraph (JS/TS)
+- **數據驗證：** Zod (Strict Schema)
 - **環境：** Node.js
 - **測試：** Jest + ts-jest
-- **設計模式：** Interface-Driven Development, Component-Based Container, Middleware (Onion Model), DAG-based Scheduling.
 
 ---
 
@@ -52,8 +55,19 @@ SuperNova 採用 **組件化容器 (Component Container)** 設計。Agent 本身
 npm install
 ```
 
-### 2. 運行集成測試
-驗證組件化架構是否運作正常：
+### 2. 配置環境
+在根目錄建立 `.env` 文件，填入：
+```env
+OPENAI_API_KEY=your_key_here
+```
+
+### 3. 運行 Demo
+體驗真實的自動化規劃與執行流程：
+```bash
+npx ts-node scripts/run-demo.ts
+```
+
+### 4. 運行測試
 ```bash
 npm test tests/
 ```
@@ -65,7 +79,7 @@ npm test tests/
 本項目遵循嚴格的工程化標準：
 - **註解 (Comments)：** 必須使用中文進行詳細說明，解釋邏輯意圖與風險。
 - **日誌與鍵值 (Logging & Keys)：** 所有的 Log 訊息、數據結構 Key、指標名稱必須使用英文。
-- **類型安全：** 核心數據流強制使用泛型與強類型接口。
+- **LLM 使用：** 所有真實 LLM API 呼叫必須經過 `IInferenceEngine` 並遵循安全規範。
 
 ---
 
@@ -73,6 +87,8 @@ npm test tests/
 
 - [x] **Phase 1-6:** 核心運行時與基礎架構落地
 - [x] **Phase 7:** Agent 組件化重構 (Component-Based Refactor)
-- [ ] **Phase 8:** 行為插件集擴展與實戰應用 (Ongoing)
+- [x] **Phase 8:** 無狀態推理引擎與提示詞綁定優化
+- [ ] **Phase 9:** 真實工具鏈集成 (File, Search, Python)
+- [ ] **Phase 10:** 多 Agent 協作場景實戰測試 (Ongoing)
 
 ---

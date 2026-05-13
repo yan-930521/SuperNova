@@ -3,7 +3,6 @@ import { IEvaluatorAgent } from '../../interfaces/agent/IEvaluatorAgent';
 import { IEvaluationRecord } from '../../interfaces/agent/IAgentState';
 import { IModelRegistry, IInferenceEngine, ModelPreset } from '../../interfaces/runtime/IModelRegistry';
 import { ThoughtEvalResponseSchema, PlanReviewSchema } from '../schemas/agent/AgentOutputSchemas';
-import { PromptLoader } from '../utils/PromptLoader';
 
 /**
  * EvaluatorAgent 類
@@ -11,34 +10,48 @@ import { PromptLoader } from '../utils/PromptLoader';
  * 配置應包含 prompts.thought_eval 和 prompts.plan_review 連結。
  */
 export class EvaluatorAgent extends BaseAgent implements IEvaluatorAgent {
-  private evalInference: IInferenceEngine;
+  private thoughtEvalEngine: IInferenceEngine;
+  private planReviewEngine: IInferenceEngine;
 
   constructor(private modelRegistry: IModelRegistry) {
     super();
-    this.evalInference = this.modelRegistry.getModel(ModelPreset.EVAL);
+    const evalModel = this.modelRegistry.getModel(ModelPreset.EVAL);
+    
+    // 預先綁定常見評估引擎
+    this.thoughtEvalEngine = evalModel.withSystemPrompt(
+      this._config.prompts?.thought_eval || "Evaluate these thoughts: {items}"
+    );
+    this.planReviewEngine = evalModel.withSystemPrompt(
+      this._config.prompts?.plan_review || "Review this plan: {items}"
+    );
+  }
+
+  /**
+   * 初始化後重新綁定提示詞 (因為 _config 可能在 initFromJSON 中改變)
+   */
+  async initFromJSON(config: Record<string, any>): Promise<void> {
+    await super.initFromJSON(config);
+    const evalModel = this.modelRegistry.getModel(ModelPreset.EVAL);
+    this.thoughtEvalEngine = evalModel.withSystemPrompt(
+      this._config.prompts?.thought_eval || "Evaluate these thoughts: {items}"
+    );
+    this.planReviewEngine = evalModel.withSystemPrompt(
+      this._config.prompts?.plan_review || "Review this plan: {items}"
+    );
   }
   
   /**
    * 對一組對象進行批次評分
-   * @param targets 待評分對象列表 (如 ThoughtNodes 或 TaskNodes)
-   * @param criteria 評分上下文 (包含 type, goal, messages, state 等)
    */
   async evaluateBatch(targets: any[], criteria: any): Promise<IEvaluationRecord[]> {
-    console.log(`[EvaluatorAgent ${this.id}] Starting real evaluation for ${targets.length} items.`);
+    console.log(`[EvaluatorAgent ${this.id}] 開始對 ${targets.length} 個項目進行評估。`);
 
-    // 1. 決定任務類型對應的模板與 Schema
     const isThought = criteria.type === 'thought';
-    const promptTemplate = isThought 
-      ? this._config.prompts?.thought_eval 
-      : this._config.prompts?.plan_review;
-    
+    const engine = isThought ? this.thoughtEvalEngine : this.planReviewEngine;
     const schema = isThought ? ThoughtEvalResponseSchema : PlanReviewSchema;
 
-    // 2. 執行真實推理 (利用 LangGraph 內部風格：原始模板 + state 注入)
-    // 注意：如果是規劃審查，模型通常回傳單個結果；如果是思維評價，回傳數組。
-    // 為了統一接口，我們在此處進行適配。
-    const result = await this.evalInference.infer(
-      promptTemplate || "Evaluate the following items: {items}",
+    // 2. 執行真實推理 (Stateless)
+    const result = await engine.infer(
       criteria.state || { goal: criteria.goal, messages: criteria.messages || [], metadata: { identity: this.identity } },
       schema as any,
       {
@@ -49,15 +62,13 @@ export class EvaluatorAgent extends BaseAgent implements IEvaluatorAgent {
       }
     );
 
-    // 3. 結構轉換：確保回傳符合 IEvaluationRecord[]
+    // 3. 結構轉換
     if (isThought) {
-      // ThoughtEvalResponseSchema 本身就是數組
       return (result as any[]).map(r => ({
         ...r,
         evaluatorId: this.id
       }));
     } else {
-      // PlanReviewSchema 是單個物件，我們將其擴展到所有 targets (通常規劃審核是對整個圖的)
       const review = result as { score: number; rationale: string };
       return [{
         targetId: 'current_plan',
@@ -69,12 +80,21 @@ export class EvaluatorAgent extends BaseAgent implements IEvaluatorAgent {
   }
 
   /**
-   * 實作 IWorkerAgent 要求的 executeIntent
+   * 實作 IWorkerAgent 要求的 processTask
+   * @param taskNode 來自 TaskGraph 的任務節點
    */
-  async executeIntent(intent: any): Promise<any> {
-    if (intent.type === 'evaluate') {
-      return this.evaluateBatch(intent.targets, intent.criteria);
+  async processTask(taskNode: any): Promise<any> {
+    // 評估者主要執行評估工作。
+    // taskNode 可能包含評估標準與目標。
+    if (taskNode.type === 'evaluate_thought' || taskNode.type === 'evaluate_plan') {
+      const { targets, criteria } = taskNode.data || {};
+      if (!targets || !criteria) {
+        throw new Error(`評估任務 ${taskNode.id} 缺少目標或標準。`);
+      }
+      const evalCriteria = { ...criteria, type: taskNode.type.split('_')[1] };
+      return this.evaluateBatch(targets, evalCriteria);
     }
-    return null;
+    
+    throw new Error(`EvaluatorAgent 無法處理任務類型: ${taskNode.type}`);
   }
 }

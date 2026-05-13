@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { IToolContext } from './IToolContext';
 
 /**
@@ -24,6 +25,9 @@ export interface ITool<TIn = any, TOut = any> {
    * TIER_3: 具破壞性 (Destructive)
    */
   safety_tier: ToolSafetyTier;
+
+  /** 輸入驗證 Schema (Zod) */
+  schema: z.ZodType<TIn>;
   
   /** 
    * 工具輸入預檢

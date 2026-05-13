@@ -2,6 +2,7 @@ import type { IRuntime } from '../../interfaces/runtime/IRuntime';
 import type { IEvent } from '../../interfaces/models/IEvent';
 import type { IEventBus } from '../../interfaces/infra/IEventBus';
 import type { ISessionManager } from '../../interfaces/infra/ISessionManager';
+import type { IAgentRegistry } from '../../interfaces/infra/IAgentRegistry';
 import type { IConfig } from '../../interfaces/config/IConfig';
 import { ConfigLoader } from '../config/ConfigLoader';
 
@@ -16,7 +17,8 @@ export class GlobalRuntime implements IRuntime {
 
   constructor(
     private sessionManager: ISessionManager,
-    private eventBus: IEventBus
+    private eventBus: IEventBus,
+    private agentRegistry?: IAgentRegistry
   ) {}
 
   /**
@@ -29,6 +31,25 @@ export class GlobalRuntime implements IRuntime {
     if (!this.config) {
       const loader = new ConfigLoader();
       this.config = await loader.bootstrap('./supernova.json');
+    }
+
+    // 自動載入 Agent
+    if (this.agentRegistry) {
+      const agentsDir = this.config?.runtime.agents_dir || './agents';
+      const fallbackId = this.config?.runtime.default_fallback_agent_id || 'default-worker';
+
+      // 同步配置到註冊表
+      this.agentRegistry.updateConfig(agentsDir, fallbackId);
+
+      console.log(`[GlobalRuntime] Auto-loading agents from ${agentsDir}...`);
+      await this.agentRegistry.loadAllAgentsFromDir();
+      
+      // 確保預設 Worker 存在
+      try {
+        await this.agentRegistry.ensureDefaultWorker();
+      } catch (e) {
+        console.warn(`[GlobalRuntime] ${(e as Error).message}`);
+      }
     }
 
     this.isRunning = true;

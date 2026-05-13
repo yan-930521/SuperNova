@@ -37,29 +37,39 @@ export class CoordinatorAgent extends BaseAgent implements ICoordinator {
   }
 
   /**
+   * 從 JSON 配置初始化或恢復 Agent 狀態
+   * @param config 配置對象
+   */
+  async initFromJSON(config: Record<string, any>): Promise<void> {
+    await super.initFromJSON(config);
+    if (config.availableAgents) {
+      this._config.availableAgents = config.availableAgents;
+    }
+  }
+
+  /**
    * 基於目標生成任務的有向無環圖 (DAG)
    * @param goal 任務目標描述
-   * @param availableAgents 當前系統中可用的 Agent 列表 (可選)
    */
-  async planTaskGraph(goal: string, availableAgents?: any[]): Promise<ITaskGraph> {
+  async planTaskGraph(goal: string): Promise<ITaskGraph> {
     console.log(`[CoordinatorAgent ${this.id}] Planning task graph for goal: ${goal}`);
     
     if (!this.planEngine) {
       throw new Error(`TaskPlanEngine not injected into CoordinatorAgent ${this.id}`);
     }
 
+    const availableAgents = this._config.availableAgents || [];
+
     // 1. 建立初始狀態，並注入可用 Agent 資訊
     const initialState = this.createInitialState(goal);
-    if (availableAgents) {
-      initialState.metadata = {
-        ...initialState.metadata,
-        available_agents: availableAgents.map(a => ({
-          id: a.id,
-          role: a.role,
-          capabilities: a.capabilities || []
-        }))
-      };
-    }
+    initialState.metadata = {
+      ...initialState.metadata,
+      available_agents: availableAgents.map((a: any) => ({
+        id: a.id,
+        role: a.role,
+        capabilities: a.capabilities || []
+      }))
+    };
 
     // 2. 執行規劃引擎 (LangGraph 流程)
     const finalState = await this.planEngine.run(initialState);
@@ -78,14 +88,12 @@ export class CoordinatorAgent extends BaseAgent implements ICoordinator {
    * @param failedTaskId 失敗的任務 ID
    * @param error 錯誤訊息
    * @param currentState 當前 Agent 狀態
-   * @param availableAgents 當前系統中可用的 Agent 列表 (可選)
    */
   async requestReplan(
     goal: string, 
     failedTaskId: string, 
     error: string, 
-    currentState: IAgentState,
-    availableAgents?: any[]
+    currentState: IAgentState
   ): Promise<ITaskGraph> {
     console.log(`[CoordinatorAgent ${this.id}] Requesting replan for failed task: ${failedTaskId}`);
 
@@ -93,17 +101,17 @@ export class CoordinatorAgent extends BaseAgent implements ICoordinator {
       throw new Error(`TaskPlanEngine not injected into CoordinatorAgent ${this.id}`);
     }
 
-    // 注入可用 Agent 資訊到當前狀態（如果提供）
-    if (availableAgents) {
-      currentState.metadata = {
-        ...currentState.metadata,
-        available_agents: availableAgents.map(a => ({
-          id: a.id,
-          role: a.role,
-          capabilities: a.capabilities || []
-        }))
-      };
-    }
+    const availableAgents = this._config.availableAgents || [];
+
+    // 注入可用 Agent 資訊到當前狀態
+    currentState.metadata = {
+      ...currentState.metadata,
+      available_agents: availableAgents.map((a: any) => ({
+        id: a.id,
+        role: a.role,
+        capabilities: a.capabilities || []
+      }))
+    };
 
     // 1. 執行規劃引擎的重新規劃邏輯
     const replanResult = await this.planEngine.replan(currentState, failedTaskId, error);

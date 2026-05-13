@@ -1,0 +1,7 @@
+{
+  "id": "researcher-01",
+  "role": "Researcher",
+  "type": "WORKER",
+  "capabilities": ["SEARCH"],
+  "prompts": { "identity": "You are a researcher." }
+}

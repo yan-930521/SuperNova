@@ -1,4 +1,4 @@
-import type { IToolRegistry } from '../../interfaces/tool/IToolRegistry';
+import type { IToolRegistry } from '../../interfaces/infra/IToolRegistry';
 import type { ITool } from '../../interfaces/tool/ITool';
 
 /**

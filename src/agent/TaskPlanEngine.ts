@@ -12,12 +12,33 @@ import { StateGraph, END, START } from '@langchain/langgraph';
  */
 export class TaskPlanEngine implements ITaskPlanEngine {
   private graph: any;
-  private smartInference: IInferenceEngine;
-  private evalInference: IInferenceEngine;
+  private milestoneEngine: IInferenceEngine;
+  private reviewEngine: IInferenceEngine;
+  private projectionEngine: IInferenceEngine;
+  private expansionEngine: IInferenceEngine;
+  private replanEngine: IInferenceEngine;
 
   constructor(private modelRegistry: IModelRegistry) {
-    this.smartInference = this.modelRegistry.getModel(ModelPreset.SMART);
-    this.evalInference = this.modelRegistry.getModel(ModelPreset.EVAL);
+    const smart = this.modelRegistry.getModel(ModelPreset.SMART);
+    const evalModel = this.modelRegistry.getModel(ModelPreset.EVAL);
+
+    // 1. 預先載入並綁定提示詞，達成「維持特定 prompt」
+    this.milestoneEngine = smart.withSystemPrompt(
+      PromptLoader.load('prompts/planning/milestone_plan.md', 'Plan milestones for goal: {goal}')
+    );
+    this.reviewEngine = evalModel.withSystemPrompt(
+      PromptLoader.load('prompts/planning/plan_review.md', 'Review these milestones: {items}')
+    );
+    this.projectionEngine = smart.withSystemPrompt(
+      PromptLoader.load('prompts/common/context_projection.md', 'Project context for: {task_graph}')
+    );
+    this.expansionEngine = smart.withSystemPrompt(
+      PromptLoader.load('prompts/planning/task_expand.md', 'Expand milestone: {milestone}')
+    );
+    this.replanEngine = smart.withSystemPrompt(
+      PromptLoader.load('prompts/planning/replan.md', 'Replan for failed task: {failed_task_id}')
+    );
+
     this.graph = this.buildGraph();
   }
 
@@ -58,8 +79,7 @@ export class TaskPlanEngine implements ITaskPlanEngine {
    * [Node] 里程碑規劃
    */
   async planMilestones(state: typeof AgentStateAnnotation.State): Promise<Partial<typeof AgentStateAnnotation.State>> {
-    const prompt = PromptLoader.load('prompts/planning/milestone_plan.md', 'Plan milestones for goal: {goal}');
-    const result = await this.smartInference.infer(prompt, state as any, MilestonePlanSchema);
+    const result = await this.milestoneEngine.infer(state as any, MilestonePlanSchema);
 
     return {
       planning: {
@@ -74,14 +94,12 @@ export class TaskPlanEngine implements ITaskPlanEngine {
    */
   async reviewAndProject(state: typeof AgentStateAnnotation.State): Promise<Partial<typeof AgentStateAnnotation.State>> {
     // 1. 執行架構審查
-    const reviewPrompt = PromptLoader.load('prompts/planning/plan_review.md', 'Review these milestones: {items}');
-    const review = await this.evalInference.infer(reviewPrompt, state as any, PlanReviewSchema, {
+    const review = await this.reviewEngine.infer(state as any, PlanReviewSchema, {
       variables: { items: state.planning.milestones }
     });
 
     // 2. 執行環境投影
-    const projectionPrompt = PromptLoader.load('prompts/common/context_projection.md', 'Project context for: {task_graph}');
-    const projection = await this.smartInference.infer(projectionPrompt, state as any, ContextProjectionSchema, {
+    const projection = await this.projectionEngine.infer(state as any, ContextProjectionSchema, {
       variables: { 
         current_context: "Initial state",
         task_graph: state.planning.milestones
@@ -104,8 +122,7 @@ export class TaskPlanEngine implements ITaskPlanEngine {
     const milestone = state.planning.milestones[state.planning.currentMilestoneIdx];
     if (!milestone) return {};
 
-    const prompt = PromptLoader.load('prompts/planning/task_expand.md', 'Expand milestone: {milestone}');
-    const result = await this.smartInference.infer(prompt, state as any, TaskExpandResponseSchema, {
+    const result = await this.expansionEngine.infer(state as any, TaskExpandResponseSchema, {
       variables: {
         milestone: milestone,
         projected_context: state.planning.projectedContext,
@@ -134,8 +151,7 @@ export class TaskPlanEngine implements ITaskPlanEngine {
   async replan(state: IAgentState, failedNodeId: string, error: string): Promise<Partial<IAgentState>> {
     const failedNode = state.planning.taskGraph?.nodes.find(n => n.id === failedNodeId);
     
-    const prompt = PromptLoader.load('prompts/planning/replan.md', 'Replan for failed task: {failed_task_id}');
-    const result = await this.smartInference.infer(prompt, state as any, TaskExpandResponseSchema, {
+    const result = await this.replanEngine.infer(state as any, TaskExpandResponseSchema, {
       variables: {
         goal: state.goal,
         failed_task_id: failedNodeId,

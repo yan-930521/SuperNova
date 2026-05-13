@@ -13,9 +13,9 @@ export interface ITaskNode {
   /** 所需能力標籤 (例如: ['FILE_WRITE', 'SEARCH']) */
   requiredCapabilities?: string[];
   /** 指定執行的 Agent ID (選填) */
-  assignedAgentId?: string;
+  assignedAgentId?: string | null;
   /** 指定執行的 Agent Role (選填) */
-  assignedRole?: string;
+  assignedRole?: string | null;
   /** 工具路由指引 (Grounding) */
   toolRouting?: {
     preferredTools?: string[];

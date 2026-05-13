@@ -43,10 +43,12 @@ describe('Integration & E2E Theme Tests', () => {
     const testStorageDir = path.join(process.cwd(), '.test-integration-snapshots-theme');
     let snapshotManager: FileSnapshotManager;
     let agentRegistry: AgentRegistry;
+    let toolRegistry: ToolRegistry;
 
     beforeEach(async () => {
       snapshotManager = new FileSnapshotManager(testStorageDir);
-      agentRegistry = new AgentRegistry();
+      toolRegistry = new ToolRegistry();
+      agentRegistry = new AgentRegistry(undefined, toolRegistry);
       if (await fs.access(testStorageDir).then(() => true).catch(() => false)) {
         await fs.rm(testStorageDir, { recursive: true, force: true });
       }
@@ -62,6 +64,8 @@ describe('Integration & E2E Theme Tests', () => {
       const session = new BaseSession('test-session', 'Initial Goal');
       session.snapshotManager = snapshotManager;
       session.agentRegistry = agentRegistry;
+
+      toolRegistry.register(new MockTool('test', 'test'));
 
       const agent = new BaseAgent();
       await agent.initFromJSON({ id: 'agent-1', role: 'worker', state: { step: 0 } });
@@ -93,8 +97,8 @@ describe('Integration & E2E Theme Tests', () => {
     it('should execute tasks in DAG order through GlobalRuntime', async () => {
       jest.useFakeTimers();
       const eventBus = new EventBus();
-      const agentRegistry = new AgentRegistry();
       const toolRegistry = new ToolRegistry();
+      const agentRegistry = new AgentRegistry(undefined, toolRegistry);
       const sessionManager = new SessionManager();
       const runtime = new GlobalRuntime(sessionManager, eventBus);
       runtime.config = { runtime: { tick_rate_ms: 100, max_active_sessions: 10 } } as any;
@@ -102,9 +106,9 @@ describe('Integration & E2E Theme Tests', () => {
       toolRegistry.register(new MockTool('SearchTool', 'SEARCH'));
       toolRegistry.register(new MockTool('SummarizeTool', 'SUMMARIZE'));
 
-      const searchAgent = new BaseAgent();
+      const searchAgent = new WorkerAgent(toolRegistry);
       await searchAgent.initFromJSON({ id: 'a1', role: 'Searcher', capabilities: ['SEARCH'] });
-      const sumAgent = new BaseAgent();
+      const sumAgent = new WorkerAgent(toolRegistry);
       await sumAgent.initFromJSON({ id: 'a2', role: 'Summarizer', capabilities: ['SUMMARIZE'] });
       agentRegistry.register(searchAgent);
       agentRegistry.register(sumAgent);
@@ -161,8 +165,8 @@ describe('Integration & E2E Theme Tests', () => {
         coordinator = new CoordinatorAgent(planEngine);
         await coordinator.initFromJSON({ id: "coord", role: "COORDINATOR" });
 
-        agentRegistry = new AgentRegistry();
         toolRegistry = new ToolRegistry();
+        agentRegistry = new AgentRegistry(modelRegistry, toolRegistry);
         sessionManager = new SessionManager();
       });
 
@@ -174,7 +178,7 @@ describe('Integration & E2E Theme Tests', () => {
       it('should recover from failure via adaptive replanning', async () => {
         const goal = "Save 'test' to 'forbidden.txt'. If fails, use 'backup.txt'.";
         toolRegistry.register(new MockTool('work', 'work', 'TIER_2'));
-        const worker = new WorkerAgent(toolRegistry);
+        const worker = new WorkerAgent(toolRegistry, modelRegistry);
         await worker.initFromJSON({ id: "w1", role: "worker", capabilities: ["WORK"] });
         agentRegistry.register(worker);
         agentRegistry.register(coordinator);

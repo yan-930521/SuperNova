@@ -1,73 +1,79 @@
-import { IModelRegistry, IInferenceEngine, ModelPreset, InferenceOptions } from '../../interfaces/runtime/IModelRegistry';
-import { IAgentState } from '../../interfaces/agent/IAgentState';
 import { z } from 'zod';
-import { HumanMessage, AIMessage, BaseMessage } from '@langchain/core/messages';
-import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts';
+
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import { ChatOpenAI } from '@langchain/openai';
-import { PromptLoader } from '../utils/PromptLoader';
+import { BaseMessage } from '@langchain/core/messages';
+import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts';
+
+import { IAgentState } from '../../interfaces/agent/IAgentState';
+import {
+    IInferenceEngine, IModelRegistry, InferenceOptions, ModelPreset
+} from '../../interfaces/runtime/IModelRegistry';
 
 /**
  * 具體的推理引擎實現
- * 使用真實的 LangChain Runnable 管道
+ * 採用 Stateless 設計，內部維護 ChatPromptTemplate。
  */
 export class InferenceEngine implements IInferenceEngine {
+  private _promptTemplate: ChatPromptTemplate | null = null;
+
   /**
    * @param modelInstance 支援 withStructuredOutput 的 LangChain 聊天模型
    */
-  constructor(private modelInstance: BaseChatModel) {}
+  constructor(public readonly modelInstance: BaseChatModel) {}
+
+  get promptTemplate(): ChatPromptTemplate | null {
+    return this._promptTemplate;
+  }
 
   /**
-   * 執行結構化推理並更新訊息流
-   * 這裡採用 LangGraph 內核風格：將 prompt 視為 Template，並自動從 state 注入變量。
+   * 綁定系統提示詞，回傳一個新的引擎實例。
+   * 建立並快取 ChatPromptTemplate。
    */
-  async infer<T>(prompt: string, state: IAgentState, schema: z.ZodSchema<T>, options?: InferenceOptions): Promise<T> {
-    // 1. 渲染 Prompt 並自動維護 state.messages (添加 HumanMessage)
-    const renderedPrompt = PromptLoader.render(prompt, {
-      ...state,
-      ...options?.variables,
-      goal: state.goal
-    });
+  withSystemPrompt(prompt: string): IInferenceEngine {
+    const newEngine = new InferenceEngine(this.modelInstance);
+    // 建立標準的 LangGraph 風格模板：System Prompt + Messages 佔位符
+    newEngine._promptTemplate = ChatPromptTemplate.fromMessages([
+      ["system", prompt],
+      new MessagesPlaceholder("messages"),
+    ]);
+    return newEngine;
+  }
 
-    // 嘗試從 Prompt 中提取 Role 名稱 (例如 # Role\n你是一個「...」)
-    const roleMatch = renderedPrompt.match(/# Role\n(?:你是一個)?(.+?)(?:\s|$)/);
-    const roleName = roleMatch ? roleMatch[1].replace(/[「」]/g, '') : (state.metadata?.role || 'Assistant');
-    const promptSnippet = renderedPrompt.split('\n').find(line => line.trim().length > 0 && !line.startsWith('#')) || '';
-    
-    // console.log(`[InferenceEngine] [${roleName}] Goal: ${state.goal.substring(0, 30)}... | ${promptSnippet.substring(0, 50)}...`);
-    
-    state.messages.push(new HumanMessage(renderedPrompt));
-
+  /**
+   * 執行結構化推理。
+   * 使用 promptTemplate 進行渲染與調用。
+   */
+  async infer<T>(state: IAgentState, schema: z.ZodSchema<T>, options?: InferenceOptions): Promise<T> {
     try {
-      // 2. 定義標準對話模板
-      const promptTemplate = ChatPromptTemplate.fromMessages([
-        ["system", state.metadata?.identity || "You are a helpful AI assistant. Global goal: {goal}"],
-        new MessagesPlaceholder("messages"),
-      ]);
+      // 1. 確定使用的模板
+      let template = this._promptTemplate;
+      if (!template) {
+        // 如果沒有綁定模板，則建立臨時的預設模板
+        const defaultSystem = state.metadata?.identity || "You are a helpful AI assistant. Global goal: {goal}";
+        template = ChatPromptTemplate.fromMessages([
+          ["system", defaultSystem],
+          new MessagesPlaceholder("messages"),
+        ]);
+      }
 
-      // 3. 構建並執行結構化輸出鏈
-      const chain = promptTemplate.pipe(
-        this.modelInstance.withStructuredOutput(schema as any) as any
-      );
-
-      // 4. 準備調度數據
+      // 2. 準備輸入數據
       const inputVariables = {
         ...state,
         ...options?.variables,
         goal: state.goal,
-        messages: state.messages
+        messages: state.messages || []
       };
 
-      const result = await chain.invoke(inputVariables) as T;
+      // 3. 執行結構化輸出鏈
+      const chain = template.pipe(
+        this.modelInstance.withStructuredOutput(schema as any) as any
+      );
 
-      // 5. 添加 AIMessage 回訊息流
-      state.messages.push(new AIMessage(JSON.stringify(result)));
+      const result = await chain.invoke(inputVariables) as T;
 
       return result;
     } catch (error: any) {
       console.error(`[InferenceEngine] Inference failed: ${error.message}`);
-      // 記錄錯誤到 state
-      state.errors.push(`INFERENCE_ERROR: ${error.message}`);
       throw error;
     }
   }
@@ -85,6 +91,15 @@ export class ModelRegistry implements IModelRegistry {
       throw new Error(`Model preset ${preset} not found in registry.`);
     }
     return engine;
+  }
+
+  getRawModel(preset: ModelPreset): BaseChatModel {
+    const engine = this.engines.get(preset);
+    if (!engine) {
+      throw new Error(`Model preset ${preset} not found in registry.`);
+    }
+    // @ts-ignore - 內部已知 InferenceEngine 實作
+    return (engine as InferenceEngine).modelInstance;
   }
 
   registerModel(preset: ModelPreset, engine: IInferenceEngine): void {

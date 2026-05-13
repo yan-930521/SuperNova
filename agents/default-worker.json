@@ -1,0 +1,9 @@
+{
+  "id": "default-worker",
+  "role": "Worker",
+  "type": "WORKER",
+  "capabilities": ["GENERAL_EXECUTION"],
+  "prompts": {
+    "identity": "You are a default worker agent capable of executing various tasks using available tools."
+  }
+}

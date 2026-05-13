@@ -4,7 +4,7 @@
   "description": "SuperNova AI Runtime",
   "main": "index.js",
   "scripts": {
-    "test": "jest",
+    "test": "npm run lint && jest",
     "build": "tsc",
     "lint": "tsc --noEmit"
   },

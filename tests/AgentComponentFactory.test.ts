@@ -5,6 +5,7 @@ describe('AgentComponentFactory', () => {
   const mockModelRegistry: IModelRegistry = {
     getModel: jest.fn().mockReturnValue({}),
     registerModel: jest.fn(),
+    getRawModel: jest.fn(),
   };
 
   it('should create a TaskPlanEngine for LANGGRAPH_PLANNER', () => {

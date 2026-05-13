@@ -6,6 +6,12 @@ import type { IWorkerAgent } from './IWorkerAgent';
  */
 export interface IEvaluatorAgent extends IWorkerAgent {
   /**
+   * 處理來自 TaskGraph 的任務節點
+   * @param taskNode 任務節點數據
+   */
+  processTask(taskNode: any): Promise<any>;
+
+  /**
    * 對一組對象進行批次評分 (思路分支或任務圖)
    * @param targets 待評分對象列表
    * @param criteria 評分標準或上下文

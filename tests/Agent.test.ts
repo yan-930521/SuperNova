@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { BaseAgent } from '../src/agent/BaseAgent';
 import { WorkerAgent } from '../src/agent/WorkerAgent';
 import { EvaluatorAgent } from '../src/agent/EvaluatorAgent';
@@ -125,7 +126,7 @@ describe('Agent Theme Tests', () => {
 
     beforeEach(() => {
       toolRegistry = new ToolRegistry();
-      workerAgent = new WorkerAgent(toolRegistry);
+      workerAgent = new WorkerAgent(toolRegistry, undefined as any);
     });
 
     it('should initialize correctly from JSON', async () => {
@@ -146,11 +147,12 @@ describe('Agent Theme Tests', () => {
       expect(workerAgent.capabilities).toContain('test-cap');
     });
 
-    it('should execute intent by running the corresponding tool', async () => {
+    it('should execute task by running the corresponding tool', async () => {
       const mockTool = {
         name: 'test-tool',
-        description: 'A test tool',
+        description: 'test-desc',
         safety_tier: 'TIER_1' as const,
+        schema: z.any(),
         validateInput: jest.fn().mockResolvedValue(true),
         run: jest.fn().mockResolvedValue('tool-result'),
         required_capabilities: []
@@ -158,12 +160,14 @@ describe('Agent Theme Tests', () => {
 
       toolRegistry.register(mockTool);
 
-      const intent = {
-        toolName: 'test-tool',
-        input: 'test-input'
+      const taskNode = {
+        id: 'task-1',
+        type: 'test-tool',
+        goal: 'test-goal',
+        metadata: { data: 'test-input' }
       };
 
-      const result = await workerAgent.executeIntent(intent);
+      const result = await workerAgent.processTask(taskNode as any);
 
       expect(result).toBe('tool-result');
       expect(mockTool.run).toHaveBeenCalledWith(
@@ -175,12 +179,13 @@ describe('Agent Theme Tests', () => {
     });
 
     it('should throw error if tool is not found', async () => {
-      const intent = {
-        toolName: 'non-existent-tool',
-        input: {}
+      const taskNode = {
+        id: 'task-fail',
+        type: 'non-existent-tool',
+        goal: 'fail'
       };
 
-      await expect(workerAgent.executeIntent(intent)).rejects.toThrow('Tool not found: non-existent-tool');
+      await expect(workerAgent.processTask(taskNode as any)).rejects.toThrow('找不到保底工具: non-existent-tool');
     });
   });
 
@@ -273,17 +278,20 @@ describe('Agent Theme Tests', () => {
       expect(results[0].rationale).toBe('Excellent plan');
     });
 
-    test('should handle executeIntent for evaluate type', async () => {
+    test('should handle processTask for evaluate type', async () => {
       const evaluateSpy = jest.spyOn(agent, 'evaluateBatch').mockResolvedValue([]);
       
-      const intent = {
-        type: 'evaluate',
-        targets: [],
-        criteria: { type: 'thought' }
+      const taskNode = {
+        id: 'eval-task',
+        type: 'evaluate_thought',
+        data: {
+          targets: [],
+          criteria: { goal: 'test' }
+        }
       };
 
-      await agent.executeIntent(intent);
-      expect(evaluateSpy).toHaveBeenCalledWith([], intent.criteria);
+      await agent.processTask(taskNode);
+      expect(evaluateSpy).toHaveBeenCalled();
     });
   });
 });

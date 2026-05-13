@@ -11,6 +11,10 @@ export const DEFAULT_CONFIG: IConfig = {
     tick_rate_ms: 100,
     /** 預設最大並行會話數為 10 */
     max_active_sessions: 10,
+    /** 預設 Agent 目錄 */
+    agents_dir: './agents',
+    /** 預設保底 Agent ID */
+    default_fallback_agent_id: 'default-worker',
   },
   observability: {
     /** 預設運行於開發模式 */

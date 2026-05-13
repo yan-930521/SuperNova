@@ -1,25 +1,16 @@
+import { z } from 'zod';
 import { BaseSession } from '../src/session/BaseSession';
 import { TaskGraph } from '../src/session/TaskGraph';
 import { ParallelScheduler } from '../src/session/ParallelScheduler';
 import { MiddlewareChain } from '../src/session/MiddlewareChain';
+import { ReadyQueue } from '../src/session/ReadyQueue';
 import { WorkerAgent } from '../src/agent/WorkerAgent';
-import { CoordinatorAgent } from '../src/agent/CoordinatorAgent';
 import { ToolRegistry } from '../src/infra/ToolRegistry';
+import { AgentRegistry } from '../src/infra/AgentRegistry';
+import { FileSnapshotManager } from '../src/infra/FileSnapshotManager';
+import * as fs from 'fs/promises';
+import * as path from 'path';
 import type { IMiddleware, IMiddlewareContext } from '../interfaces/session/IMiddleware';
-import type { ISnapshotManager } from '../interfaces/infra/ISnapshotManager';
-import type { IReadyQueue } from '../interfaces/session/IReadyQueue';
-
-/**
- * 輔助用 ReadyQueue 實作 (用於測試)
- */
-class MockReadyQueue implements IReadyQueue {
-  private queue: string[] = [];
-  push(taskId: string): void { this.queue.push(taskId); }
-  pop(): string | null { return this.queue.shift() || null; }
-  get length(): number { return this.queue.length; }
-  get items(): string[] { return [...this.queue]; }
-  clear(): void { this.queue = []; }
-}
 
 describe('Session Theme Tests', () => {
 
@@ -49,9 +40,19 @@ describe('Session Theme Tests', () => {
 
   describe('BaseSession Execution & Delegation', () => {
     let session: BaseSession;
+    const testStorageDir = path.join(process.cwd(), '.test-session-snapshots');
 
-    beforeEach(() => {
+    beforeEach(async () => {
       session = new BaseSession('test-session', 'to test real execution');
+      if (await fs.access(testStorageDir).then(() => true).catch(() => false)) {
+        await fs.rm(testStorageDir, { recursive: true, force: true });
+      }
+    });
+
+    afterEach(async () => {
+      if (await fs.access(testStorageDir).then(() => true).catch(() => false)) {
+        await fs.rm(testStorageDir, { recursive: true, force: true });
+      }
     });
 
     it('should execute tasks through the toolChain middleware', async () => {
@@ -74,12 +75,8 @@ describe('Session Theme Tests', () => {
     });
 
     it('should trigger rollback on task failure if SnapshotManager is present', async () => {
-      const mockSnapshotManager: ISnapshotManager = {
-        snapshot: jest.fn(),
-        rollback: jest.fn().mockResolvedValue(undefined),
-        getLatestSnapshotId: jest.fn().mockResolvedValue('last-successful-checkpoint')
-      } as any;
-      session.snapshotManager = mockSnapshotManager;
+      const snapshotManager = new FileSnapshotManager(testStorageDir);
+      session.snapshotManager = snapshotManager;
 
       session.use('TOOL', {
         execute: async (ctx, next) => {
@@ -88,32 +85,45 @@ describe('Session Theme Tests', () => {
         }
       });
 
-      session.taskGraph.addTask('task_fail');
-      try { await session.tick(); } catch (e) {}
-      expect(mockSnapshotManager.rollback).toHaveBeenCalled();
+      session.taskGraph.addTask('task_ok', { goal: 'ok' });
+      session.taskGraph.addTask('task_fail', { goal: 'fail', dependencies: ['task_ok'] });
+      session.taskGraph.addDependency('task_ok', 'task_fail');
+
+      // 執行第一個任務並產生快照
+      await session.tick();
+      const firstSnapshot = await snapshotManager.getLatestSnapshotId(session.id);
+      expect(firstSnapshot).toBeDefined();
+
+      // 執行失敗任務，應觸發回滾
+      try { 
+        await session.tick(); 
+      } catch (e) {
+        // 預期會拋出錯誤
+      }
+      
+      // 回滾後狀態應回到 task_ok 完成後的狀態，即 task_fail 就緒但未執行
+      expect(session.taskGraph.getReadyTasks()).toContain('task_fail');
     });
 
     it('should delegate task execution to a real worker agent', async () => {
       const toolRegistry = new ToolRegistry();
       const mockTool = {
         name: 'test-tool',
-        description: 'A test tool',
+        description: 'test-desc',
         safety_tier: 'TIER_1' as const,
+        schema: z.any(),
         validateInput: jest.fn().mockResolvedValue(true),
-        run: jest.fn().mockResolvedValue('tool-result'),
+        run: jest.fn().mockResolvedValue({ success: true }),
         required_capabilities: []
       };
       toolRegistry.register(mockTool);
 
-      const worker = new WorkerAgent(toolRegistry);
+      const agentRegistry = new AgentRegistry(undefined, toolRegistry);
+      const worker = new WorkerAgent(toolRegistry, undefined as any);
       await worker.initFromJSON({ id: 'real-worker', role: 'worker' });
+      agentRegistry.register(worker);
 
-      const mockRegistry = {
-        getAgent: jest.fn().mockReturnValue(worker),
-        getAgentByRole: jest.fn().mockReturnValue(undefined)
-      };
-
-      session.agentRegistry = mockRegistry as any;
+      session.agentRegistry = agentRegistry;
       session.taskGraph.addTask('task_1', { goal: 'test delegation', assignedRole: 'worker', type: 'test-tool' });
 
       await session.tick();
@@ -125,12 +135,12 @@ describe('Session Theme Tests', () => {
 
   describe('ParallelScheduler & TaskGraph', () => {
     let graph: TaskGraph;
-    let queue: MockReadyQueue;
+    let queue: ReadyQueue;
     let scheduler: ParallelScheduler;
 
     beforeEach(() => {
       graph = new TaskGraph();
-      queue = new MockReadyQueue();
+      queue = new ReadyQueue();
       scheduler = new ParallelScheduler();
     });
 
@@ -146,10 +156,10 @@ describe('Session Theme Tests', () => {
       graph.addDependency('A', 'B');
 
       scheduler.schedule(graph, queue);
-      expect(queue.items).toEqual(['A']);
+      expect(queue.getItems()).toEqual(['A']);
 
       scheduler.onTaskCompleted('A', graph, queue);
-      expect(queue.items).toContain('B');
+      expect(queue.getItems()).toContain('B');
     });
   });
 

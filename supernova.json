@@ -1,7 +1,9 @@
 {
   "runtime": {
     "tick_rate_ms": 100,
-    "max_active_sessions": 10
+    "max_active_sessions": 10,
+    "agents_dir": "./agents",
+    "default_fallback_agent_id": "default-worker"
   },
   "observability": {
     "mode": "DEVELOPMENT",
