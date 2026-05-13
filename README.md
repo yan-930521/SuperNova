@@ -58,7 +58,8 @@ npm install
 ### 2. 配置環境
 在根目錄建立 `.env` 文件，填入：
 ```env
-OPENAI_API_KEY=your_key_here
+OPENAI_API_KEY=<your_key_here>
+TAVILY_API_KEY=<your_key_here>
 ```
 
 ### 3. 運行 Demo
@@ -71,6 +72,51 @@ npx ts-node scripts/run-demo.ts
 ```bash
 npm test tests/
 ```
+
+---
+
+## 🤖 建立新 Agent (Creating a New Agent)
+
+在 SuperNova 中，Agent 是由 JSON 配置驅動的。要建立一個新的 Agent，請在 `./agents` 目錄下建立一個 `.json` 檔案。
+
+### 1. 配置文件格式
+一個標準的 Agent 配置文件如下：
+
+```json
+{
+  "id": "therapist",
+  "role": "THERAPIST",
+  "type": "WORKER",
+  "capabilities": ["THERAPY", "EMPATHY"],
+  "prompts": {
+    "identity": "你是一位專業的心理諮商師，擅長傾聽、同理並提供情緒支持。"
+  }
+}
+```
+
+### 2. 欄位說明
+- **`id`**: Agent 的唯一標識符，建議與檔名一致。
+- **`role`**: Agent 的角色名稱。
+- **`type`**: Agent 的類型，可選值包括：
+    - `COORDINATOR`: 負責任務規劃與分發。
+    - `EVALUATOR`: 負責評估任務執行結果。
+    - `WORKER`: 負責執行具體任務（通常具備工具調用能力）。
+    - `BASE`: 基礎 Agent 實作。
+- **`capabilities`**: Agent 具備的能力標籤，用於工具匹配與任務分配。
+- **`prompts.identity`**: 定義 Agent 的人格特質與行為準則（System Prompt）。可以是一個字串，或者是一個指向 `.md` 檔案的路徑（例如 `"identity/researcher_identity.md"`，系統會自動從 `./prompts/` 目錄加載）。
+
+### 3. 加載 Agent
+系統啟動時，`AgentRegistry` 會自動掃描並加載 `./agents` 目錄下的所有配置文件，或者你也可以手動加載：
+
+```typescript
+const agent = await agentRegistry.loadAgentById('therapist');
+```
+
+---
+
+## ⚠️ 已知限制 (Known Limitations)
+
+- **訊息上下文隔離：** 目前 Agent 在執行任務時，無法讀取同一個任務線（Session/Task Line）中的歷史訊息紀錄。每個任務節點的執行狀態（Messages）目前是獨立初始化且不跨任務共享的。
 
 ---
 

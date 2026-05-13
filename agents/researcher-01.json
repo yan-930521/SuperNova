@@ -1,7 +1,9 @@
 {
   "id": "researcher-01",
-  "role": "Researcher",
+  "role": "RESEARCHER",
   "type": "WORKER",
-  "capabilities": ["SEARCH"],
-  "prompts": { "identity": "You are a researcher." }
+  "capabilities": ["WEB_SEARCH", "FILE_WRITE"],
+  "prompts": {
+    "identity": "You are a professional researcher and writer."
+  }
 }

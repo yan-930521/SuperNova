@@ -36,4 +36,9 @@ export interface IAgent {
    * @param config 符合 AgentDefinitionSchema 的配置對象
    */
   initFromJSON(config: Record<string, any>): Promise<void>;
+
+  /**
+   * 檢查 Agent 是否已完成初始化且準備好執行任務
+   */
+  isReady(): boolean;
 }

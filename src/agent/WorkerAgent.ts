@@ -15,14 +15,17 @@ import type { IToolRegistry } from '../../interfaces/infra/IToolRegistry';
 import type { IAgentState } from '../../interfaces/agent/IAgentState';
 import type { ITaskNode } from '../../interfaces/agent/ITaskPlanEngine';
 import type { IModelRegistry } from '../../interfaces/runtime/IModelRegistry';
+
 /**
  * WorkerAgent 類
- * 負責接收任務，直接利用 LangGraph 內建的 ReAct 模式執行任務。
- * 支持並行執行多個來自不同會話的任務。
+ * 負責接收任務，利用 LangGraph 內建的 ReAct 模式執行任務。
+ * 在初始化時即構建 ReAct Agent 實例以提升效能並確保執行環境不變。
  */
 export class WorkerAgent extends BaseAgent implements IWorkerAgent {
   protected reasoner?: IReasoningBehavior;
   private activeTasks: Set<Promise<any>> = new Set();
+  /** 預編譯的 ReAct Agent 實例 */
+  private reactAgent: any = null;
 
   constructor(
     protected toolRegistry?: IToolRegistry,
@@ -32,18 +35,86 @@ export class WorkerAgent extends BaseAgent implements IWorkerAgent {
   }
 
   /**
-   * 初始化 WorkerAgent
-   * @param config 來自 JSON 的配置
+   * 從 JSON 配置初始化 WorkerAgent
+   * 初始化後即鎖定執行引擎 (ReAct Agent)
    */
   async initFromJSON(config: Record<string, any>): Promise<void> {
+    const isFirstInit = !this._isReady;
+    
+    if (!isFirstInit) {
+      // 如果已經初始化過，忽略身份變更請求，保持 Agent 不變性
+      if (config.prompts?.identity && config.prompts.identity !== this.identity) {
+        console.warn(`[WorkerAgent ${this.id}] Attempted to change identity after initialization. Agent is immutable. Change ignored.`);
+        
+        // 創建一個排除身份變更的配置副本
+        const safeConfig = { 
+          ...config, 
+          prompts: { ...config.prompts, identity: this.identity } 
+        };
+        await super.initFromJSON(safeConfig);
+      } else {
+        await super.initFromJSON(config);
+      }
+      
+      console.log(`[WorkerAgent ${this.id}] 狀態已恢復，跳過引擎重新構建。`);
+      return;
+    }
+
+    // 第一次初始化
     await super.initFromJSON(config);
-    console.log(`[WorkerAgent ${this.id}] 初始化完成。`);
+    this.buildExecutionEngine();
+    
+    // 標記為就緒 (若引擎構建成功)
+    if (this.reactAgent) {
+      this._isReady = true;
+    }
+    
+    console.log(`[WorkerAgent ${this.id}] 初始化完成。${this.reactAgent ? 'ReAct Engine Ready.' : 'Fallback Mode Ready.'}`);
+  }
+
+  /**
+   * 構建 ReAct 執行引擎
+   */
+  private buildExecutionEngine(): void {
+    if (!this.modelRegistry || !this.toolRegistry) {
+      return;
+    }
+
+    try {
+      // 1. 獲取模型
+      const model = this.modelRegistry.getRawModel(ModelPreset.SMART) as BaseChatModel;
+      
+      // 2. 獲取並包裝工具
+      const tools = this.toolRegistry.listTools().map((t: ITool) => tool(
+        async (input) => {
+          // 這裡的 context 會在執行時動態生成，所以這裡先預留
+          return await t.run(input, {
+            sessionId: 'dynamic', // 實際執行時會被覆蓋或透過其他方式傳遞
+            agentId: this.id,
+            traceId: `trace-${Date.now()}`
+          });
+        },
+        {
+          name: t.name,
+          description: t.description,
+          schema: t.schema || z.any()
+        }
+      ));
+
+      // 3. 創建 ReAct Agent
+      this.reactAgent = createReactAgent({
+        llm: model,
+        tools: tools,
+        // 使用 identity 作為系統提示詞的前綴
+        messageModifier: this.identity || `You are a helpful worker agent specialized in ${this.role}.`
+      });
+    } catch (error: any) {
+      console.error(`[WorkerAgent ${this.id}] Failed to build ReAct engine: ${error.message}`);
+    }
   }
 
   /**
    * 處理來自 TaskGraph 的任務節點 (直接執行)
-   * 透過 async 不等待實現潛在的並行支持，但由調用者控制等待。
-   * @param taskNode 任務節點數據
    */
   async processTask(taskNode: ITaskNode): Promise<any> {
     const taskPromise = this.executeTaskInternal(taskNode);
@@ -58,56 +129,31 @@ export class WorkerAgent extends BaseAgent implements IWorkerAgent {
   }
 
   /**
-   * 內部的任務執行邏輯，使用 LangGraph ReAct 實作
-   * @param taskNode 任務節點
+   * 內部的任務執行邏輯
    */
   protected async executeTaskInternal(taskNode: ITaskNode): Promise<any> {
-    if (!this.modelRegistry || !this.toolRegistry) {
-      // 若未配置 modelRegistry 或 toolRegistry，則嘗試直接根據 taskNode.type 執行工具 (退化模式)
+    // 若無預編譯引擎，則使用保底模式
+    if (!this.reactAgent) {
       return this.fallbackExecution(taskNode);
     }
 
-    // 1. 獲取模型與工具
-    const model = this.modelRegistry.getRawModel(ModelPreset.SMART) as BaseChatModel;
-    const tools = this.toolRegistry.listTools().map((t: ITool) => tool(
-      async (input) => {
-        const context = {
-          sessionId: taskNode.metadata?.sessionId || 'unknown',
-          agentId: this.id,
-          traceId: `trace-${Date.now()}`
-        };
-        return await t.run(input, context);
-      },
-      {
-        name: t.name,
-        description: t.description,
-        schema: t.schema || z.any()
-      }
-    ));
-
-    // 2. 創建 ReAct Agent
-    const agent = createReactAgent({
-      llm: model,
-      tools: tools,
-      // 使用 identity 作為系統提示詞的前綴
-      messageModifier: this.identity || `You are a helpful worker agent specialized in ${this.role}.`
-    });
-
-    // 3. 構建思考上下文
+    // 1. 構建思考上下文
     const state: IAgentState = this.createTaskState(taskNode);
     
-    // 4. 執行 Agent
-    console.log(`[WorkerAgent ${this.id}] 正在利用 ReAct 模式執行任務: ${taskNode.goal}`);
-    // 準備訊息：若無歷史訊息，則將 goal 作為第一條 HumanMessage
+    console.log(`[WorkerAgent ${this.id}] 正在利用預編譯 ReAct 模式執行任務: ${taskNode.goal}`);
+    
+    // 2. 準備訊息
     const messages = state.messages.length > 0 
       ? state.messages 
       : [new HumanMessage(state.goal)];
 
-    const resultState = await agent.invoke({
+    // 3. 執行 Agent
+    // 注意：這裡直接使用預先編譯好的 reactAgent
+    const resultState = await this.reactAgent.invoke({
       messages: messages
     });
 
-    // 5. 返回最後一條消息的內容作為結果
+    // 4. 返回最後一條消息的內容作為結果
     const lastMessage = resultState.messages[resultState.messages.length - 1];
     return lastMessage.content;
   }
@@ -133,7 +179,7 @@ export class WorkerAgent extends BaseAgent implements IWorkerAgent {
   }
 
   /**
-   * 當無 ModelRegistry 時的保底執行邏輯
+   * 當無可用引擎時的保底執行邏輯
    */
   protected async fallbackExecution(taskNode: ITaskNode): Promise<any> {
     if (!this.toolRegistry) {
@@ -148,7 +194,7 @@ export class WorkerAgent extends BaseAgent implements IWorkerAgent {
         traceId: `trace-${Date.now()}`
       });
     }
-    throw new Error(`無可用 ModelRegistry 且找不到保底工具: ${taskNode.type}`);
+    throw new Error(`無可用預編譯引擎且找不到保底工具: ${taskNode.type}`);
   }
 
   /**

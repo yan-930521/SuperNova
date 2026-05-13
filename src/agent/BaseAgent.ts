@@ -13,6 +13,7 @@ export class BaseAgent implements IAgent {
   protected _identity: string = '';
   protected _capabilities: string[] = [];
   protected _config: Record<string, any> = {};
+  protected _isReady: boolean = false;
   private _components = new Map<string, IAgentComponent>();
 
   get id(): string {
@@ -29,6 +30,13 @@ export class BaseAgent implements IAgent {
 
   get capabilities(): string[] {
     return this._capabilities;
+  }
+
+  /**
+   * 檢查 Agent 是否已完成初始化且準備好執行任務
+   */
+  isReady(): boolean {
+    return this._isReady;
   }
 
   /**

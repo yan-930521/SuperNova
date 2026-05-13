@@ -2,167 +2,183 @@ import type { IAgentRegistry } from '../../interfaces/infra/IAgentRegistry';
 import type { IAgent } from '../../interfaces/agent/IAgent';
 import type { IModelRegistry } from '../../interfaces/runtime/IModelRegistry';
 import type { ITaskPlanEngine } from '../../interfaces/agent/ITaskPlanEngine';
-import { BaseAgent } from '../agent/BaseAgent';
-import { CoordinatorAgent } from '../agent/CoordinatorAgent';
-import { EvaluatorAgent } from '../agent/EvaluatorAgent';
-import { WorkerAgent } from '../agent/WorkerAgent';
-import { TaskPlanEngine } from '../agent/TaskPlanEngine';
-import type { IToolRegistry } from '../../interfaces/infra/IToolRegistry';
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { BaseAgent } from '../agent/BaseAgent';
+import { CoordinatorAgent } from '../agent/CoordinatorAgent';
+import { EvaluatorAgent } from '../agent/EvaluatorAgent';
+import { TaskPlanEngine } from '../agent/TaskPlanEngine';
+import { WorkerAgent } from '../agent/WorkerAgent';
+
+import type { IToolRegistry } from '../../interfaces/infra/IToolRegistry';
 /**
  * AgentRegistry 類
  * 實作 IAgentRegistry 接口，負責管理系統中所有可用的 Agent 實例。
  */
 export class AgentRegistry implements IAgentRegistry {
-  private agents: Map<string, IAgent> = new Map();
-  private taskPlanEngine?: ITaskPlanEngine;
-  private agentsDir: string = './agents';
-  private defaultFallbackAgentId: string = 'default-worker';
+	private agents: Map<string, IAgent> = new Map();
+	private taskPlanEngine?: ITaskPlanEngine;
+	private agentsDir: string = './agents';
+	private defaultFallbackAgentId: string = 'default-worker';
 
-  constructor(
-    private modelRegistry?: IModelRegistry,
-    private toolRegistry?: IToolRegistry
-  ) {
-    if (this.modelRegistry) {
-      this.taskPlanEngine = new TaskPlanEngine(this.modelRegistry);
-    }
-  }
+	constructor(
+		private modelRegistry?: IModelRegistry,
+		private toolRegistry?: IToolRegistry
+	) {
+		if (this.modelRegistry) {
+			this.taskPlanEngine = new TaskPlanEngine(this.modelRegistry);
+		}
+	}
 
-  /**
-   * 更新註冊表的運行時配置
-   */
-  updateConfig(agentsDir: string, defaultId: string): void {
-    this.agentsDir = agentsDir;
-    this.defaultFallbackAgentId = defaultId;
-    console.log(`[AgentRegistry] Config updated: agents_dir=${agentsDir}, default_id=${defaultId}`);
-  }
+	/**
+	 * 更新註冊表的運行時配置
+	 */
+	updateConfig(agentsDir: string, defaultId: string): void {
+		this.agentsDir = agentsDir;
+		this.defaultFallbackAgentId = defaultId;
+		console.log(`[AgentRegistry] Config updated: agents_dir=${agentsDir}, default_id=${defaultId}`);
+	}
 
-  /**
-   * 手動註冊一個 Agent 實例
-   */
-  register(agent: IAgent): void {
-    console.log(`[AgentRegistry] Registering agent: ${agent.id} (role: ${agent.role})`);
-    this.agents.set(agent.id, agent);
-  }
+	/**
+	 * 手動註冊一個 Agent 實例
+	 */
+	register(agent: IAgent): void {
+		console.log(`[AgentRegistry] Registering agent: ${agent.id} (role: ${agent.role})`);
+		this.agents.set(agent.id, agent);
+	}
 
-  /**
-   * 根據 ID 獲取已註冊的 Agent 實例
-   */
-  getAgent(id: string): IAgent | undefined {
-    return this.agents.get(id);
-  }
+	/**
+	 * 根據 ID 獲取已註冊的 Agent 實例
+	 */
+	getAgent(id: string): IAgent | undefined {
+		return this.agents.get(id);
+	}
 
-  /**
-   * 獲取所有已註冊的 Agent 實例
-   */
-  getAllAgents(): IAgent[] {
-    return Array.from(this.agents.values());
-  }
+	/**
+	 * 獲取所有已註冊的 Agent 實例
+	 */
+	getAllAgents(): IAgent[] {
+		return Array.from(this.agents.values());
+	}
 
-  /**
-   * 根據 Role 獲取所有匹配的 Agent 實例 (大小寫不敏感)
-   */
-  getAgentByRole(role: string): IAgent[] {
-    return this.getAllAgents().filter(agent => agent.role.toLowerCase() === role.toLowerCase());
-  }
+	/**
+	 * 根據 Role 獲取所有匹配的 Agent 實例 (大小寫不敏感)
+	 */
+	getAgentByRole(role: string): IAgent[] {
+		return this.getAllAgents().filter(agent => agent.role.toLowerCase() === role.toLowerCase());
+	}
 
-  /**
-   * 根據 ID 從檔案加載並實例化 Agent
-   * @param id Agent ID
-   * @param agentsDir Agent 設定目錄 (選擇性)
-   */
-  async loadAgentById(id: string, agentsDir?: string): Promise<IAgent> {
-    const dir = agentsDir || this.agentsDir || path.resolve(process.cwd(), 'agents');
-    const filePath = path.join(dir, `${id}.json`);
-    
-    if (!fs.existsSync(filePath)) {
-      throw new Error(`Agent config not found for ID: ${id} (Searched in ${filePath})`);
-    }
+	/**
+	 * 根據 ID 從檔案加載並實例化 Agent
+	 * @param id Agent ID
+	 * @param agentsDir Agent 設定目錄 (選擇性)
+	 */
+	async loadAgentById(id: string, agentsDir?: string): Promise<IAgent> {
+		const dir = agentsDir || this.agentsDir || path.resolve(process.cwd(), 'agents');
+		const filePath = path.join(dir, `${id}.json`);
 
-    const config = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-    // 強制將檔案中的 ID 與請求的 ID 對齊，若檔案中未定義則補上
-    config.id = config.id || id;
-    
-    return await this.loadAgentFromJSON(config);
-  }
+		if (!fs.existsSync(filePath)) {
+			throw new Error(`Agent config not found for ID: ${id} (Searched in ${filePath})`);
+		}
 
-  /**
-   * 從 JSON 數據動態加載並實例化 Agent
-   * @param agentJson Agent 的序列化數據
-   */
-  async loadAgentFromJSON(agentJson: Record<string, any>): Promise<IAgent> {
-    const { type } = agentJson;
-    let agent: IAgent;
+		const config = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+		// 強制將檔案中的 ID 與請求的 ID 對齊，若檔案中未定義則補上
+		config.id = config.id || id;
 
-    // 根據 type 映射具體的實作類
-    switch (type) {
-      case 'COORDINATOR':
-        agent = new CoordinatorAgent(this.taskPlanEngine);
-        break;
-      case 'EVALUATOR':
-        if (!this.modelRegistry) {
-          throw new Error('ModelRegistry is required to instantiate EVALUATOR agent.');
-        }
-        agent = new EvaluatorAgent(this.modelRegistry);
-        break;
-      case 'WORKER':
-        if (!this.toolRegistry) {
-          console.warn('[AgentRegistry] Creating WORKER agent without ToolRegistry.');
-        }
-        agent = new WorkerAgent(this.toolRegistry!, this.modelRegistry);
-        break;
-      case 'BASE':
-        agent = new BaseAgent();
-        break;
-      default:
-        throw new Error(`Unknown agent type: ${type}`);
-    }
+		return await this.loadAgentFromJSON(config);
+	}
 
-    await agent.initFromJSON(agentJson);
-    this.register(agent);
-    return agent;
-  }
+	/**
+	 * 從 JSON 數據動態加載並實例化 Agent
+	 * @param agentJson Agent 的序列化數據
+	 */
+	async loadAgentFromJSON(agentJson: Record<string, any>): Promise<IAgent> {
+		const { type, id } = agentJson;
+		let agent: IAgent;
 
-  /**
-   * 從指定目錄加載所有 Agent 配置
-   * @param dirPath 目錄路徑
-   */
-  async loadAllAgentsFromDir(dirPath?: string): Promise<void> {
-    const targetPath = dirPath || this.agentsDir;
-    const absolutePath = path.isAbsolute(targetPath) ? targetPath : path.resolve(process.cwd(), targetPath);
-    if (!fs.existsSync(absolutePath)) {
-      console.warn(`[AgentRegistry] Directory not found: ${absolutePath}`);
-      return;
-    }
+		console.log(`[AgentRegistry] Loading agent from JSON: ${id} (type: ${type})`);
 
-    const files = fs.readdirSync(absolutePath);
-    for (const file of files) {
-      if (file.endsWith('.json')) {
-        try {
-          const config = JSON.parse(fs.readFileSync(path.join(absolutePath, file), 'utf-8'));
-          await this.loadAgentFromJSON(config);
-        } catch (error) {
-          console.error(`[AgentRegistry] Failed to load agent from ${file}:`, error);
-        }
-      }
-    }
-  }
+		// 根據 type 映射具體的實作類
+		switch (type) {
+			case 'COORDINATOR':
+				agent = new CoordinatorAgent(this.taskPlanEngine, this);
+				break;
+			case 'EVALUATOR':
+				if (!this.modelRegistry) {
+					throw new Error('ModelRegistry is required to instantiate EVALUATOR agent.');
+				}
+				agent = new EvaluatorAgent(this.modelRegistry);
+				break;
+			case 'WORKER':
+				if (!this.toolRegistry) {
+					console.warn('[AgentRegistry] Creating WORKER agent without ToolRegistry.');
+				}
+				agent = new WorkerAgent(this.toolRegistry!, this.modelRegistry);
+				break;
+			case 'BASE':
+				agent = new BaseAgent();
+				break;
+			default:
+				throw new Error(`Unknown agent type: ${type}`);
+		}
 
-  /**
-   * 確保存在預設的 Worker Agent (優先從配置加載，若無則報錯)
-   */
-  async ensureDefaultWorker(): Promise<IAgent> {
-    const defaultId = this.defaultFallbackAgentId;
-    let agent = this.getAgent(defaultId);
-    if (!agent) {
-      try {
-        agent = await this.loadAgentById(defaultId);
-      } catch (error) {
-        throw new Error(`Default worker agent (${defaultId}) not found. Please ensure it exists in ${this.agentsDir}`);
-      }
-    }
-    return agent;
-  }
+		// 初始化 Agent 基本屬性與身份
+		await agent.initFromJSON(agentJson);
+
+		// [Tool Binding Logic] 
+		// 如果是 Worker 且有 ToolRegistry，根據其 capabilities 進行工具過濾或檢查 (目前 Worker 是全量存取)
+		// 如果未來需要針對特定 Agent 限制工具集，可以在此處實現篩選邏輯
+		if (this.toolRegistry && agent.capabilities && agent.capabilities.length > 0) {
+			const availableTools = this.toolRegistry.listTools().map(t => t.name.toLowerCase());
+			const matchedTools = agent.capabilities.filter(cap => availableTools.includes(cap.toLowerCase()));
+			if (matchedTools.length > 0) {
+				console.log(`[AgentRegistry] Agent ${agent.id} matched ${matchedTools.length} tools based on capabilities: ${matchedTools.join(', ')}`);
+			}
+		}
+
+		this.register(agent);
+		return agent;
+	}
+
+	/**
+	 * 從指定目錄加載所有 Agent 配置
+	 * @param dirPath 目錄路徑
+	 */
+	async loadAllAgentsFromDir(dirPath?: string): Promise<void> {
+		const targetPath = dirPath || this.agentsDir;
+		const absolutePath = path.isAbsolute(targetPath) ? targetPath : path.resolve(process.cwd(), targetPath);
+		if (!fs.existsSync(absolutePath)) {
+			console.warn(`[AgentRegistry] Directory not found: ${absolutePath}`);
+			return;
+		}
+
+		const files = fs.readdirSync(absolutePath);
+		for (const file of files) {
+			if (file.endsWith('.json')) {
+				try {
+					const config = JSON.parse(fs.readFileSync(path.join(absolutePath, file), 'utf-8'));
+					await this.loadAgentFromJSON(config);
+				} catch (error) {
+					console.error(`[AgentRegistry] Failed to load agent from ${file}:`, error);
+				}
+			}
+		}
+	}
+
+	/**
+	 * 確保存在預設的 Worker Agent (優先從配置加載，若無則報錯)
+	 */
+	async ensureDefaultWorker(): Promise<IAgent> {
+		const defaultId = this.defaultFallbackAgentId;
+		let agent = this.getAgent(defaultId);
+		if (!agent) {
+			try {
+				agent = await this.loadAgentById(defaultId);
+			} catch (error) {
+				throw new Error(`Default worker agent (${defaultId}) not found. Please ensure it exists in ${this.agentsDir}`);
+			}
+		}
+		return agent;
+	}
 }

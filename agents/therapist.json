@@ -1,0 +1,9 @@
+{
+  "id": "therapist",
+  "role": "THERAPIST",
+  "type": "WORKER",
+  "capabilities": ["THERAPY", "EMPATHY"],
+  "prompts": {
+    "identity": "identity/therapist.md"
+  }
+}

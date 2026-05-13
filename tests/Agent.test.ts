@@ -7,6 +7,13 @@ import { IModelRegistry, IInferenceEngine, ModelPreset } from '../interfaces/run
 import { ThoughtEvalResponseSchema } from '../src/schemas/agent/AgentOutputSchemas';
 import type { IMutationRequest } from '../interfaces/models/IMutationRequest';
 
+// Mock LangChain's createReactAgent
+jest.mock('@langchain/langgraph/prebuilt', () => ({
+  createReactAgent: jest.fn().mockReturnValue({ invoke: jest.fn() })
+}));
+
+import { createReactAgent } from '@langchain/langgraph/prebuilt';
+
 describe('Agent Theme Tests', () => {
 
   describe('BaseAgent', () => {
@@ -60,6 +67,10 @@ describe('Agent Theme Tests', () => {
       await agent.initFromJSON({});
       expect(agent.id).toBe('');
       expect(agent.role).toBe('');
+    });
+
+    test('should report not ready initially', () => {
+      expect(agent.isReady()).toBe(false);
     });
 
     test('should log when receiving a task', async () => {
@@ -123,10 +134,18 @@ describe('Agent Theme Tests', () => {
   describe('WorkerAgent', () => {
     let toolRegistry: ToolRegistry;
     let workerAgent: WorkerAgent;
+    let mockModelRegistry: any;
 
     beforeEach(() => {
       toolRegistry = new ToolRegistry();
-      workerAgent = new WorkerAgent(toolRegistry, undefined as any);
+      mockModelRegistry = {
+        getRawModel: jest.fn().mockReturnValue({}),
+        getModel: jest.fn().mockReturnValue({
+          withSystemPrompt: jest.fn().mockReturnThis()
+        })
+      };
+      workerAgent = new WorkerAgent(toolRegistry, mockModelRegistry);
+      (createReactAgent as jest.Mock).mockClear();
     });
 
     it('should initialize correctly from JSON', async () => {
@@ -145,6 +164,51 @@ describe('Agent Theme Tests', () => {
       expect(workerAgent.role).toBe('test-worker');
       expect(workerAgent.identity).toBe('I am a test worker');
       expect(workerAgent.capabilities).toContain('test-cap');
+      expect(workerAgent.isReady()).toBe(true);
+    });
+
+    describe('Immutability & ReAct Engine', () => {
+      it('should only call createReactAgent once during initial initFromJSON', async () => {
+        const config = {
+          id: 'worker-1',
+          role: 'test-role',
+          prompts: { identity: 'initial identity' }
+        };
+
+        await workerAgent.initFromJSON(config);
+        expect(createReactAgent).toHaveBeenCalledTimes(1);
+
+        // Second call with same identity
+        await workerAgent.initFromJSON(config);
+        expect(createReactAgent).toHaveBeenCalledTimes(1); // Still 1
+      });
+
+      it('should ignore identity changes after initialization and not rebuild engine', async () => {
+        const config1 = {
+          id: 'worker-1',
+          role: 'test-role',
+          prompts: { identity: 'initial identity' }
+        };
+
+        const config2 = {
+          id: 'worker-1',
+          role: 'test-role',
+          prompts: { identity: 'new identity' }
+        };
+
+        const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+        await workerAgent.initFromJSON(config1);
+        expect(createReactAgent).toHaveBeenCalledTimes(1);
+        expect(workerAgent.identity).toBe('initial identity');
+
+        await workerAgent.initFromJSON(config2);
+        expect(createReactAgent).toHaveBeenCalledTimes(1); // Still 1, no rebuild
+        expect(workerAgent.identity).toBe('initial identity'); // Still initial
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Attempted to change identity after initialization'));
+
+        warnSpy.mockRestore();
+      });
     });
 
     it('should execute task by running the corresponding tool', async () => {
@@ -196,7 +260,8 @@ describe('Agent Theme Tests', () => {
 
     beforeEach(() => {
       mockInference = {
-        infer: jest.fn()
+        infer: jest.fn(),
+        withSystemPrompt: jest.fn().mockReturnThis()
       } as any;
 
       mockRegistry = {
@@ -209,6 +274,12 @@ describe('Agent Theme Tests', () => {
 
     test('should initialize with correct model preset', () => {
       expect(mockRegistry.getModel).toHaveBeenCalledWith(ModelPreset.EVAL);
+    });
+
+    test('should report ready after initialization', async () => {
+      expect(agent.isReady()).toBe(false);
+      await agent.initFromJSON({ id: 'eval-1' });
+      expect(agent.isReady()).toBe(true);
     });
 
     test('should evaluate a batch of thoughts using real inference logic', async () => {
@@ -244,8 +315,7 @@ describe('Agent Theme Tests', () => {
       
       // 驗證 infer 調用參數
       expect(mockInference.infer).toHaveBeenCalledWith(
-        'Evaluate these: {items}',
-        expect.anything(),
+        expect.objectContaining({ goal: 'Test Goal' }),
         ThoughtEvalResponseSchema,
         expect.objectContaining({
           variables: expect.objectContaining({ items: targets, goal: 'Test Goal' })

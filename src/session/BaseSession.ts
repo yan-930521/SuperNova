@@ -106,16 +106,28 @@ export class BaseSession implements ISession {
 
 							// 優先級：1. 指定 ID, 2. 指定 Role, 3. 預設 Role, 4. 系統 Default Worker
 							let agent = assignedId ? this.agentRegistry.getAgent(assignedId) : undefined;
+							
+							// 檢查指定 Agent 是否就緒
+							if (agent && !agent.isReady()) {
+							  console.warn(`[BaseSession] Agent ${agent.id} found but not ready. Searching for alternatives.`);
+							  agent = undefined;
+							}
+
 							if (!agent) {
-							  const allAgents = this.agentRegistry.getAllAgents();
-							  console.log(`[BaseSession] Searching for role: "${assignedRole}". Registry agents: ${JSON.stringify(allAgents.map(a => ({ id: a.id, role: a.role })))}`);
+							  const allAgents = this.agentRegistry.getAllAgents().filter(a => a.isReady());
+							  console.log(`[BaseSession] Searching for ready agent with role: "${assignedRole}". Available ready agents: ${JSON.stringify(allAgents.map(a => ({ id: a.id, role: a.role })))}`);
 							  agent = allAgents.find(a => a.role.toLowerCase() === assignedRole.toLowerCase());
 							}
 
 							if (!agent) {
 								try {
 									agent = await this.agentRegistry.ensureDefaultWorker();
-									console.log(`[BaseSession] Using fallback default worker: ${agent.id} for task ${id}`);
+									if (agent && !agent.isReady()) {
+									  console.error(`[BaseSession] Default worker ${agent.id} is not ready.`);
+									  agent = undefined;
+									} else {
+									  console.log(`[BaseSession] Using fallback default worker: ${agent?.id} for task ${id}`);
+									}
 								} catch (e) {
 									console.warn(`[BaseSession] Failed to get default worker: ${(e as Error).message}`);
 								}
@@ -186,6 +198,9 @@ export class BaseSession implements ISession {
 
 					const errorMessage = error instanceof Error ? error.message : String(error);
 
+					// 獲寫當前所有可用的 Agent 資訊以供重新規劃
+					const availableAgents = this.agentRegistry.getAllAgents().filter(a => a.isReady());
+
 					// 構建當前狀態 (IAgentState 的基礎版本)
 					const currentState = {
 						goal: this.goal,
@@ -193,11 +208,15 @@ export class BaseSession implements ISession {
 						planning: {
 							taskGraph: this.taskGraph.toJSON()
 						},
-						errors: [errorMessage]
+						errors: [errorMessage],
+						metadata: {
+						  available_agents: availableAgents.map(a => ({
+						    id: a.id,
+						    role: a.role,
+						    capabilities: a.capabilities || []
+						  }))
+						}
 					};
-
-					// 獲寫當前所有可用的 Agent 資訊以供重新規劃
-					const availableAgents = this.agentRegistry.getAllAgents();
 
 					const newGraph = await coordinator.requestReplan(
 						this.goal,

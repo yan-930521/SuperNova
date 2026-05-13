@@ -57,7 +57,7 @@ export class PromptLoader {
 
   /**
    * 遞歸解析對象中的 Prompt 連結
-   * 如果字串值以 .md 結尾，則嘗試從 prompts/agents/ 目錄加載內容。
+   * 如果字串值以 .md 結尾，則嘗試從 prompts/ 目錄加載內容。
    * @param data 待解析的配置對象
    */
   public static async resolvePrompts(data: any): Promise<any> {

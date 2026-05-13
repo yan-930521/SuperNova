@@ -27,17 +27,39 @@ export class EvaluatorAgent extends BaseAgent implements IEvaluatorAgent {
   }
 
   /**
-   * 初始化後重新綁定提示詞 (因為 _config 可能在 initFromJSON 中改變)
+   * 初始化後重新綁定提示詞 (僅在第一次初始化時執行)
    */
   async initFromJSON(config: Record<string, any>): Promise<void> {
+    const isFirstInit = !this._isReady;
+
+    if (!isFirstInit) {
+      if (config.prompts?.identity && config.prompts.identity !== this.identity) {
+        console.warn(`[EvaluatorAgent ${this.id}] Attempted to change identity after initialization. Agent is immutable. Change ignored.`);
+        const safeConfig = { 
+          ...config, 
+          prompts: { ...config.prompts, identity: this.identity } 
+        };
+        await super.initFromJSON(safeConfig);
+      } else {
+        await super.initFromJSON(config);
+      }
+      console.log(`[EvaluatorAgent ${this.id}] 狀態已恢復，跳過引擎重新綁定。`);
+      return;
+    }
+
     await super.initFromJSON(config);
     const evalModel = this.modelRegistry.getModel(ModelPreset.EVAL);
+    
     this.thoughtEvalEngine = evalModel.withSystemPrompt(
       this._config.prompts?.thought_eval || "Evaluate these thoughts: {items}"
     );
     this.planReviewEngine = evalModel.withSystemPrompt(
       this._config.prompts?.plan_review || "Review this plan: {items}"
     );
+
+    this._isReady = true;
+    
+    console.log(`[EvaluatorAgent ${this.id}] 初始化完成。Evaluation Engines Ready.`);
   }
   
   /**
