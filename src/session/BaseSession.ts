@@ -9,6 +9,7 @@ import type { IReadyQueue } from '../../interfaces/session/IReadyQueue';
 import type { ISnapshotManager } from '../../interfaces/infra/ISnapshotManager';
 import type { IAgentRegistry } from '../../interfaces/infra/IAgentRegistry';
 import type { ICoordinator } from '../../interfaces/agent/ICoordinator';
+import { logger } from '../infra/LogManager';
 
 /**
  * 會話基礎實作類
@@ -35,6 +36,8 @@ export class BaseSession implements ISession {
 
 	/** 任務完成計數 (用於快照索引) */
 	private completedTaskCount: number = 0;
+	/** 儲存已完成任務的結果 */
+	private taskResults: Map<string, any> = new Map();
 
 	constructor(
 		public id: string,
@@ -66,8 +69,6 @@ export class BaseSession implements ISession {
 	 * 調用調度器填充隊列，並模擬並行執行就緒任務。
 	 */
 	async asyncTick(): Promise<void> {
-		// console.log(`Session ${this.id} ticking...`);
-
 		// 1. 調用調度器，根據 TaskGraph 狀態填充 ReadyQueue
 		this.scheduler.schedule(this.taskGraph, this.readyQueue);
 
@@ -81,21 +82,44 @@ export class BaseSession implements ISession {
 		// 3. 執行任務 (目前採順序執行以確保錯誤時能立即中斷並回滾)
 		// TODO: 未來可引入並行執行與取消機制以優化性能
 		for (const id of tasksToExecute) {
-			console.log(`[BaseSession] Executing task: ${id}`);
+			// 如果已經在處理失敗（例如上一個任務剛失敗），則停止批次處理
+			if (this.status === 'ERROR') {
+				break;
+			}
+
+			logger.info(`Executing task: ${id}`, { session_id: this.id, type: 'LIFECYCLE' });
 			this.scheduler.onTaskStarted(id);
 
 			const taskNode = this.taskGraph.getTask(id);
 			if (!taskNode) {
-				console.error(`[BaseSession] Task node ${id} not found in graph during execution.`);
+				logger.error(`Task node ${id} not found in graph during execution.`, { session_id: this.id, type: 'SYSTEM' });
 				continue;
 			}
 
 			try {
+				// ... (rest of the try block)
+				// 收集依賴任務的結果作為上下文
+				const parentContext: Record<string, any> = {};
+				if (taskNode.dependencies && taskNode.dependencies.length > 0) {
+					for (const depId of taskNode.dependencies) {
+						if (this.taskResults.has(depId)) {
+							parentContext[depId] = this.taskResults.get(depId);
+						}
+					}
+				}
+
+				// 將上下文注入 metadata
+				taskNode.metadata = {
+					...(taskNode.metadata || {}),
+					parentContext,
+					sessionGoal: this.goal // 同步傳遞會話總體目標
+				};
+
 				await this.toolChain.execute(
 					{
 						session_id: this.id,
 						target: id,
-						data: taskNode.metadata || {}, // 使用 metadata 擴充數據
+						data: taskNode.metadata,
 						metadata: taskNode
 					},
 					async () => {
@@ -109,13 +133,13 @@ export class BaseSession implements ISession {
 							
 							// 檢查指定 Agent 是否就緒
 							if (agent && !agent.isReady()) {
-							  console.warn(`[BaseSession] Agent ${agent.id} found but not ready. Searching for alternatives.`);
+							  logger.warn(`Agent ${agent.id} found but not ready. Searching for alternatives.`, { session_id: this.id, type: 'SYSTEM' });
 							  agent = undefined;
 							}
 
 							if (!agent) {
 							  const allAgents = this.agentRegistry.getAllAgents().filter(a => a.isReady());
-							  console.log(`[BaseSession] Searching for ready agent with role: "${assignedRole}". Available ready agents: ${JSON.stringify(allAgents.map(a => ({ id: a.id, role: a.role })))}`);
+							  logger.info(`Searching for ready agent with role: "${assignedRole}".`, { session_id: this.id, type: 'SYSTEM', payload: { available: allAgents.map(a => a.id) } });
 							  agent = allAgents.find(a => a.role.toLowerCase() === assignedRole.toLowerCase());
 							}
 
@@ -123,32 +147,39 @@ export class BaseSession implements ISession {
 								try {
 									agent = await this.agentRegistry.ensureDefaultWorker();
 									if (agent && !agent.isReady()) {
-									  console.error(`[BaseSession] Default worker ${agent.id} is not ready.`);
+									  logger.error(`Default worker ${agent.id} is not ready.`, { session_id: this.id, type: 'SYSTEM' });
 									  agent = undefined;
 									} else {
-									  console.log(`[BaseSession] Using fallback default worker: ${agent?.id} for task ${id}`);
+									  logger.info(`Using fallback default worker: ${agent?.id} for task ${id}`, { session_id: this.id, type: 'SYSTEM' });
 									}
 								} catch (e) {
-									console.warn(`[BaseSession] Failed to get default worker: ${(e as Error).message}`);
+									logger.warn(`Failed to get default worker: ${(e as Error).message}`, { session_id: this.id, type: 'SYSTEM' });
 								}
 							}
 
 							if (agent && 'processTask' in agent) {
-							  console.log(`[BaseSession] Delegating task ${id} to agent ${agent.id} (role: ${agent.role})`);
-							  await (agent as any).processTask(taskNode);
+							  logger.info(`Delegating task ${id} to agent ${agent.id} (role: ${agent.role})`, { session_id: this.id, type: 'LIFECYCLE', agent_id: agent.id });
+							  const result = await (agent as any).processTask(taskNode);
+							  
+							  // 保存執行結果
+							  taskNode.result = result;
+							  this.taskResults.set(id, result);
+							  taskNode.status = 'completed';
 							} else {
-							  console.warn(`[BaseSession] No suitable worker agent found for ID: ${assignedId} or Role: ${assignedRole}.`);
+							  logger.warn(`No suitable worker agent found for ID: ${assignedId} or Role: ${assignedRole}.`, { session_id: this.id, type: 'SYSTEM' });
 							}
 
 
 						}
-						console.log(`[BaseSession] Tool execution completed for task: ${id}`);
+						logger.info(`Tool execution completed for task: ${id}`, { session_id: this.id, type: 'TOOL' });
 					}
 				);
 
 				// 任務成功完成
 				await this.onTaskSuccess(id);
 			} catch (error) {
+				// 標記會話狀態為 ERROR，防止 batch 繼續執行
+				this.status = 'ERROR';
 				// 任務失敗
 				await this.onTaskFailure(id, error);
 				throw error; // 重新拋出以讓 tick() 捕捉
@@ -156,11 +187,21 @@ export class BaseSession implements ISession {
 		}
 	}
 
+	private isTicking: boolean = false;
+
 	/**
 	 * 核心循環 (同步包裝器，保持接口一致性，但內部支持並發)
 	 */
 	async tick(): Promise<void> {
-		await this.asyncTick();
+		if (this.isTicking) {
+			return;
+		}
+		this.isTicking = true;
+		try {
+			await this.asyncTick();
+		} finally {
+			this.isTicking = false;
+		}
 	}
 
 	/**
@@ -173,7 +214,7 @@ export class BaseSession implements ISession {
 
 		// 2. 自動觸發快照
 		if (this.snapshotManager) {
-			console.log(`[BaseSession] Task ${taskId} completed. Triggering snapshot...`);
+			logger.info(`Task ${taskId} completed. Triggering snapshot...`, { session_id: this.id, type: 'LIFECYCLE' });
 			await this.snapshotManager.snapshot(this, {
 				lastTaskId: taskId,
 				taskIndex: this.completedTaskCount
@@ -185,7 +226,7 @@ export class BaseSession implements ISession {
 	 * 處理任務失敗
 	 */
 	private async onTaskFailure(taskId: string, error: any): Promise<void> {
-		console.error(`[BaseSession] Task ${taskId} failed:`, error);
+		logger.error(`Task ${taskId} failed: ${error}`, { session_id: this.id, type: 'LIFECYCLE', payload: error });
 		this.scheduler.onTaskFailed(taskId, this.taskGraph, this.readyQueue);
 
 		// 1. 嘗試進行自適應重新規劃
@@ -194,7 +235,7 @@ export class BaseSession implements ISession {
 			const coordinator = (coordinators && coordinators.length > 0) ? coordinators[0] : undefined;
 			if (coordinator && 'requestReplan' in coordinator) {
 				try {
-					console.log(`[BaseSession] Triggering adaptive replanning for task ${taskId}...`);
+					logger.info(`Triggering adaptive replanning for task ${taskId}...`, { session_id: this.id, type: 'PLAN' });
 
 					const errorMessage = error instanceof Error ? error.message : String(error);
 
@@ -226,12 +267,12 @@ export class BaseSession implements ISession {
 					);
 
 					if (newGraph) {
-						console.log(`[BaseSession] Replanning successful. Loading new task graph.`);
+						logger.info(`Replanning successful. Loading new task graph.`, { session_id: this.id, type: 'PLAN' });
 						await this.loadFromJSON({ taskGraph: newGraph });
 						return; // 重新規劃成功，跳過回滾
 					}
 				} catch (replanError) {
-					console.warn(`[BaseSession] Adaptive replanning failed:`, replanError);
+					logger.warn(`Adaptive replanning failed: ${replanError}`, { session_id: this.id, type: 'PLAN' });
 					// 繼續執行回滾邏輯
 				}
 			}
@@ -242,7 +283,7 @@ export class BaseSession implements ISession {
 		if (this.snapshotManager) {
 			const lastSuccessful = await this.snapshotManager.getLatestSnapshotId(this.id);
 			if (lastSuccessful) {
-				console.log(`[BaseSession] Rolling back to last successful snapshot: ${lastSuccessful}`);
+				logger.info(`Rolling back to last successful snapshot: ${lastSuccessful}`, { session_id: this.id, type: 'LIFECYCLE' });
 				await this.rollback(lastSuccessful);
 			}
 		}
@@ -290,7 +331,7 @@ export class BaseSession implements ISession {
 			for (const [aid, agentData] of Object.entries(data.agents)) {
 				let agent = this.agentRegistry.getAgent(aid);
 				if (!agent) {
-					console.warn(`[BaseSession] Agent ${aid} not found in registry during load.`);
+					logger.warn(`Agent ${aid} not found in registry during load.`, { session_id: this.id, type: 'SYSTEM' });
 				} else {
 					await agent.initFromJSON(agentData as Record<string, any>);
 				}
@@ -317,7 +358,7 @@ export class BaseSession implements ISession {
 		if (!this.snapshotManager) {
 			throw new Error("SnapshotManager not configured for this session.");
 		}
-		console.log(`[BaseSession] Rolling back to ${checkpointId}`);
+		logger.info(`Rolling back to ${checkpointId}`, { session_id: this.id, type: 'LIFECYCLE' });
 		await this.snapshotManager.rollback(this, checkpointId);
 		// 狀態恢復邏輯已在 loadFromJSON 中處理 (包含 ReadyQueue 的重新填充)
 	}

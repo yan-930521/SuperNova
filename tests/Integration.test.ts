@@ -16,6 +16,7 @@ import { ModelRegistry, InferenceEngine } from '../src/runtime/ModelRegistry';
 import { ModelPreset } from '../interfaces/runtime/IModelRegistry';
 import { ChatOpenAI } from '@langchain/openai';
 import { BaseTool } from '../src/tool/BaseTool';
+import { logger } from '../src/infra/LogManager';
 import type { ITool, ToolSafetyTier } from '../interfaces/tool/ITool';
 import type { IToolContext } from '../interfaces/tool/IToolContext';
 
@@ -119,22 +120,28 @@ describe('Integration & E2E Theme Tests', () => {
       session.taskGraph.addTask('B', { type: 'SummarizeTool', goal: 'summarize' });
       session.taskGraph.addDependency('A', 'B');
 
-      const logSpy = jest.spyOn(console, 'log');
+      const logSpy = jest.spyOn(logger, 'info').mockImplementation();
       await runtime.start();
 
       jest.advanceTimersByTime(100);
-      await Promise.resolve();
-      await Promise.resolve();
-      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Executing task: A'));
+      for (let i = 0; i < 20; i++) await Promise.resolve();
+      
+      expect(logSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Executing task: A'),
+        expect.objectContaining({ session_id: 's1', type: 'LIFECYCLE' })
+      );
 
       // 確保第一次 tick 的所有後續處理（如成功後的排程）都跑完
-      for (let i = 0; i < 5; i++) await Promise.resolve();
+      for (let i = 0; i < 20; i++) await Promise.resolve();
 
       jest.advanceTimersByTime(100);
       // 確保第二次 tick 的執行邏輯跑完
-      for (let i = 0; i < 10; i++) await Promise.resolve();
+      for (let i = 0; i < 20; i++) await Promise.resolve();
       
-      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Executing task: B'));
+      expect(logSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Executing task: B'),
+        expect.objectContaining({ session_id: 's1', type: 'LIFECYCLE' })
+      );
 
       await runtime.stop();
       jest.useRealTimers();

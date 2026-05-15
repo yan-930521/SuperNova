@@ -2,8 +2,13 @@ import { AgentComponentFactory } from '../src/agent/AgentComponentFactory';
 import { IModelRegistry, ModelPreset } from '../interfaces/runtime/IModelRegistry';
 
 describe('AgentComponentFactory', () => {
+  const mockInferenceEngine = {
+    withSystemPrompt: jest.fn().mockReturnThis(),
+    infer: jest.fn(),
+  };
+
   const mockModelRegistry: IModelRegistry = {
-    getModel: jest.fn().mockReturnValue({}),
+    getModel: jest.fn().mockReturnValue(mockInferenceEngine),
     registerModel: jest.fn(),
     getRawModel: jest.fn(),
   };

@@ -1,4 +1,5 @@
 import { ITaskNode, ITaskGraph } from '../../interfaces/agent/ITaskPlanEngine';
+import { logger } from '../infra/LogManager';
 
 /**
  * TaskGraph 負責維護任務（節點）與依賴（邊）的關係。
@@ -172,7 +173,7 @@ export class TaskGraph {
             this.inDegreeMap.set(node.id, currentInDegree + 1);
           }
         } else {
-          console.warn(`[TaskGraph] Task ${node.id} depends on non-existent task ${parentId}`);
+          logger.warn(`[TaskGraph] Task ${node.id} depends on non-existent task ${parentId}`, { type: 'SYSTEM' });
         }
       });
     });

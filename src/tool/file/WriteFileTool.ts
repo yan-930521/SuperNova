@@ -1,6 +1,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { z } from 'zod';
+import { logger } from '../../infra/LogManager';
 import { BaseFileTool } from './BaseFileTool';
 
 /**
@@ -34,7 +35,7 @@ export class WriteFileTool extends BaseFileTool<{ path: string, content: string 
 
     await fs.writeFile(fullPath, input.content, 'utf-8');
     
-    console.log(`[WriteFileTool] Successfully wrote to ${input.path}`);
+    logger.info(`[WriteFileTool] Successfully wrote to ${input.path}`, { type: 'TOOL' });
     return `SUCCESS: File written to ${input.path}`;
   }
 }

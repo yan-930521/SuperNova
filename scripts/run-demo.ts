@@ -55,19 +55,42 @@ async function runDemo() {
 	}
 
 	// 建立 Session 並讓 Coordinator 規劃任務
-	const goal = `請執行以下流程並產出純中文報告：
-1. 搜索 2025-2026 年遠端工作對心理健康影響的最新趨勢。
-2. 分析這些趨勢對員工生產力的具體心理影響。
-3. 由專業心理諮商師 (THERAPIST) 提供針對管理者的同理心支持建議。
-4. 將以上內容彙整，使用 WriteFile 工具儲存為 "health_report.md"。`;
+const goal = `
+請執行以下任務並以「純中文研究報告」輸出最終結果：
+
+1. 使用 WebSearch Tool 查詢 2025–2026 年遠端工作（Remote Work）對心理健康影響的最新研究與趨勢。
+   - 重點包含：焦慮、倦怠（burnout）、孤獨感、工作生活界線變化
+   - 檔名：tmp1.md
+   - 使用 WriteFile Tool 寫入 workspace
+
+2. 分析上述趨勢對員工生產力的心理層面影響。
+   - 需包含心理機制解釋（如注意力、動機、壓力反應）
+   - 檔名：tmp2.md
+   - 使用 WriteFile Tool 寫入 workspace
+
+3. 由心理諮商師角色（THERAPIST Agent）提供給管理者的建議：
+   - 需具備同理心
+   - 強調實務可行性（管理策略、溝通方式、制度調整）
+   - 檔名：tmp3.md
+   - 使用 WriteFile Tool 寫入 workspace
+
+4. 整合以上三部分內容，輸出為 Markdown 文件：
+   - 檔名：health_report.md
+   - 使用 WriteFile Tool 寫入 workspace
+   - 每個章節需標明來源 Agent（Search / Analyst / THERAPIST）
+
+輸出要求：
+- 結構清晰（分段標題）
+- 避免空泛敘述
+- 優先使用可驗證資訊與研究趨勢
+- 全程使用中文
+`;
 	
 	const session = await sessionManager.createFromJSON({
 		id: 'demo-session',
 		goal: goal
 	}) as BaseSession;
 	session.agentRegistry = agentRegistry;
-
-	console.log("\n📝 [Coordinator] 正在自動規劃任務圖...");
 	
 	
 	const taskGraph = await coordinator.planTaskGraph(goal);
@@ -79,7 +102,7 @@ async function runDemo() {
 
 	// 4. 執行循環
 	let tickCount = 0;
-	const maxTicks = 30;
+	const maxTicks = 100;
 
 	while (session.taskGraph.size > 0 || session.readyQueue.length > 0) {
 		try {

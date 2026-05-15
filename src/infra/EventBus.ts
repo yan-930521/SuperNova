@@ -1,5 +1,6 @@
 import type { IEventBus } from '../../interfaces/infra/IEventBus';
 import type { IEvent } from '../../interfaces/models/IEvent';
+import { logger } from './LogManager';
 
 /**
  * 事件總線實作
@@ -12,14 +13,14 @@ export class EventBus implements IEventBus {
    * 發布事件
    */
   publish(event: IEvent): void {
-    console.log(`[EventBus] Publishing event: ${event.type}`);
+    logger.info(`[EventBus] Publishing event: ${event.type}`, { type: 'SYSTEM' });
     const typeHandlers = this.handlers.get(event.type);
     if (typeHandlers) {
       typeHandlers.forEach(handler => {
         try {
           handler(event);
         } catch (error) {
-          console.error(`[EventBus] Error in handler for ${event.type}:`, error);
+          logger.error(`[EventBus] Error in handler for ${event.type}:`, { type: 'SYSTEM', payload: { error } });
         }
       });
     }

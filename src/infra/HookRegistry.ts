@@ -1,4 +1,5 @@
 import type { IHook } from '../../interfaces/hook/IHook';
+import { logger } from './LogManager';
 
 /**
  * Hook 註冊表
@@ -12,10 +13,10 @@ export class HookRegistry {
    */
   register(hook: IHook): void {
     if (this.hooks.has(hook.name)) {
-      console.warn(`[HookRegistry] Overwriting existing hook: ${hook.name}`);
+      logger.warn(`[HookRegistry] Overwriting existing hook: ${hook.name}`, { type: 'SYSTEM' });
     }
     this.hooks.set(hook.name, hook);
-    console.log(`[HookRegistry] Registered hook: ${hook.name} (v${hook.version})`);
+    logger.info(`[HookRegistry] Registered hook: ${hook.name} (v${hook.version})`, { type: 'SYSTEM' });
   }
 
   /**

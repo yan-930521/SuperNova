@@ -1,13 +1,14 @@
 import { z } from 'zod';
 
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import { HumanMessage } from '@langchain/core/messages';
+import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { tool } from '@langchain/core/tools';
 import { createReactAgent } from '@langchain/langgraph/prebuilt';
 
 import { ModelPreset } from '../../interfaces/runtime/IModelRegistry';
 import { ITool } from '../../interfaces/tool/ITool';
 import { BaseAgent } from './BaseAgent';
+import { logger } from '../infra/LogManager';
 
 import type { IWorkerAgent } from '../../interfaces/agent/IWorkerAgent';
 import type { IReasoningBehavior } from '../../interfaces/agent/IReasoningBehavior';
@@ -44,7 +45,7 @@ export class WorkerAgent extends BaseAgent implements IWorkerAgent {
     if (!isFirstInit) {
       // 如果已經初始化過，忽略身份變更請求，保持 Agent 不變性
       if (config.prompts?.identity && config.prompts.identity !== this.identity) {
-        console.warn(`[WorkerAgent ${this.id}] Attempted to change identity after initialization. Agent is immutable. Change ignored.`);
+        logger.warn(`Attempted to change identity after initialization. Agent is immutable. Change ignored.`, { agent_id: this.id, type: 'SYSTEM' });
         
         // 創建一個排除身份變更的配置副本
         const safeConfig = { 
@@ -56,7 +57,7 @@ export class WorkerAgent extends BaseAgent implements IWorkerAgent {
         await super.initFromJSON(config);
       }
       
-      console.log(`[WorkerAgent ${this.id}] 狀態已恢復，跳過引擎重新構建。`);
+      logger.info(`狀態已恢復，跳過引擎重新構建。`, { agent_id: this.id, type: 'SYSTEM' });
       return;
     }
 
@@ -64,12 +65,12 @@ export class WorkerAgent extends BaseAgent implements IWorkerAgent {
     await super.initFromJSON(config);
     this.buildExecutionEngine();
     
-    // 標記為就緒 (若引擎構建成功)
-    if (this.reactAgent) {
+    // 標記為就緒 (若引擎構建成功或具備保底執行能力)
+    if (this.reactAgent || this.toolRegistry) {
       this._isReady = true;
     }
     
-    console.log(`[WorkerAgent ${this.id}] 初始化完成。${this.reactAgent ? 'ReAct Engine Ready.' : 'Fallback Mode Ready.'}`);
+    logger.info(`初始化完成。${this.reactAgent ? 'ReAct Engine Ready.' : 'Fallback Mode Ready.'}`, { agent_id: this.id, type: 'SYSTEM' });
   }
 
   /**
@@ -109,7 +110,7 @@ export class WorkerAgent extends BaseAgent implements IWorkerAgent {
         messageModifier: this.identity || `You are a helpful worker agent specialized in ${this.role}.`
       });
     } catch (error: any) {
-      console.error(`[WorkerAgent ${this.id}] Failed to build ReAct engine: ${error.message}`);
+      logger.error(`[WorkerAgent ${this.id}] Failed to build ReAct engine: ${error.message}`, { agent_id: this.id, type: 'SYSTEM' });
     }
   }
 
@@ -140,18 +141,44 @@ export class WorkerAgent extends BaseAgent implements IWorkerAgent {
     // 1. 構建思考上下文
     const state: IAgentState = this.createTaskState(taskNode);
     
-    console.log(`[WorkerAgent ${this.id}] 正在利用預編譯 ReAct 模式執行任務: ${taskNode.goal}`);
+    logger.info(`Executing task with ReAct mode: ${taskNode.goal}`, { 
+      session_id: taskNode.metadata?.sessionId, 
+      agent_id: this.id, 
+      type: 'THOUGHT' 
+    });
     
-    // 2. 準備訊息
-    const messages = state.messages.length > 0 
-      ? state.messages 
-      : [new HumanMessage(state.goal)];
+    // 2. 準備訊息 (注入上下文)
+    const messages: (HumanMessage | SystemMessage)[] = [];
+    
+    // 注入全域目標與父任務結果
+    const parentContext = taskNode.metadata?.parentContext;
+    const sessionGoal = taskNode.metadata?.sessionGoal;
+    
+    if (sessionGoal || (parentContext && Object.keys(parentContext).length > 0)) {
+      let contextPrompt = `### 重要背景資訊 (僅供參考)\n`;
+      if (sessionGoal) {
+        contextPrompt += `**全局任務目標**: ${sessionGoal}\n`;
+        contextPrompt += `**!! 警告 !!**: 上方的「全局任務目標」包含多個階段。你現在「僅被授權執行」下方的「當前任務」。\n`;
+        contextPrompt += `請忽視全局目標中的任何編號步驟或後續指令。不要執行任何未在「當前任務」中明確提到的操作（例如：不要預先撰寫後續階段的文件）。\n`;
+      }
+      if (parentContext && Object.keys(parentContext).length > 0) {
+        contextPrompt += `**前置任務產出 (可用作輸入)**:\n`;
+        for (const [taskId, result] of Object.entries(parentContext)) {
+          contextPrompt += `- [${taskId}]: ${typeof result === 'string' ? result : JSON.stringify(result)}\n`;
+        }
+      }
+      messages.push(new SystemMessage(contextPrompt));
+    }
+
+    // 加入當前任務目標
+    const taskPrompt = `## 你的唯一任務 (請立即執行)\n**任務內容**: ${taskNode.goal}\n\n請直接開始執行並在完成後輸出結果。`;
+    messages.push(new HumanMessage(taskPrompt));
 
     // 3. 執行 Agent
     // 注意：這裡直接使用預先編譯好的 reactAgent
     const resultState = await this.reactAgent.invoke({
       messages: messages
-    });
+    }, { recursionLimit: 50 });
 
     // 4. 返回最後一條消息的內容作為結果
     const lastMessage = resultState.messages[resultState.messages.length - 1];
@@ -187,7 +214,11 @@ export class WorkerAgent extends BaseAgent implements IWorkerAgent {
     }
     const tool = this.toolRegistry.getTool(taskNode.type);
     if (tool) {
-      console.log(`[WorkerAgent ${this.id}] [保底模式] 直接執行工具: ${taskNode.type}`);
+      logger.info(`[保底模式] 直接執行工具: ${taskNode.type}`, {
+        session_id: taskNode.metadata?.sessionId,
+        agent_id: this.id,
+        type: 'TOOL'
+      });
       return await tool.run(taskNode.metadata?.data || {}, {
         sessionId: taskNode.metadata?.sessionId || 'unknown',
         agentId: this.id,

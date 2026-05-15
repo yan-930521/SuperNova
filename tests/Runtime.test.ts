@@ -102,10 +102,16 @@ describe('Runtime Theme Tests', () => {
 
     beforeEach(() => {
       mockInvoke = jest.fn();
+      // 建立一個看起來像 Runnable 的 Mock
+      const mockRunnable = {
+        invoke: mockInvoke,
+        lc_runnable: true,
+        lc_serializable: true,
+        lc_namespace: ["test"]
+      };
+
       mockModel = { 
-        withStructuredOutput: jest.fn().mockReturnValue({
-          invoke: mockInvoke
-        })
+        withStructuredOutput: jest.fn().mockReturnValue(mockRunnable)
       };
 
       engine = new InferenceEngine(mockModel as any);
@@ -132,8 +138,10 @@ describe('Runtime Theme Tests', () => {
       expect(initialState.messages).toHaveLength(0); // Should remain 0
       
       // Check if invoke was called with SystemMessage and role rendered
-      const calledMessages = mockInvoke.mock.calls[0][0];
-      expect(calledMessages[0].constructor.name).toBe('SystemMessage');
+      const firstArg = mockInvoke.mock.calls[0][0];
+      const calledMessages = firstArg.messages || (firstArg.toMessages ? firstArg.toMessages() : firstArg);
+      
+      expect(calledMessages[0].constructor.name).toContain('SystemMessage');
       expect(calledMessages[0].content).toBe('You are assistant');
     });
 

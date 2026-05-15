@@ -54,6 +54,10 @@ export class TavilySearchTool extends BaseTool<TavilySearchInput, any> {
    * @param context 工具執行上下文
    */
   async run(input: TavilySearchInput, context: IToolContext): Promise<any> {
+    if (!process.env.TAVILY_API_KEY) {
+      throw new Error('TAVILY_API_KEY is not configured');
+    }
+
     try {
       // 確保 API Key 存在於環境變數中，TavilySearch 會自動從 process.env.TAVILY_API_KEY 讀取
       // 將 input 映射到 TavilySearch 期望的參數格式
@@ -65,12 +69,33 @@ export class TavilySearchTool extends BaseTool<TavilySearchInput, any> {
         includeImages: input.includeImages,
         timeRange: input.timeRange,
         topic: input.topic,
-        // 注意：invoke 時可能不支援 maxResults (有些版本是在構造函數設定)，
-        // 這裡我們先傳遞其餘支援的參數。
       });
-      return result;
+
+      // 如果結果是字串（可能是某些版本的預設輸出），嘗試解析
+      let parsedResult = result;
+      if (typeof result === 'string') {
+        try {
+          parsedResult = JSON.parse(result);
+        } catch (e) {
+          // 如果不是 JSON，就直接回傳結果
+          return result;
+        }
+      }
+
+      // 如果結果包含 results 陣列，則回傳該陣列並過濾不需要的欄位
+      if (parsedResult && parsedResult.results && Array.isArray(parsedResult.results)) {
+        const formattedResults = parsedResult.results.map((r: any) => ({
+          title: r.title,
+          url: r.url,
+          content: r.content,
+          score: r.score
+        }));
+        return JSON.stringify(formattedResults);
+      }
+
+      return typeof result === 'string' ? result : JSON.stringify(result);
     } catch (error: any) {
-      throw new Error(`Tavily Search failed: ${error.message}`);
+      throw new Error(`Tavily API error: ${error.message}`);
     }
   }
 }

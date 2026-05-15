@@ -75,6 +75,25 @@ npm test tests/
 
 ---
 
+## 🚀 Demo 演示與功能實踐 (Demo Showcase)
+
+`scripts/run-demo.ts` 展示了 SuperNova 處理複雜、多步驟任務的能力。
+
+### 演示情境：遠端工作心理健康研究報告
+Demo 會啟動一個完整的會話，並自動執行以下流程：
+1.  **自動規劃 (Planning):** `CoordinatorAgent` 接收到一個模糊的「中文研究報告」目標，並將其拆解為四個具體的任務：
+    *   使用 `TavilySearchTool` 檢索 2025-2026 年關於遠端工作與心理健康的趨勢。
+    *   分析檢索到的數據對生產力的心理影響。
+    *   調用 `THERAPIST Agent`（心理諮商師角色）從專業角度提供管理建議。
+    *   將所有內容整合並產出最終的 `health_report.md`。
+2.  **併發執行 (Execution):** 系統會根據任務依賴關係，自動調度並行任務，並通過 `WorkerAgent` 調用真實工具。
+3.  **工具整合 (Tools):** 
+    *   `TavilySearchTool`: 實現聯網搜索。
+    *   `WriteFileTool`: 將中間結果與最終報告寫入 `workspace/` 目錄。
+4.  **結果驗證:** 最終會在 `workspace/` 生成一個結構清晰、具備專業深度的 Markdown 報告。
+
+---
+
 ## 🤖 建立新 Agent (Creating a New Agent)
 
 在 SuperNova 中，Agent 是由 JSON 配置驅動的。要建立一個新的 Agent，請在 `./agents` 目錄下建立一個 `.json` 檔案。
@@ -84,12 +103,12 @@ npm test tests/
 
 ```json
 {
-  "id": "therapist",
-  "role": "THERAPIST",
-  "type": "WORKER",
-  "capabilities": ["THERAPY", "EMPATHY"],
+  "id": "coordinator-01",
+  "role": "COORDINATOR",
+  "type": "COORDINATOR",
+  "availableAgents": ["researcher-01", "coder-01", "therapist"],
   "prompts": {
-    "identity": "你是一位專業的心理諮商師，擅長傾聽、同理並提供情緒支持。"
+    "identity": "你是一個高效的任務協調者，負責分析目標並分發任務給合適的專家。"
   }
 }
 ```
@@ -102,6 +121,7 @@ npm test tests/
     - `EVALUATOR`: 負責評估任務執行結果。
     - `WORKER`: 負責執行具體任務（通常具備工具調用能力）。
     - `BASE`: 基礎 Agent 實作。
+- **`availableAgents`**: (僅限 `COORDINATOR`) 該協調者可以調度的 Agent ID 列表。若未提供，則無法分發任務。
 - **`capabilities`**: Agent 具備的能力標籤，用於工具匹配與任務分配。
 - **`prompts.identity`**: 定義 Agent 的人格特質與行為準則（System Prompt）。可以是一個字串，或者是一個指向 `.md` 檔案的路徑（例如 `"identity/researcher_identity.md"`，系統會自動從 `./prompts/` 目錄加載）。
 
@@ -134,7 +154,9 @@ const agent = await agentRegistry.loadAgentById('therapist');
 - [x] **Phase 1-6:** 核心運行時與基礎架構落地
 - [x] **Phase 7:** Agent 組件化重構 (Component-Based Refactor)
 - [x] **Phase 8:** 無狀態推理引擎與提示詞綁定優化
-- [ ] **Phase 9:** 真實工具鏈集成 (File, Search, Python)
-- [ ] **Phase 10:** 多 Agent 協作場景實戰測試 (Ongoing)
+- [x] **Phase 9:** 真實工具鏈集成 (File, Search)
+- [x] **Phase 10:** 多 Agent 協作場景實戰測試 (Remote Work Research Case)
+- [ ] **Phase 11:** 更多原生工具 (Python Executor, Browser Control)
+- [ ] **Phase 12:** 長期記憶與 RAG 系統集成
 
 ---

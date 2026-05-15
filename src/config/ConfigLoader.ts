@@ -1,5 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { logger } from '../infra/LogManager';
 import { IConfig, DeepPartial } from '../../interfaces/config/IConfig';
 import { IConfigLoader } from '../../interfaces/config/IConfigLoader';
 import { DEFAULT_CONFIG } from './DefaultConfig';
@@ -28,13 +29,13 @@ export class ConfigLoader implements IConfigLoader {
         customConfig = JSON.parse(content);
       } catch (parseError) {
         // 若解析失敗，記錄錯誤並拋出，防止以損壞的配置啟動
-        console.error(`[ConfigLoader] Failed to parse config file at ${targetPath}:`, parseError);
+        logger.error(`[ConfigLoader] Failed to parse config file at ${targetPath}:`, { payload: { error: parseError }, type: 'SYSTEM' });
         throw parseError;
       }
     } catch (error: any) {
       if (error.code === 'ENOENT') {
         // 檔案不存在：執行初始化生成邏輯
-        console.log(`[ConfigLoader] Config file not found. Generating default at ${targetPath}`);
+        logger.info(`[ConfigLoader] Config file not found. Generating default at ${targetPath}`, { type: 'SYSTEM' });
         
         // 確保目標目錄存在
         const dir = path.dirname(targetPath);

@@ -45,6 +45,7 @@ describe('Coordinator Theme Tests', () => {
 
     test('should request replan from engine and return updated task graph', async () => {
       const mockSmartInference = { 
+        withSystemPrompt: jest.fn().mockReturnThis(),
         infer: jest.fn().mockResolvedValue({
           nodes: [
             { id: 'task-1', goal: 'Replanned Task', type: 'worker', dependencies: [], status: 'pending' as const }
@@ -88,8 +89,14 @@ describe('Coordinator Theme Tests', () => {
     let planEngine: TaskPlanEngine;
 
     beforeEach(async () => {
-      mockSmartInference = { infer: jest.fn() };
-      mockEvalInference = { infer: jest.fn() };
+      mockSmartInference = { 
+        withSystemPrompt: jest.fn().mockReturnThis(),
+        infer: jest.fn() 
+      };
+      mockEvalInference = { 
+        withSystemPrompt: jest.fn().mockReturnThis(),
+        infer: jest.fn() 
+      };
       mockModelRegistry = {
         getModel: jest.fn((preset) => {
           if (preset === ModelPreset.SMART) return mockSmartInference;
@@ -131,7 +138,10 @@ describe('Coordinator Theme Tests', () => {
     let planEngine: TaskPlanEngine;
 
     beforeEach(() => {
-      mockSmartInference = { infer: jest.fn() };
+      mockSmartInference = { 
+        withSystemPrompt: jest.fn().mockReturnThis(),
+        infer: jest.fn() 
+      };
       mockModelRegistry = {
         getModel: jest.fn().mockReturnValue(mockSmartInference),
         registerModel: jest.fn()

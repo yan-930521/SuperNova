@@ -1,5 +1,6 @@
 import type { IAgent } from '../../interfaces/agent/IAgent';
 import type { ITool } from '../../interfaces/tool/ITool';
+import { logger } from './LogManager';
 
 /**
  * 能力驗證器 (Capability Validator)
@@ -27,7 +28,7 @@ export class CapabilityValidator {
     const hasAll = required.every(cap => agentCapabilities.includes(cap));
     
     if (!hasAll) {
-      console.warn(`[CapabilityValidator] Agent ${agent.id} missing capabilities for ${tool.name}. Required: ${required}`);
+      logger.warn(`[CapabilityValidator] Agent ${agent.id} missing capabilities for ${tool.name}. Required: ${required}`, { type: 'SYSTEM', agent_id: agent.id });
     }
 
     return hasAll;

@@ -6,6 +6,7 @@ import { ToolRegistry } from '../src/infra/ToolRegistry';
 import { IModelRegistry, IInferenceEngine, ModelPreset } from '../interfaces/runtime/IModelRegistry';
 import { ThoughtEvalResponseSchema } from '../src/schemas/agent/AgentOutputSchemas';
 import type { IMutationRequest } from '../interfaces/models/IMutationRequest';
+import { logger } from '../src/infra/LogManager';
 
 // Mock LangChain's createReactAgent
 jest.mock('@langchain/langgraph/prebuilt', () => ({
@@ -74,24 +75,22 @@ describe('Agent Theme Tests', () => {
     });
 
     test('should log when receiving a task', async () => {
-      const logSpy = jest.spyOn(console, 'log').mockImplementation();
+      const logSpy = jest.spyOn(logger, 'info').mockImplementation();
       await agent.initFromJSON({ id: 'test-agent' });
       
       const task = { type: 'test-task', data: 123 };
       await agent.receiveTask(task);
 
       expect(logSpy).toHaveBeenCalledWith(
-        expect.stringContaining('[BaseAgent test-agent] Receiving task:')
-      );
-      expect(logSpy).toHaveBeenCalledWith(
-        expect.stringContaining(JSON.stringify(task))
+        expect.stringContaining('[BaseAgent test-agent] Receiving task:'),
+        expect.objectContaining({ agent_id: 'test-agent' })
       );
       
       logSpy.mockRestore();
     });
 
     test('should log when proposing a mutation', async () => {
-      const logSpy = jest.spyOn(console, 'log').mockImplementation();
+      const logSpy = jest.spyOn(logger, 'info').mockImplementation();
       await agent.initFromJSON({ id: 'test-agent' });
 
       const mutation: IMutationRequest = {
@@ -106,7 +105,8 @@ describe('Agent Theme Tests', () => {
       await agent.proposeMutation(mutation);
 
       expect(logSpy).toHaveBeenCalledWith(
-        expect.stringContaining('[BaseAgent test-agent] Proposing mutation to onMessage')
+        expect.stringContaining('[BaseAgent test-agent] Proposing mutation to onMessage'),
+        expect.objectContaining({ agent_id: 'test-agent' })
       );
 
       logSpy.mockRestore();
@@ -196,7 +196,7 @@ describe('Agent Theme Tests', () => {
           prompts: { identity: 'new identity' }
         };
 
-        const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
+        const warnSpy = jest.spyOn(logger, 'warn').mockImplementation();
 
         await workerAgent.initFromJSON(config1);
         expect(createReactAgent).toHaveBeenCalledTimes(1);
@@ -205,7 +205,10 @@ describe('Agent Theme Tests', () => {
         await workerAgent.initFromJSON(config2);
         expect(createReactAgent).toHaveBeenCalledTimes(1); // Still 1, no rebuild
         expect(workerAgent.identity).toBe('initial identity'); // Still initial
-        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Attempted to change identity after initialization'));
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Attempted to change identity after initialization'),
+          expect.objectContaining({ agent_id: 'worker-1' })
+        );
 
         warnSpy.mockRestore();
       });

@@ -1,40 +1,44 @@
-import axios from 'axios';
 import { TavilySearchTool } from '../../src/tool/common/TavilySearchTool';
 import { IToolContext } from '../../interfaces/tool/IToolContext';
+import { TavilySearch } from '@langchain/tavily';
 
-// 模擬 axios
-jest.mock('axios');
-const mockedAxios = axios as jest.Mocked<typeof axios>;
+// 模擬 TavilySearch
+jest.mock('@langchain/tavily');
+const MockedTavilySearch = TavilySearch as jest.MockedClass<typeof TavilySearch>;
 
 describe('TavilySearchTool', () => {
   let tool: TavilySearchTool;
+  let mockTavilyInstance: any;
   const mockContext: IToolContext = {
     sessionId: 'test-session',
     agentId: 'test-agent'
   } as any;
 
   beforeEach(() => {
-    tool = new TavilySearchTool();
+    jest.clearAllMocks();
+    mockTavilyInstance = {
+      invoke: jest.fn()
+    };
+    MockedTavilySearch.mockImplementation(() => mockTavilyInstance);
+    
     // 設定測試用的 API Key
     process.env.TAVILY_API_KEY = 'test-key';
-    jest.clearAllMocks();
+    tool = new TavilySearchTool();
   });
 
   it('應能成功搜尋並回傳格式化後的結果', async () => {
     const mockResponse = {
-      data: {
-        results: [
-          {
-            title: 'Test Title',
-            url: 'https://test.com',
-            content: 'Test Content',
-            score: 0.95,
-            extra: 'ignore me'
-          }
-        ]
-      }
+      results: [
+        {
+          title: 'Test Title',
+          url: 'https://test.com',
+          content: 'Test Content',
+          score: 0.95,
+          extra: 'ignore me'
+        }
+      ]
     };
-    mockedAxios.post.mockResolvedValueOnce(mockResponse);
+    mockTavilyInstance.invoke.mockResolvedValueOnce(mockResponse);
 
     const result = await tool.run({ query: 'test' }, mockContext);
 
@@ -47,13 +51,10 @@ describe('TavilySearchTool', () => {
       score: 0.95
     });
     
-    // 驗證 API 呼叫參數
-    expect(mockedAxios.post).toHaveBeenCalledWith(
-      'https://api.tavily.com/search',
+    // 驗證 invoke 呼叫參數
+    expect(mockTavilyInstance.invoke).toHaveBeenCalledWith(
       expect.objectContaining({
-        api_key: 'test-key',
-        query: 'test',
-        max_results: 5
+        query: 'test'
       })
     );
   });
@@ -65,21 +66,15 @@ describe('TavilySearchTool', () => {
 
   it('當 API 請求失敗時應拋出錯誤', async () => {
     const errorMessage = 'Network Error';
-    mockedAxios.post.mockRejectedValueOnce(new Error(errorMessage));
+    mockTavilyInstance.invoke.mockRejectedValueOnce(new Error(errorMessage));
     
     await expect(tool.run({ query: 'test' }, mockContext)).rejects.toThrow(`Tavily API error: ${errorMessage}`);
   });
 
   it('當 API 回傳 401 等錯誤時應提取 detail 訊息', async () => {
-    const mockError = {
-      response: {
-        data: {
-          detail: 'Unauthorized API Key'
-        }
-      }
-    };
-    mockedAxios.post.mockRejectedValueOnce(mockError);
+    // 這裡我們模擬 TavilySearch 拋出的錯誤訊息
+    mockTavilyInstance.invoke.mockRejectedValueOnce(new Error('Unauthorized'));
     
-    await expect(tool.run({ query: 'test' }, mockContext)).rejects.toThrow('Tavily API error: Unauthorized API Key');
+    await expect(tool.run({ query: 'test' }, mockContext)).rejects.toThrow('Tavily API error: Unauthorized');
   });
 });

@@ -5,6 +5,7 @@ import { BaseMessage } from '@langchain/core/messages';
 import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts';
 
 import { IAgentState } from '../../interfaces/agent/IAgentState';
+import { logger } from '../infra/LogManager';
 import {
     IInferenceEngine, IModelRegistry, InferenceOptions, ModelPreset
 } from '../../interfaces/runtime/IModelRegistry';
@@ -73,7 +74,7 @@ export class InferenceEngine implements IInferenceEngine {
 
       return result;
     } catch (error: any) {
-      console.error(`[InferenceEngine] Inference failed: ${error.message}`);
+      logger.error(`[InferenceEngine] Inference failed: ${error.message}`, { type: 'SYSTEM' });
       throw error;
     }
   }

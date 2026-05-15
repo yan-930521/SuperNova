@@ -1,5 +1,6 @@
 import type { IToolRegistry } from '../../interfaces/infra/IToolRegistry';
 import type { ITool } from '../../interfaces/tool/ITool';
+import { logger } from './LogManager';
 
 /**
  * ToolRegistry 實作
@@ -16,9 +17,9 @@ export class ToolRegistry implements IToolRegistry {
    */
   register(tool: ITool): void {
     if (this.tools.has(tool.name)) {
-      console.warn(`[ToolRegistry] Overwriting existing tool: ${tool.name}`);
+      logger.warn(`[ToolRegistry] Overwriting existing tool: ${tool.name}`, { type: 'SYSTEM' });
     } else {
-      console.log(`[ToolRegistry] Registered tool: ${tool.name}`);
+      logger.info(`[ToolRegistry] Registered tool: ${tool.name}`, { type: 'SYSTEM' });
     }
     this.tools.set(tool.name, tool);
   }

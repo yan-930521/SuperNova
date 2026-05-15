@@ -7,13 +7,16 @@ import { ITaskGraph, ITaskNode, ITaskPlanEngine } from '../../interfaces/agent/I
 import {
     IInferenceEngine, IModelRegistry, ModelPreset
 } from '../../interfaces/runtime/IModelRegistry';
+import { logger } from '../infra/LogManager';
 import {
     ContextProjectionSchema, MilestonePlanSchema, PlanReviewSchema, TaskExpandResponseSchema
 } from '../schemas/agent/AgentOutputSchemas';
 import { PromptLoader } from '../utils/PromptLoader';
+import { TaskGraph } from '../session/TaskGraph';
 
 /**
  * TaskPlanEngine 實作類
+
  * 內部封裝了 LangGraph 流程，負責里程碑規劃與任務展開。
  */
 export class TaskPlanEngine implements ITaskPlanEngine {
@@ -85,7 +88,13 @@ export class TaskPlanEngine implements ITaskPlanEngine {
    * [Node] 里程碑規劃
    */
   async planMilestones(state: typeof AgentStateAnnotation.State): Promise<Partial<typeof AgentStateAnnotation.State>> {
+    logger.info(`[TaskPlanEngine] Planning milestones for goal: ${state.goal}`, { type: 'PLAN' });
     const result = await this.milestoneEngine.infer(state as any, MilestonePlanSchema);
+    
+    logger.info(`[TaskPlanEngine] Generated ${result.milestones.length} milestones.`, { 
+      type: 'PLAN', 
+      payload: { milestones: result.milestones } 
+    });
 
     return {
       planning: {
@@ -99,10 +108,14 @@ export class TaskPlanEngine implements ITaskPlanEngine {
    * [Node] 審查規劃與預測未來上下文
    */
   async reviewAndProject(state: typeof AgentStateAnnotation.State): Promise<Partial<typeof AgentStateAnnotation.State>> {
+    logger.info(`[TaskPlanEngine] Reviewing milestones and projecting context...`, { type: 'PLAN' });
+    
     // 1. 執行架構審查
     const review = await this.reviewEngine.infer(state as any, PlanReviewSchema, {
       variables: { items: state.planning.milestones }
     });
+
+    logger.info(`[TaskPlanEngine] Review Score: ${review.score}/10. Rationale: ${review.rationale}`, { type: 'PLAN' });
 
     // 2. 執行環境投影
     const projection = await this.projectionEngine.infer(state as any, ContextProjectionSchema, {
@@ -122,41 +135,90 @@ export class TaskPlanEngine implements ITaskPlanEngine {
   }
 
   /**
-   * [Node] 任務展開 (DAG)
+   * [Node] 任務展開 (DAG) - 遍歷所有里程碑並生成完整的任務圖
    */
   async expandMilestone(state: typeof AgentStateAnnotation.State): Promise<Partial<typeof AgentStateAnnotation.State>> {
-    const milestone = state.planning.milestones[state.planning.currentMilestoneIdx];
-    if (!milestone) return {};
+    const finalGraph = new TaskGraph();
+    let prevMilestoneTaskIds: string[] = [];
 
-    const result = await this.expansionEngine.infer(state as any, TaskExpandResponseSchema, {
-      variables: {
-        milestone: milestone,
-        projected_context: state.planning.projectedContext,
-        available_agents: JSON.stringify(state.metadata?.available_agents || [])
-      }
+    logger.info(`[TaskPlanEngine] Starting full expansion for ${state.planning.milestones.length} milestones.`, { type: 'PLAN' });
+
+    for (let i = 0; i < state.planning.milestones.length; i++) {
+      const milestone = state.planning.milestones[i];
+      const milestonePrefix = `m${i + 1}_`;
+      logger.info(`[TaskPlanEngine] Expanding milestone [${i + 1}/${state.planning.milestones.length}]: ${milestone}`, { type: 'PLAN' });
+
+      const result = await this.expansionEngine.infer(state as any, TaskExpandResponseSchema, {
+        variables: {
+          milestone: milestone,
+          projected_context: JSON.stringify(state.planning.projectedContext),
+          available_agents: JSON.stringify(state.metadata?.available_agents || [])
+        }
+      });
+
+      // 1. 映射任務 ID 與依賴 (加上前綴確保全局唯一)
+      const currentMilestoneNodes: ITaskNode[] = result.nodes.map(n => {
+        const originalId = n.id || uuidv4();
+        const globalId = `${milestonePrefix}${originalId}`;
+        
+        // 映射依賴 ID
+        const internalDeps = (n.dependencies || []).map(d => `${milestonePrefix}${d}`);
+        
+        // 如果該任務沒有內部分依賴，則依賴於上一個里程碑的所有末端任務 (達成階段同步)
+        const globalDeps = (internalDeps.length > 0) ? internalDeps : [...prevMilestoneTaskIds];
+          
+        return {
+          ...n,
+          id: globalId,
+          dependencies: globalDeps,
+          status: 'pending' as const
+        };
+      });
+
+      // 2. 將任務加入 TaskGraph 類實例進行維護
+      currentMilestoneNodes.forEach(node => finalGraph.addTask(node.id, node));
+      
+      // 3. 建立依賴關係 (TaskGraph 會自動更新入度)
+      currentMilestoneNodes.forEach(node => {
+        node.dependencies.forEach(depId => {
+          try {
+            finalGraph.addDependency(depId, node.id);
+          } catch (e) {
+            logger.warn(`[TaskPlanEngine] Failed to add dependency ${depId} -> ${node.id}: ${(e as Error).message}`);
+          }
+        });
+      });
+
+      // 更新 prevMilestoneTaskIds 為當前里程碑的所有任務
+      prevMilestoneTaskIds = currentMilestoneNodes.map(n => n.id);
+    }
+
+    const taskGraphData = finalGraph.toJSON();
+    // 補齊 milestones 資訊
+    taskGraphData.milestones = state.planning.milestones;
+    taskGraphData.currentMilestoneIndex = state.planning.milestones.length - 1;
+
+    logger.info(`[TaskPlanEngine] Full expansion completed. Total tasks: ${finalGraph.size}`, { 
+      type: 'PLAN', 
+      payload: { 
+        totalTasks: finalGraph.size,
+        tasks: taskGraphData.nodes.map(n => ({ id: n.id, goal: n.goal, agent: n.assignedAgentId || n.assignedRole, deps: n.dependencies }))
+      } 
     });
 
-    // 為模型回傳的任務生成 UUID (如果模型沒產出的話)
-    const nodes: ITaskNode[] = result.nodes.map(n => ({
-      ...n,
-      id: n.id || uuidv4(),
-      status: 'pending' as const
-    }));
-
-    const taskGraph: ITaskGraph = {
-      nodes,
-      milestones: state.planning.milestones,
-      currentMilestoneIndex: state.planning.currentMilestoneIdx
-    };
-
     return {
-      planning: { ...state.planning, taskGraph }
+      planning: { ...state.planning, taskGraph: taskGraphData }
     };
   }
 
   async replan(state: IAgentState, failedNodeId: string, error: string): Promise<Partial<IAgentState>> {
     const failedNode = state.planning.taskGraph?.nodes.find(n => n.id === failedNodeId);
     
+    logger.info(`[TaskPlanEngine] Requesting replan for failed task: ${failedNodeId}`, { 
+      type: 'PLAN', 
+      payload: { error } 
+    });
+
     const result = await this.replanEngine.infer(state as any, TaskExpandResponseSchema, {
       variables: {
         goal: state.goal,
@@ -175,6 +237,8 @@ export class TaskPlanEngine implements ITaskPlanEngine {
       id: n.id || uuidv4(),
       status: 'pending' as const
     }));
+
+    logger.info(`[TaskPlanEngine] Replanning completed. New graph has ${nodes.length} nodes.`, { type: 'PLAN' });
 
     return {
       planning: {

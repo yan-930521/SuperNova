@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { logger } from '../infra/LogManager';
 
 /**
  * Prompt 加載器
@@ -24,7 +25,7 @@ export class PromptLoader {
     try {
       // 2. 檢查檔案是否存在
       if (!fs.existsSync(absolutePath)) {
-        console.warn(`[PromptLoader] File not found: ${absolutePath}. Using fallback.`);
+        logger.warn(`[PromptLoader] File not found: ${absolutePath}. Using fallback.`, { type: 'SYSTEM' });
         return fallback;
       }
 
@@ -32,8 +33,8 @@ export class PromptLoader {
       const content = fs.readFileSync(absolutePath, 'utf-8');
       this.cache.set(absolutePath, content);
       return content;
-    } catch (error) {
-      console.error(`[PromptLoader] Failed to read prompt at ${absolutePath}:`, error);
+    } catch (error: any) {
+      logger.error(`[PromptLoader] Failed to read prompt at ${absolutePath}: ${error.message}`, { type: 'SYSTEM' });
       return fallback;
     }
   }

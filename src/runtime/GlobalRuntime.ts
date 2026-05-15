@@ -5,6 +5,10 @@ import type { ISessionManager } from '../../interfaces/infra/ISessionManager';
 import type { IAgentRegistry } from '../../interfaces/infra/IAgentRegistry';
 import type { IConfig } from '../../interfaces/config/IConfig';
 import { ConfigLoader } from '../config/ConfigLoader';
+import { logger } from '../infra/LogManager';
+import { ConsoleTransport } from '../infra/transports/ConsoleTransport';
+import { FileTransport } from '../infra/transports/FileTransport';
+import { LogLevel } from '../../interfaces/infra/ILogger';
 
 /**
  * 全局運行時實作類 (Global Runtime)
@@ -33,6 +37,12 @@ export class GlobalRuntime implements IRuntime {
       this.config = await loader.bootstrap('./supernova.json');
     }
 
+    // 初始化日誌系統
+    const consoleLevel = (process.env.CONSOLE_LOG_LEVEL as LogLevel) || 'INFO';
+    logger.addTransport(new ConsoleTransport(consoleLevel));
+    logger.addTransport(new FileTransport('DEBUG'));
+    logger.info('Logger initialized.', { type: 'SYSTEM' });
+
     // 自動載入 Agent
     if (this.agentRegistry) {
       const agentsDir = this.config?.runtime.agents_dir || './agents';
@@ -41,14 +51,14 @@ export class GlobalRuntime implements IRuntime {
       // 同步配置到註冊表
       this.agentRegistry.updateConfig(agentsDir, fallbackId);
 
-      console.log(`[GlobalRuntime] Auto-loading agents from ${agentsDir}...`);
+      logger.info(`Auto-loading agents from ${agentsDir}...`, { type: 'SYSTEM' });
       await this.agentRegistry.loadAllAgentsFromDir();
       
       // 確保預設 Worker 存在
       try {
         await this.agentRegistry.ensureDefaultWorker();
       } catch (e) {
-        console.warn(`[GlobalRuntime] ${(e as Error).message}`);
+        logger.warn(`${(e as Error).message}`, { type: 'SYSTEM' });
       }
     }
 
@@ -61,7 +71,7 @@ export class GlobalRuntime implements IRuntime {
       await this.runTick();
     }, tickRate);
     
-    console.log(`[GlobalRuntime] Runtime started with tick rate: ${tickRate}ms.`);
+    logger.info(`Runtime started with tick rate: ${tickRate}ms.`, { type: 'SYSTEM' });
   }
 
   /**
@@ -73,7 +83,7 @@ export class GlobalRuntime implements IRuntime {
       this.timer = null;
     }
     this.isRunning = false;
-    console.log('[GlobalRuntime] Runtime stopped.');
+    logger.info('Runtime stopped.', { type: 'SYSTEM' });
   }
 
   /**
@@ -86,7 +96,7 @@ export class GlobalRuntime implements IRuntime {
       try {
         await session.tick();
       } catch (error) {
-        console.error(`[GlobalRuntime] Error in session ${sessionId} tick:`, error);
+        logger.error(`Error in session ${sessionId} tick:`, { type: 'SYSTEM', session_id: sessionId, payload: error });
       }
     }
   }

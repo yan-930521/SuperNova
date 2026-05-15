@@ -1,4 +1,5 @@
 import { BaseAgent } from './BaseAgent';
+import { logger } from '../infra/LogManager';
 import { IEvaluatorAgent } from '../../interfaces/agent/IEvaluatorAgent';
 import { IEvaluationRecord } from '../../interfaces/agent/IAgentState';
 import { IModelRegistry, IInferenceEngine, ModelPreset } from '../../interfaces/runtime/IModelRegistry';
@@ -34,7 +35,7 @@ export class EvaluatorAgent extends BaseAgent implements IEvaluatorAgent {
 
     if (!isFirstInit) {
       if (config.prompts?.identity && config.prompts.identity !== this.identity) {
-        console.warn(`[EvaluatorAgent ${this.id}] Attempted to change identity after initialization. Agent is immutable. Change ignored.`);
+        logger.warn(`[EvaluatorAgent ${this.id}] Attempted to change identity after initialization. Agent is immutable. Change ignored.`, { agent_id: this.id, type: 'SYSTEM' });
         const safeConfig = { 
           ...config, 
           prompts: { ...config.prompts, identity: this.identity } 
@@ -43,7 +44,7 @@ export class EvaluatorAgent extends BaseAgent implements IEvaluatorAgent {
       } else {
         await super.initFromJSON(config);
       }
-      console.log(`[EvaluatorAgent ${this.id}] 狀態已恢復，跳過引擎重新綁定。`);
+      logger.info(`[EvaluatorAgent ${this.id}] 狀態已恢復，跳過引擎重新綁定。`, { agent_id: this.id, type: 'SYSTEM' });
       return;
     }
 
@@ -59,14 +60,14 @@ export class EvaluatorAgent extends BaseAgent implements IEvaluatorAgent {
 
     this._isReady = true;
     
-    console.log(`[EvaluatorAgent ${this.id}] 初始化完成。Evaluation Engines Ready.`);
+    logger.info(`[EvaluatorAgent ${this.id}] 初始化完成。Evaluation Engines Ready.`, { agent_id: this.id, type: 'SYSTEM' });
   }
   
   /**
    * 對一組對象進行批次評分
    */
   async evaluateBatch(targets: any[], criteria: any): Promise<IEvaluationRecord[]> {
-    console.log(`[EvaluatorAgent ${this.id}] 開始對 ${targets.length} 個項目進行評估。`);
+    logger.info(`[EvaluatorAgent ${this.id}] 開始對 ${targets.length} 個項目進行評估。`, { agent_id: this.id, type: 'THOUGHT' });
 
     const isThought = criteria.type === 'thought';
     const engine = isThought ? this.thoughtEvalEngine : this.planReviewEngine;

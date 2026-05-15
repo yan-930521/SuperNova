@@ -1,4 +1,5 @@
 import type { IReadyQueue } from '../../interfaces/session/IReadyQueue';
+import { logger } from '../infra/LogManager';
 import { TaskGraph } from './TaskGraph';
 
 /**
@@ -18,7 +19,7 @@ export class ParallelScheduler {
     const readyTasks = graph.getReadyTasks();
     for (const taskId of readyTasks) {
       if (!this.queuedTaskIds.has(taskId) && !this.runningTaskIds.has(taskId)) {
-        console.log(`Scheduling task: ${taskId}`);
+        logger.info(`Scheduling task: ${taskId}`, { type: 'LIFECYCLE' });
         queue.push(taskId);
         this.queuedTaskIds.add(taskId);
       }
@@ -41,7 +42,7 @@ export class ParallelScheduler {
    * @param queue 就緒任務隊列
    */
   onTaskCompleted(taskId: string, graph: TaskGraph, queue: IReadyQueue): void {
-    console.log(`Task completed: ${taskId}`);
+    logger.info(`Task completed: ${taskId}`, { type: 'LIFECYCLE' });
     graph.completeTask(taskId);
     this.runningTaskIds.delete(taskId);
     this.schedule(graph, queue);
@@ -54,7 +55,7 @@ export class ParallelScheduler {
    * @param queue 就緒任務隊列
    */
   onTaskFailed(taskId: string, graph: TaskGraph, queue: IReadyQueue): void {
-    console.log(`Task failed: ${taskId}`);
+    logger.error(`Task failed: ${taskId}`, { type: 'LIFECYCLE' });
     this.runningTaskIds.delete(taskId);
     this.queuedTaskIds.delete(taskId);
   }

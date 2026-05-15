@@ -2,6 +2,7 @@ import type { IAgent } from '../../interfaces/agent/IAgent';
 import type { IAgentComponent } from '../../interfaces/agent/IAgentComponent';
 import type { IMutationRequest } from '../../interfaces/models/IMutationRequest';
 import { PromptLoader } from '../utils/PromptLoader';
+import { logger } from '../infra/LogManager';
 
 /**
  * BaseAgent 類
@@ -101,7 +102,7 @@ export class BaseAgent implements IAgent {
    * @param task 任務數據
    */
   async receiveTask(task: any): Promise<void> {
-    console.log(`[BaseAgent ${this.id}] Receiving task: ${JSON.stringify(task)}`);
+    logger.info(`[BaseAgent ${this.id}] Receiving task: ${JSON.stringify(task)}`, { agent_id: this.id, type: 'SYSTEM' });
   }
 
   /**
@@ -109,6 +110,6 @@ export class BaseAgent implements IAgent {
    * @param mutation 變更請求
    */
   async proposeMutation(mutation: IMutationRequest): Promise<void> {
-    console.log(`[BaseAgent ${this.id}] Proposing mutation to ${mutation.target_hook}`);
+    logger.info(`[BaseAgent ${this.id}] Proposing mutation to ${mutation.target_hook}`, { agent_id: this.id, type: 'SYSTEM' });
   }
 }

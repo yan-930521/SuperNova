@@ -4,6 +4,7 @@ import type { IModelRegistry } from '../../interfaces/runtime/IModelRegistry';
 import type { ITaskPlanEngine } from '../../interfaces/agent/ITaskPlanEngine';
 import * as fs from 'fs';
 import * as path from 'path';
+import { logger } from './LogManager';
 
 import { BaseAgent } from '../agent/BaseAgent';
 import { CoordinatorAgent } from '../agent/CoordinatorAgent';
@@ -37,14 +38,14 @@ export class AgentRegistry implements IAgentRegistry {
 	updateConfig(agentsDir: string, defaultId: string): void {
 		this.agentsDir = agentsDir;
 		this.defaultFallbackAgentId = defaultId;
-		console.log(`[AgentRegistry] Config updated: agents_dir=${agentsDir}, default_id=${defaultId}`);
+		logger.info(`[AgentRegistry] Config updated: agents_dir=${agentsDir}, default_id=${defaultId}`, { type: 'SYSTEM' });
 	}
 
 	/**
 	 * 手動註冊一個 Agent 實例
 	 */
 	register(agent: IAgent): void {
-		console.log(`[AgentRegistry] Registering agent: ${agent.id} (role: ${agent.role})`);
+		logger.info(`[AgentRegistry] Registering agent: ${agent.id} (role: ${agent.role})`, { type: 'SYSTEM' });
 		this.agents.set(agent.id, agent);
 	}
 
@@ -97,7 +98,7 @@ export class AgentRegistry implements IAgentRegistry {
 		const { type, id } = agentJson;
 		let agent: IAgent;
 
-		console.log(`[AgentRegistry] Loading agent from JSON: ${id} (type: ${type})`);
+		logger.info(`[AgentRegistry] Loading agent from JSON: ${id} (type: ${type})`, { type: 'SYSTEM' });
 
 		// 根據 type 映射具體的實作類
 		switch (type) {
@@ -112,7 +113,7 @@ export class AgentRegistry implements IAgentRegistry {
 				break;
 			case 'WORKER':
 				if (!this.toolRegistry) {
-					console.warn('[AgentRegistry] Creating WORKER agent without ToolRegistry.');
+					logger.warn('[AgentRegistry] Creating WORKER agent without ToolRegistry.', { type: 'SYSTEM' });
 				}
 				agent = new WorkerAgent(this.toolRegistry!, this.modelRegistry);
 				break;
@@ -133,7 +134,7 @@ export class AgentRegistry implements IAgentRegistry {
 			const availableTools = this.toolRegistry.listTools().map(t => t.name.toLowerCase());
 			const matchedTools = agent.capabilities.filter(cap => availableTools.includes(cap.toLowerCase()));
 			if (matchedTools.length > 0) {
-				console.log(`[AgentRegistry] Agent ${agent.id} matched ${matchedTools.length} tools based on capabilities: ${matchedTools.join(', ')}`);
+				logger.info(`[AgentRegistry] Agent ${agent.id} matched ${matchedTools.length} tools based on capabilities: ${matchedTools.join(', ')}`, { type: 'SYSTEM' });
 			}
 		}
 
@@ -149,7 +150,7 @@ export class AgentRegistry implements IAgentRegistry {
 		const targetPath = dirPath || this.agentsDir;
 		const absolutePath = path.isAbsolute(targetPath) ? targetPath : path.resolve(process.cwd(), targetPath);
 		if (!fs.existsSync(absolutePath)) {
-			console.warn(`[AgentRegistry] Directory not found: ${absolutePath}`);
+			logger.warn(`[AgentRegistry] Directory not found: ${absolutePath}`, { type: 'SYSTEM' });
 			return;
 		}
 
@@ -160,7 +161,7 @@ export class AgentRegistry implements IAgentRegistry {
 					const config = JSON.parse(fs.readFileSync(path.join(absolutePath, file), 'utf-8'));
 					await this.loadAgentFromJSON(config);
 				} catch (error) {
-					console.error(`[AgentRegistry] Failed to load agent from ${file}:`, error);
+					logger.error(`[AgentRegistry] Failed to load agent from ${file}:`, { payload: { error }, type: 'SYSTEM' });
 				}
 			}
 		}

@@ -4,6 +4,6 @@
   "type": "WORKER",
   "capabilities": ["WEB_SEARCH", "FILE_WRITE"],
   "prompts": {
-    "identity": "You are a professional researcher and writer."
+    "identity": "identity/researcher.md"
   }
 }

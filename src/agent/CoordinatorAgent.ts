@@ -1,4 +1,5 @@
 import { BaseAgent } from './BaseAgent';
+import { logger } from '../infra/LogManager';
 
 import type { ICoordinator } from '../../interfaces/agent/ICoordinator';
 import type { IMutationRequest } from '../../interfaces/models/IMutationRequest';
@@ -49,7 +50,7 @@ export class CoordinatorAgent extends BaseAgent implements ICoordinator {
 	 * @param goal 任務目標描述
 	 */
 	async planTaskGraph(goal: string): Promise<ITaskGraph> {
-		console.log(`[CoordinatorAgent ${this.id}] Planning task graph for goal: ${goal}`);
+		logger.info(`[CoordinatorAgent ${this.id}] Planning task graph for goal: ${goal}`, { agent_id: this.id, type: 'PLAN' });
 
 		if (!this.planEngine) {
 			throw new Error(`TaskPlanEngine not injected into CoordinatorAgent ${this.id}`);
@@ -90,7 +91,7 @@ export class CoordinatorAgent extends BaseAgent implements ICoordinator {
 		error: string,
 		currentState: IAgentState
 	): Promise<ITaskGraph> {
-		console.log(`[CoordinatorAgent ${this.id}] Requesting replan for failed task: ${failedTaskId}`);
+		logger.info(`[CoordinatorAgent ${this.id}] Requesting replan for failed task: ${failedTaskId}`, { agent_id: this.id, type: 'PLAN' });
 
 		if (!this.planEngine) {
 			throw new Error(`TaskPlanEngine not injected into CoordinatorAgent ${this.id}`);
@@ -126,7 +127,7 @@ export class CoordinatorAgent extends BaseAgent implements ICoordinator {
 
 		// 如果沒有傳入 AgentRegistry，則無法解析，返回空列表
 		if (!this.agentRegistry) {
-			console.warn(`[CoordinatorAgent ${this.id}] AgentRegistry not available. Cannot resolve availableAgents.`);
+			logger.warn(`[CoordinatorAgent ${this.id}] AgentRegistry not available. Cannot resolve availableAgents.`, { agent_id: this.id, type: 'PLAN' });
 			return [];
 		}
 
@@ -139,7 +140,7 @@ export class CoordinatorAgent extends BaseAgent implements ICoordinator {
 					capabilities: agent.capabilities || []
 				};
 			}
-			console.warn(`[CoordinatorAgent ${this.id}] Available agent with ID ${id} not found in registry.`);
+			logger.warn(`[CoordinatorAgent ${this.id}] Available agent with ID ${id} not found in registry.`, { agent_id: this.id, type: 'PLAN' });
 			return null;
 		}).filter(a => a !== null);
 	}
