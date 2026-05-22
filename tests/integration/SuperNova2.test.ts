@@ -35,7 +35,6 @@ describe('SuperNova 2.0 Full Cycle', () => {
 
     // 3. 驗證 Session 是否正確同步了 Worker 的摘要
     const history = session.history;
-    console.log('Session History:', JSON.stringify(history, null, 2));
 
     expect(history.some(h => h.role === 'user' && h.content === "幫我研究 AI 趨勢")).toBe(true);
     expect(history.some(h => h.role === 'worker' && h.content.includes('[Worker Summary]'))).toBe(true);
