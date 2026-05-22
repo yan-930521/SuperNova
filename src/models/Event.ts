@@ -6,11 +6,10 @@ export type Event<T = any> = {
   type: string;
   /** 數據載體 */
   payload: T;
-  /** 用於 Hook 匹配的標籤 */
-  tags: string[];
-  /** 全鏈路追蹤上下文 */
-  trace_context: {
-    session_id: string;
-    trace_id: string;
-  };
+  /** 事件發生時間戳 */
+  timestamp: number;
+  /** 會話 ID (可選) */
+  session_id?: string;
+  /** 追蹤 ID (可選) */
+  trace_id?: string;
 }

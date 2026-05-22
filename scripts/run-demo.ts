@@ -4,14 +4,13 @@ import * as path from 'path';
 
 import { ChatOpenAI } from '@langchain/openai';
 
-import { ModelPreset } from '../interfaces/runtime/IModelRegistry';
 import { CoordinatorAgent } from '../src/agent/CoordinatorAgent';
 import { AgentRegistry } from '../src/infra/AgentRegistry';
 import { EventBus } from '../src/infra/EventBus';
 import { SessionManager } from '../src/infra/SessionManager';
 import { ToolRegistry } from '../src/infra/ToolRegistry';
 import { GlobalRuntime } from '../src/runtime/GlobalRuntime';
-import { InferenceEngine, ModelRegistry } from '../src/runtime/ModelRegistry';
+import { InferenceEngine, ModelRegistry, ModelPreset } from '../src/runtime/ModelRegistry';
 import { BaseSession } from '../src/session/BaseSession';
 import { TavilySearchTool } from '../src/tool/common/TavilySearchTool';
 import { WriteFileTool } from '../src/tool/file/WriteFileTool';
@@ -22,7 +21,7 @@ async function runDemo() {
 	console.log("🚀 [SuperNova Demo] 系統初始化 (Real Planning & ReAct Execution)...\n");
 
 	// A. 初始化核心基礎設施
-	const eventBus = new EventBus();
+	const eventBus = EventBus.getInstance();
 	const sessionManager = new SessionManager();
 	const toolRegistry = new ToolRegistry();
 	
