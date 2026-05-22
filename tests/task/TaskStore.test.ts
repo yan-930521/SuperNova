@@ -8,14 +8,14 @@ describe('TaskStore', () => {
   });
 
   it('should initialize a task and update its status', () => {
-    store.updateStatus('task-1', 'RUNNING');
+    store.updateStatus('task-1', 'running');
     const taskState = store.getTask('task-1');
     expect(taskState).toBeDefined();
-    expect(taskState?.status).toBe('RUNNING');
+    expect(taskState?.status).toBe('running');
     expect(taskState?.id).toBe('task-1');
   });
 
-  it('should return PENDING for a new task that was just created via getOrCreate internally', () => {
+  it('should return pending for a new task that was just created via getOrCreate internally', () => {
     // 雖然 getOrCreate 是私有的，但 addRecord 會觸發它
     store.addRecord({
       taskId: 'task-2',
@@ -24,8 +24,8 @@ describe('TaskStore', () => {
     });
     const taskState = store.getTask('task-2');
     expect(taskState?.records.length).toBe(1);
-    // 預設狀態應該是 PENDING (在 getOrCreate 中定義)
-    // 除非 updateStatus 被調用
+    // 預設狀態應該是 pending (在 getOrCreate 中定義)
+    expect(taskState?.status).toBe('pending');
   });
 
   it('should add operation records with timestamps', () => {

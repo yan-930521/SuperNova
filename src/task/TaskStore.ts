@@ -47,8 +47,11 @@ export class TaskStore {
     if (!task) {
       task = {
         id: taskId,
-        status: 'PENDING',
-        records: []
+        type: 'default',
+        goal: '',
+        status: 'pending',
+        records: [],
+        dependencies: []
       };
       this.taskStates.set(taskId, task);
     }
