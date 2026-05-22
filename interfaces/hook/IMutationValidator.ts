@@ -1,5 +1,5 @@
 import type { IHook } from './IHook';
-import type { IMutationRequest } from '../models/IMutationRequest';
+import type { MutationRequest } from '../../src/models/MutationRequest';
 
 /**
  * 變更校驗器接口
@@ -10,7 +10,7 @@ export interface IMutationValidator {
    * 靜態語法與權限校驗 
    * @param request 變更請求對象
    */
-  validateStatic(request: IMutationRequest): boolean;
+  validateStatic(request: MutationRequest): boolean;
 
   /** 
    * 動態版本與狀態衝突校驗 (MVCC)
@@ -18,5 +18,5 @@ export interface IMutationValidator {
    * @param request 變更請求對象
    * @param current_hook 當前 Hook 的實例 or 狀態
    */
-  validateVersion(request: IMutationRequest, current_hook: IHook): boolean;
+  validateVersion(request: MutationRequest, current_hook: IHook): boolean;
 }

@@ -1,5 +1,5 @@
 import type { IEventBus } from '../../interfaces/infra/IEventBus';
-import type { IEvent } from '../../interfaces/models/IEvent';
+import type { Event } from '../models/Event';
 import { logger } from './LogManager';
 
 /**
@@ -7,12 +7,12 @@ import { logger } from './LogManager';
  * 使用 Map 與 Set 進行高效的事件分發。
  */
 export class EventBus implements IEventBus {
-  private handlers: Map<string, Set<(event: IEvent) => void>> = new Map();
+  private handlers: Map<string, Set<(event: Event) => void>> = new Map();
 
   /**
    * 發布事件
    */
-  publish(event: IEvent): void {
+  publish(event: Event): void {
     logger.info(`[EventBus] Publishing event: ${event.type}`, { type: 'SYSTEM' });
     const typeHandlers = this.handlers.get(event.type);
     if (typeHandlers) {
@@ -29,7 +29,7 @@ export class EventBus implements IEventBus {
   /**
    * 訂閱事件
    */
-  subscribe(type: string, handler: (event: IEvent) => void): void {
+  subscribe(type: string, handler: (event: Event) => void): void {
     if (!this.handlers.has(type)) {
       this.handlers.set(type, new Set());
     }
@@ -39,7 +39,7 @@ export class EventBus implements IEventBus {
   /**
    * 取消訂閱
    */
-  unsubscribe(type: string, handler: (event: IEvent) => void): void {
+  unsubscribe(type: string, handler: (event: Event) => void): void {
     const typeHandlers = this.handlers.get(type);
     if (typeHandlers) {
       typeHandlers.delete(handler);

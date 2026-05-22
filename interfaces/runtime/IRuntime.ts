@@ -1,4 +1,4 @@
-import type { IEvent } from '../models/IEvent';
+import type { Event } from '../../src/models/Event';
 import type { ISession } from '../session/ISession';
 import type { IConfig } from '../config/IConfig';
 
@@ -20,5 +20,5 @@ export interface IRuntime {
   getActiveSessions(): Record<string, ISession>;
   
   /** 分發全局事件，觸發跨會話或跨系統的響應 */
-  emitGlobalEvent(event: IEvent): void;
+  emitGlobalEvent(event: Event): void;
 }

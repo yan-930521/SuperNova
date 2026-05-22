@@ -1,6 +1,6 @@
 import type { IAgent } from '../../interfaces/agent/IAgent';
 import type { IAgentComponent } from '../../interfaces/agent/IAgentComponent';
-import type { IMutationRequest } from '../../interfaces/models/IMutationRequest';
+import { MutationRequest } from '../models/MutationRequest';
 import { PromptLoader } from '../utils/PromptLoader';
 import { logger } from '../infra/LogManager';
 
@@ -109,7 +109,7 @@ export class BaseAgent implements IAgent {
    * 提議規則變更 (目前僅記錄日誌)
    * @param mutation 變更請求
    */
-  async proposeMutation(mutation: IMutationRequest): Promise<void> {
+  async proposeMutation(mutation: MutationRequest): Promise<void> {
     logger.info(`[BaseAgent ${this.id}] Proposing mutation to ${mutation.target_hook}`, { agent_id: this.id, type: 'SYSTEM' });
   }
 }

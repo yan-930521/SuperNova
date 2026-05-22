@@ -1,4 +1,4 @@
-import type { IMutationRequest } from '../models/IMutationRequest';
+import type { MutationRequest } from '../../src/models/MutationRequest';
 
 /**
  * 基礎 Agent 接口
@@ -24,7 +24,7 @@ export interface IAgent {
    * 向系統提議一項規則變更 (Mutation)
    * @param mutation 變更請求對象
    */
-  proposeMutation(mutation: IMutationRequest): Promise<void>;
+  proposeMutation(mutation: MutationRequest): Promise<void>;
   
   /** 
    * 將 Agent 當前狀態序列化為 JSON 

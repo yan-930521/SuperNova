@@ -1,5 +1,5 @@
 import type { IAgent } from './IAgent';
-import type { IMutationRequest } from '../models/IMutationRequest';
+import type { MutationRequest } from '../../src/models/MutationRequest';
 
 /**
  * 協調者 Agent 接口 (Coordinator)
@@ -10,7 +10,7 @@ export interface ICoordinator extends IAgent {
    * 執行階層式衝突裁決，篩選出可執行的變更提議
    * @param proposals 原始變更請求列表
    */
-  arbitrateMutations(proposals: IMutationRequest[]): Promise<IMutationRequest[]>;
+  arbitrateMutations(proposals: MutationRequest[]): Promise<MutationRequest[]>;
 
   /** 
    * 基於目標生成任務的有向無環圖 (DAG)

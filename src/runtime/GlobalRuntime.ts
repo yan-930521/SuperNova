@@ -1,5 +1,5 @@
 import type { IRuntime } from '../../interfaces/runtime/IRuntime';
-import type { IEvent } from '../../interfaces/models/IEvent';
+import { Event } from '../models/Event';
 import type { IEventBus } from '../../interfaces/infra/IEventBus';
 import type { ISessionManager } from '../../interfaces/infra/ISessionManager';
 import type { IAgentRegistry } from '../../interfaces/infra/IAgentRegistry';
@@ -111,7 +111,7 @@ export class GlobalRuntime implements IRuntime {
   /**
    * 發布全局事件
    */
-  emitGlobalEvent(event: IEvent): void {
+  emitGlobalEvent(event: Event): void {
     this.eventBus.publish(event);
   }
 }

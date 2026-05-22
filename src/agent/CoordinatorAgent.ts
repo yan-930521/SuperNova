@@ -2,7 +2,7 @@ import { BaseAgent } from './BaseAgent';
 import { logger } from '../infra/LogManager';
 
 import type { ICoordinator } from '../../interfaces/agent/ICoordinator';
-import type { IMutationRequest } from '../../interfaces/models/IMutationRequest';
+import { MutationRequest } from '../models/MutationRequest';
 import type { ITaskPlanEngine, ITaskGraph } from '../../interfaces/agent/ITaskPlanEngine';
 import type { IAgentState } from '../../interfaces/agent/IAgentState';
 import type { IAgentRegistry } from '../../interfaces/infra/IAgentRegistry';
@@ -26,8 +26,8 @@ export class CoordinatorAgent extends BaseAgent implements ICoordinator {
 	 * 執行階層式衝突裁決
 	 * @param proposals 原始變更請求列表
 	 */
-	async arbitrateMutations(proposals: IMutationRequest[]): Promise<IMutationRequest[]> {
-		const winners = new Map<string, IMutationRequest>();
+	async arbitrateMutations(proposals: MutationRequest[]): Promise<MutationRequest[]> {
+		const winners = new Map<string, MutationRequest>();
 
 		proposals.forEach((proposal) => {
 			const existing = winners.get(proposal.target_hook);
