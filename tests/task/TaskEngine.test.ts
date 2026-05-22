@@ -52,4 +52,39 @@ describe('TaskEngine', () => {
     expect(eventsReceived[0].session_id).toBe('test-session');
     expect(eventsReceived[0].timestamp).toBeDefined();
   });
+
+  it('should run tasks to completion and emit events', async () => {
+    const engine = new TaskEngine('test-session');
+    engine.loadGraph([
+      { id: 't1', goal: 'task 1', dependencies: [] },
+      { id: 't2', goal: 'task 2', dependencies: ['t1'] }
+    ]);
+    
+    const events: string[] = [];
+    EventBus.getInstance().subscribe('SESSION_START', () => events.push('SESSION_START'));
+    EventBus.getInstance().subscribe('TASK_START', (e) => events.push(`TASK_START:${e.payload.taskId}`));
+    EventBus.getInstance().subscribe('TASK_COMPLETE', (e) => events.push(`TASK_COMPLETE:${e.payload.taskId}`));
+    EventBus.getInstance().subscribe('SESSION_COMPLETE', () => events.push('SESSION_COMPLETE'));
+
+    // 監聽完成事件
+    const completePromise = new Promise((resolve) => {
+      EventBus.getInstance().subscribe('SESSION_COMPLETE', resolve);
+    });
+
+    await engine.start();
+    await completePromise;
+
+    expect(engine.getIsRunning()).toBe(false);
+    expect(engine.getTaskState('t1')?.status).toBe('completed');
+    expect(engine.getTaskState('t2')?.status).toBe('completed');
+
+    expect(events).toEqual([
+      'SESSION_START',
+      'TASK_START:t1',
+      'TASK_COMPLETE:t1',
+      'TASK_START:t2',
+      'TASK_COMPLETE:t2',
+      'SESSION_COMPLETE'
+    ]);
+  });
 });
