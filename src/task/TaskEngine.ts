@@ -48,9 +48,23 @@ export class TaskEngine {
     // 暫時模擬成功執行，延遲 10ms
     await new Promise(r => setTimeout(r, 10)); 
     
+    // 發布 Worker 摘要事件，以便 Session 紀錄
+    this.events.emit('ACTION_SUMMARY', { 
+      taskId, 
+      summary: `[Worker Summary] Successfully processed task: ${node.goal}` 
+    });
+
     this.store.updateStatus(taskId, 'completed');
     this.graph.completeTask(taskId);
     this.events.emit('TASK_COMPLETE', { taskId });
+  }
+
+  /**
+   * 中斷執行
+   */
+  interrupt(reason: string) {
+    this.isRunning = false;
+    this.events.emit('SESSION_INTERRUPT', { reason });
   }
 
   // 輔助測試
