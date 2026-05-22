@@ -4,6 +4,40 @@
 export type TaskStatus = 'pending' | 'ready' | 'running' | 'completed' | 'failed';
 
 /**
+ * 任務節點定義 (TaskNode)
+ */
+export interface TaskNode {
+  id: string;
+  type: string;
+  goal: string;
+  requiredCapabilities?: string[];
+  assignedAgentId?: string | null;
+  assignedRole?: string | null;
+  toolRouting?: {
+    preferredTools?: string[];
+    forbiddenTools?: string[];
+  };
+  dependencies: string[];
+  status: TaskStatus;
+  result?: any;
+  options?: {
+    timeout?: number;
+    maxRetries?: number;
+    isCritical?: boolean;
+  };
+  metadata?: Record<string, any>;
+}
+
+/**
+ * 任務圖資料結構 (TaskGraphData)
+ */
+export interface TaskGraphData {
+  nodes: TaskNode[];
+  milestones: string[];
+  currentMilestoneIndex: number;
+}
+
+/**
  * 單次操作記錄介面
  */
 export interface IOperationRecord {

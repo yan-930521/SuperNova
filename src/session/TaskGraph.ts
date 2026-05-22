@@ -1,4 +1,4 @@
-import { ITaskNode, ITaskGraph } from '../../interfaces/agent/ITaskPlanEngine';
+import { TaskNode, TaskGraphData } from '../task/types';
 import { logger } from '../infra/LogManager';
 
 /**
@@ -6,7 +6,7 @@ import { logger } from '../infra/LogManager';
  * 使用入度 (In-degree) 算法來管理任務的就緒狀態。
  */
 export class TaskGraph {
-  private nodes = new Map<string, ITaskNode>();
+  private nodes = new Map<string, TaskNode>();
   private adjList = new Map<string, Set<string>>();
   private inDegreeMap = new Map<string, number>();
 
@@ -18,15 +18,22 @@ export class TaskGraph {
   }
 
   /**
+   * 獲取所有任務節點。
+   */
+  getAllTasks(): TaskNode[] {
+    return Array.from(this.nodes.values());
+  }
+
+  /**
    * 添加任務節點。
    * @param taskId 任務唯一標識
    * @param node 任務節點數據 (部分提供)
    */
-  addTask(taskId: string, node: Partial<ITaskNode> = {}): void {
+  addTask(taskId: string, node: Partial<TaskNode> = {}): void {
     const isNew = !this.nodes.has(taskId);
     
-    // 提供預設值以補齊 ITaskNode
-    const fullNode: ITaskNode = {
+    // 提供預設值以補齊 TaskNode
+    const fullNode: TaskNode = {
       id: taskId,
       type: node.type || 'default',
       goal: node.goal || taskId,
@@ -130,14 +137,14 @@ export class TaskGraph {
    * 獲取任務節點。
    * @param taskId 任務唯一標識
    */
-  getTask(taskId: string): ITaskNode | undefined {
+  getTask(taskId: string): TaskNode | undefined {
     return this.nodes.get(taskId);
   }
 
   /**
    * 序列化為 JSON
    */
-  toJSON(): ITaskGraph {
+  toJSON(): TaskGraphData {
     return {
       nodes: Array.from(this.nodes.values()),
       milestones: [], // 這裡暫時留空，因為 TaskGraph 內部不維護里程碑列表
@@ -146,9 +153,9 @@ export class TaskGraph {
   }
 
   /**
-   * 從 ITaskGraph 數據對象加載狀態
+   * 從 TaskGraphData 數據對象加載狀態
    */
-  loadFromJSON(data: Partial<ITaskGraph>): void {
+  loadFromJSON(data: Partial<TaskGraphData>): void {
     this.nodes.clear();
     this.adjList.clear();
     this.inDegreeMap.clear();
@@ -156,15 +163,15 @@ export class TaskGraph {
     if (!data.nodes) return;
 
     // 1. 先註冊所有節點
-    data.nodes.forEach(node => {
+    data.nodes.forEach((node: TaskNode) => {
       this.nodes.set(node.id, node);
       this.adjList.set(node.id, new Set());
       this.inDegreeMap.set(node.id, 0);
     });
 
     // 2. 建立邊與計算入度
-    data.nodes.forEach(node => {
-      node.dependencies.forEach(parentId => {
+    data.nodes.forEach((node: TaskNode) => {
+      node.dependencies.forEach((parentId: string) => {
         const successors = this.adjList.get(parentId);
         if (successors) {
           if (!successors.has(node.id)) {
