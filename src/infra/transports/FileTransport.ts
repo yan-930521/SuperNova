@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { ILogEntry, ILogTransport, LogLevel } from '../../../interfaces/infra/ILogger';
+import { ILogEntry, ILogTransport, LogLevel } from '../LogManager';
 
 /**
  * FileTransport

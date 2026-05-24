@@ -1,13 +1,20 @@
+import { HumanMessage, AIMessage } from '@langchain/core/messages';
 import { Session } from '../../src/session/Session';
 import { EventBus } from '../../src/infra/EventBus';
+import { MessageRole } from '../../src/task/types';
+import { GlobalRuntime } from '../../src/runtime/GlobalRuntime';
 
 describe('Session', () => {
   let session: Session;
+  let eventBus: EventBus;
   const sessionId = 'test-session-id';
   const goal = 'Test overall goal';
 
   beforeEach(() => {
-    session = new Session(sessionId, goal);
+    eventBus = new EventBus();
+    // Mock GlobalRuntime.getInstance().eventBus
+    jest.spyOn(GlobalRuntime, 'getInstance').mockReturnValue({ eventBus } as any);
+    session = new Session(sessionId, goal, 'main-agent');
   });
 
   it('should initialize with id and goal', () => {
@@ -17,36 +24,31 @@ describe('Session', () => {
   });
 
   it('should add messages to history manually', () => {
-    session.addMessage('user', 'Hello');
+    session.addMessage(MessageRole.USER, 'Hello');
     expect(session.history.length).toBe(1);
-    expect(session.history[0]).toMatchObject({
-      role: 'user',
-      content: 'Hello'
-    });
-    expect(session.history[0].timestamp).toBeDefined();
+    expect(session.history[0]).toBeInstanceOf(HumanMessage);
+    expect(session.history[0].content).toBe('Hello');
   });
 
   it('should listen to ACTION_SUMMARY events and add to history', () => {
     const summary = 'Worker did something useful';
-    EventBus.getInstance().publish({
+    eventBus.publish({
       type: 'ACTION_SUMMARY',
       session_id: sessionId,
-      payload: { summary },
+      payload: { summary, taskId: 't1' },
       timestamp: Date.now()
     });
 
     expect(session.history.length).toBe(1);
-    expect(session.history[0]).toMatchObject({
-      role: 'worker',
-      content: summary
-    });
+    expect(session.history[0]).toBeInstanceOf(AIMessage);
+    expect(session.history[0].content).toContain(summary);
   });
 
   it('should not add ACTION_SUMMARY messages from other sessions', () => {
-    EventBus.getInstance().publish({
+    eventBus.publish({
       type: 'ACTION_SUMMARY',
       session_id: 'different-session-id',
-      payload: { summary: 'Other session summary' },
+      payload: { summary: 'Other session summary', taskId: 't2' },
       timestamp: Date.now()
     });
 

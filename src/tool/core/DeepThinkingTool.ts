@@ -1,0 +1,39 @@
+import { z } from 'zod';
+import { IAgentExecuteContext } from '../../task/types';
+import { BaseTool } from '../BaseTool';
+import { GlobalRuntime } from '../../runtime/GlobalRuntime';
+
+/**
+ * DeepThinkingTool
+ * 職責：引導 Agent 進行多步邏輯推演或模擬環境預測。
+ */
+export class DeepThinkingTool extends BaseTool {
+  constructor() {
+    super(
+      'deep_thinking',
+      'Perform deep logical reasoning or internal simulation for complex problems.',
+      'TIER_1',
+      ['reasoning'],
+      z.object({
+        problem: z.string().describe('The complex problem or scenario to think about.'),
+        steps: z.number().optional().default(3).describe('Number of reasoning steps to simulate.')
+      })
+    );
+  }
+
+  async run(input: any, context: IAgentExecuteContext): Promise<any> {
+    const { problem, steps } = input;
+    // 這裡目前為模擬邏輯，未來可對接思維鏈模型
+    const thoughts = [
+      `[Step 1] Analyzing the core constraints of: ${problem}`,
+      `[Step 2] Evaluating potential strategies and trade-offs...`,
+      `[Step 3] Formulating a refined execution path.`
+    ];
+
+    return {
+      focus: problem,
+      reasoningChain: thoughts.slice(0, steps),
+      conclusion: "Proceed with the suggested automated planning."
+    };
+  }
+}

@@ -1,5 +1,17 @@
-import type { IHook } from '../../interfaces/hook/IHook';
-import { logger } from './LogManager';
+import { recorder } from './LogManager';
+
+/**
+ * 系統掛鉤接口 (Hook)
+ * 作為系統規則或邏輯的擴展點，允許 Mutation 進行動態變更。
+ */
+export interface IHook {
+  /** Hook 唯一標識符 */
+  id: string;
+  /** Hook 名稱，與 IMutationRequest.target_hook 對應 */
+  name: string;
+  /** 當前 Hook 的版本標識 (用於 MVCC) */
+  version: string;
+}
 
 /**
  * Hook 註冊表
@@ -13,10 +25,10 @@ export class HookRegistry {
    */
   register(hook: IHook): void {
     if (this.hooks.has(hook.name)) {
-      logger.warn(`[HookRegistry] Overwriting existing hook: ${hook.name}`, { type: 'SYSTEM' });
+      recorder.warn(`[HookRegistry] Overwriting existing hook: ${hook.name}`, { type: 'SYSTEM' });
     }
     this.hooks.set(hook.name, hook);
-    logger.info(`[HookRegistry] Registered hook: ${hook.name} (v${hook.version})`, { type: 'SYSTEM' });
+    recorder.info(`[HookRegistry] Registered hook: ${hook.name} (v${hook.version})`, { type: 'SYSTEM' });
   }
 
   /**

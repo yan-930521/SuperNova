@@ -1,0 +1,12 @@
+{
+  "id": "coder-01",
+  "role": "Coder",
+  "type": "MAIN_AGENT",
+  "capabilities": ["FILE_WRITE", "FILE_READ", "WEB_SEARCH", "PLANNING"],
+  "availableAgents": [
+    "default-worker"
+  ],
+  "prompts": {
+    "identity": "identity/coder.md"
+  }
+}

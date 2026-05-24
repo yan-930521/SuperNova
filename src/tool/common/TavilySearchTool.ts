@@ -1,19 +1,17 @@
 import { z } from 'zod';
-
 import { TavilySearch } from '@langchain/tavily';
-
-import { IToolContext } from '../../../interfaces/tool/IToolContext';
+import { IAgentExecuteContext } from '../../task/types';
 import { BaseTool } from '../BaseTool';
 
 const TavilySearchSchema = z.object({
-  query: z.string().describe('搜尋關鍵字'),
-  includeDomains: z.array(z.string()).optional().describe('要包含的網域列表'),
-  excludeDomains: z.array(z.string()).optional().describe('要排除的網域列表'),
-  searchDepth: z.enum(['basic', 'advanced']).optional().describe('搜尋深度'),
-  includeImages: z.boolean().optional().describe('是否包含圖片結果'),
-  timeRange: z.enum(['day', 'week', 'month', 'year']).optional().describe('時間範圍'),
-  topic: z.enum(['general', 'news', 'finance']).optional().describe('搜尋主題'),
-  max_results: z.number().optional().default(5).describe('最大回傳結果數量')
+  query: z.string().describe('Search query string'),
+  includeDomains: z.array(z.string()).optional().describe('Domains to include'),
+  excludeDomains: z.array(z.string()).optional().describe('Domains to exclude'),
+  searchDepth: z.enum(['basic', 'advanced']).optional().describe('Search depth'),
+  includeImages: z.boolean().optional().describe('Whether to include images'),
+  timeRange: z.enum(['day', 'week', 'month', 'year']).optional().describe('Time range'),
+  topic: z.enum(['general', 'news', 'finance']).optional().describe('Search topic'),
+  max_results: z.number().optional().default(5).describe('Maximum number of results')
 });
 
 type TavilySearchInput = {
@@ -28,39 +26,32 @@ type TavilySearchInput = {
 };
 
 /**
- * TavilySearchTool 聯網搜尋工具
- * 封裝 LangChain 提供之 Tavily 搜尋功能。
+ * TavilySearchTool
+ * Web search tool powered by Tavily via LangChain.
  */
 export class TavilySearchTool extends BaseTool<TavilySearchInput, any> {
   private innerTool: TavilySearch;
 
   constructor() {
     super(
-      'WebSearch',
-      '使用 Tavily API 進行網頁搜尋，獲取最新資訊。',
+      'web_search',
+      'Search the web using Tavily API for real-time information.',
       'TIER_1',
       ['WEB_SEARCH'],
       TavilySearchSchema
     );
-    
+
     this.innerTool = new TavilySearch({
       maxResults: 5
     });
   }
 
-  /**
-   * 執行搜尋邏輯
-   * @param input 搜尋參數
-   * @param context 工具執行上下文
-   */
-  async run(input: TavilySearchInput, context: IToolContext): Promise<any> {
+  async run(input: TavilySearchInput, context: IAgentExecuteContext): Promise<any> {
     if (!process.env.TAVILY_API_KEY) {
       throw new Error('TAVILY_API_KEY is not configured');
     }
 
     try {
-      // 確保 API Key 存在於環境變數中，TavilySearch 會自動從 process.env.TAVILY_API_KEY 讀取
-      // 將 input 映射到 TavilySearch 期望的參數格式
       const result = await this.innerTool.invoke({
         query: input.query,
         includeDomains: input.includeDomains,
@@ -71,18 +62,15 @@ export class TavilySearchTool extends BaseTool<TavilySearchInput, any> {
         topic: input.topic,
       });
 
-      // 如果結果是字串（可能是某些版本的預設輸出），嘗試解析
       let parsedResult = result;
       if (typeof result === 'string') {
         try {
           parsedResult = JSON.parse(result);
         } catch (e) {
-          // 如果不是 JSON，就直接回傳結果
           return result;
         }
       }
 
-      // 如果結果包含 results 陣列，則回傳該陣列並過濾不需要的欄位
       if (parsedResult && parsedResult.results && Array.isArray(parsedResult.results)) {
         const formattedResults = parsedResult.results.map((r: any) => ({
           title: r.title,

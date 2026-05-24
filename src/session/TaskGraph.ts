@@ -1,5 +1,5 @@
-import { TaskNode, TaskGraphData } from '../task/types';
-import { logger } from '../infra/LogManager';
+import { TaskNode, TaskGraphData, TaskStatus } from '../task/types';
+import { recorder } from '../infra/LogManager';
 
 /**
  * TaskGraph 負責維護任務（節點）與依賴（邊）的關係。
@@ -38,7 +38,7 @@ export class TaskGraph {
       type: node.type || 'default',
       goal: node.goal || taskId,
       dependencies: node.dependencies || [],
-      status: node.status || 'pending',
+      status: node.status || TaskStatus.PENDING,
       ...node
     };
 
@@ -116,20 +116,23 @@ export class TaskGraph {
    * @param taskId 任務唯一標識
    */
   completeTask(taskId: string): void {
-    if (!this.nodes.has(taskId)) {
+    const node = this.nodes.get(taskId);
+    if (!node) {
       throw new Error(`Task ${taskId} not found`);
     }
+
+    node.status = TaskStatus.COMPLETED;
 
     const successors = this.adjList.get(taskId);
     if (successors) {
       for (const successor of successors) {
         const currentInDegree = this.inDegreeMap.get(successor)!;
-        this.inDegreeMap.set(successor, currentInDegree - 1);
+        this.inDegreeMap.set(successor, Math.max(0, currentInDegree - 1));
       }
     }
 
-    this.nodes.delete(taskId);
-    this.adjList.delete(taskId);
+    // 關鍵修正：不再刪除節點，以便後續查詢 (符合 ARCH.md 執行總帳原則)
+    // 但必須從入度表中移除，否則 getReadyTasks 會一直抓到它
     this.inDegreeMap.delete(taskId);
   }
 
@@ -180,7 +183,7 @@ export class TaskGraph {
             this.inDegreeMap.set(node.id, currentInDegree + 1);
           }
         } else {
-          logger.warn(`[TaskGraph] Task ${node.id} depends on non-existent task ${parentId}`, { type: 'SYSTEM' });
+          recorder.warn(`[TaskGraph] Task ${node.id} depends on non-existent task ${parentId}`, { type: 'SYSTEM' });
         }
       });
     });

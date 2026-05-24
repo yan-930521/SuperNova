@@ -1,0 +1,16 @@
+{
+  "id": "main-agent-01",
+  "role": "MAIN_AGENT",
+  "type": "MAIN_AGENT",
+  "capabilities": ["PLANNING", "ARBITRATION"],
+  "availableAgents": [
+    "researcher-01",
+    "analyst-01",
+    "therapist",
+    "coder-01",
+    "default-worker"
+  ],
+  "prompts": {
+    "identity": "identity/mainAgent.md"
+  }
+}

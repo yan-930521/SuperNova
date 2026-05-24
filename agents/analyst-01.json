@@ -3,5 +3,7 @@
   "role": "Analyst",
   "type": "WORKER",
   "capabilities": ["ANALYZE"],
-  "prompts": { "identity": "You are an analyst." }
+  "prompts": {
+    "identity": "identity/analyst.md"
+  }
 }

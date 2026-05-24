@@ -1,5 +1,5 @@
 import type { Event } from '../models/Event';
-import { logger } from './LogManager';
+import { recorder } from './LogManager';
 
 /**
  * 事件總線
@@ -7,20 +7,9 @@ import { logger } from './LogManager';
  * 使用 Map 與 Set 進行高效的事件分發。
  */
 export class EventBus {
-  private static instance: EventBus;
   private handlers: Map<string, Set<(event: Event) => void>> = new Map();
 
-  private constructor() {}
-
-  /**
-   * 獲取 EventBus 單例
-   */
-  public static getInstance(): EventBus {
-    if (!EventBus.instance) {
-      EventBus.instance = new EventBus();
-    }
-    return EventBus.instance;
-  }
+  constructor() {}
 
   /**
    * 發布事件
@@ -28,14 +17,14 @@ export class EventBus {
    * @param event 符合 Event 結構的事件對象
    */
   publish(event: Event): void {
-    logger.info(`[EventBus] Publishing event: ${event.type}`, { type: 'SYSTEM' });
+    recorder.info(`[EventBus] Publishing event: ${event.type}`, { type: 'SYSTEM' });
     const typeHandlers = this.handlers.get(event.type);
     if (typeHandlers) {
       typeHandlers.forEach(handler => {
         try {
           handler(event);
         } catch (error) {
-          logger.error(`[EventBus] Error in handler for ${event.type}:`, { type: 'SYSTEM', payload: { error } });
+          recorder.error(`[EventBus] Error in handler for ${event.type}:`, { type: 'SYSTEM', payload: { error } });
         }
       });
     }

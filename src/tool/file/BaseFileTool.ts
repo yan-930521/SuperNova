@@ -1,11 +1,11 @@
-import { BaseTool } from '../BaseTool';
-import { IToolContext } from '../../../interfaces/tool/IToolContext';
-import { z } from 'zod';
 import * as path from 'path';
+import { z } from 'zod';
+import { IAgentExecuteContext } from '../../task/types';
+import { BaseTool, ToolSafetyTier } from '../BaseTool';
 
 /**
- * BaseFileTool 檔案工具基底類別
- * 負責所有檔案工具的路徑驗證（Sandbox 邏輯）。
+ * BaseFileTool
+ * Base class for all file-related tools with sandbox protection.
  */
 export abstract class BaseFileTool<TIn = any, TOut = any> extends BaseTool<TIn, TOut> {
   protected readonly WORKSPACE_DIR: string;
@@ -21,7 +21,7 @@ export abstract class BaseFileTool<TIn = any, TOut = any> extends BaseTool<TIn, 
   constructor(
     name: string,
     description: string,
-    safety_tier: any,
+    safety_tier: ToolSafetyTier,
     required_capabilities: string[] = [],
     schema: z.ZodType<TIn> = z.any() as any
   ) {
@@ -31,52 +31,56 @@ export abstract class BaseFileTool<TIn = any, TOut = any> extends BaseTool<TIn, 
   }
 
   /**
-   * 驗證檔案路徑是否符合 Sandbox 安全規則
-   * @param filePath 目標檔案路徑
-   * @param operation 操作類型 ('read' | 'write' | 'delete')
-   * @returns 絕對路徑
-   * @throws Error 如果路徑不符合安全規則
+   * Validate if the path is within the sandbox.
+   * 自動處理路徑前綴：確保所有操作都在 workspace/ 內，且不會重複添加前綴。
    */
   protected validatePath(filePath: string, operation: 'read' | 'write' | 'delete'): string {
-    const absolutePath = path.resolve(filePath);
+    // 1. 嘗試先從專案根目錄解析，看是否已經在 workspace 內
+    const absoluteFromRoot = path.resolve(this.PROJECT_ROOT, filePath);
+    const relativeToWorkspaceFromRoot = path.relative(this.WORKSPACE_DIR, absoluteFromRoot);
     
-    // 1. 檢查是否在黑名單中
-    const relativeToRoot = path.relative(this.PROJECT_ROOT, absolutePath);
-    if (this.isBlacklisted(relativeToRoot)) {
-      throw new Error(`Access denied: Path is blacklisted: ${filePath}`);
+    let absolutePath: string;
+
+    // 檢查是否已經在 workspace 內 (沒有向上跳轉且不是絕對路徑)
+    const alreadyInWorkspace = !relativeToWorkspaceFromRoot.startsWith('..') && !path.isAbsolute(relativeToWorkspaceFromRoot);
+
+    if (alreadyInWorkspace) {
+        // 如果已經在 workspace 內 (例如傳入 "workspace/test.txt")，直接使用
+        absolutePath = absoluteFromRoot;
+    } else {
+        // 如果不在 workspace 內 (例如傳入 "test.txt")，則將其映射至 workspace 內
+        // 同時處理掉絕對路徑的情況，強制將其視為相對路徑
+        const normalizedRelative = path.isAbsolute(filePath) 
+            ? path.relative(this.PROJECT_ROOT, filePath) 
+            : filePath;
+        absolutePath = path.resolve(this.WORKSPACE_DIR, normalizedRelative);
     }
 
-    // 2. 根據操作類型檢查權限範圍
-    if (operation === 'write' || operation === 'delete') {
-      // 寫入/刪除：路徑必須位於 WORKSPACE_DIR 內
-      const relativeToWorkspace = path.relative(this.WORKSPACE_DIR, absolutePath);
-      const isInsideWorkspace = !relativeToWorkspace.startsWith('..') && !path.isAbsolute(relativeToWorkspace);
-      if (!isInsideWorkspace) {
-        throw new Error(`Access denied: Write/Delete operation restricted to workspace: ${filePath}`);
-      }
-    } else if (operation === 'read') {
-      // 讀取：必須位於 WORKSPACE_DIR 或 PROJECT_ROOT 內
-      const relativeToRoot = path.relative(this.PROJECT_ROOT, absolutePath);
-      const isInsideRoot = !relativeToRoot.startsWith('..') && !path.isAbsolute(relativeToRoot);
-      
-      if (!isInsideRoot) {
-        throw new Error(`Access denied: Read operation restricted to project root: ${filePath}`);
-      }
+    // 2. 嚴格邊界檢查 (二次確認，防止 ../../ 逃逸)
+    const finalRelative = path.relative(this.WORKSPACE_DIR, absolutePath);
+    const isEscaping = finalRelative.startsWith('..') || path.isAbsolute(finalRelative);
+
+    if (isEscaping) {
+      throw new Error(`Access denied: Operation escaped sandbox boundary. Attempted: ${filePath}`);
+    }
+
+    // 3. 黑名單檢查
+    const blacklistedPart = this.getBlacklistedPart(finalRelative);
+    if (blacklistedPart) {
+      throw new Error(`Access denied: Path contains blacklisted segment "${blacklistedPart}".`);
     }
 
     return absolutePath;
   }
 
-  /**
-   * 檢查路徑是否命中黑名單
-   */
-  private isBlacklisted(relativePath: string): boolean {
+  private getBlacklistedPart(relativePath: string): string | null {
     const parts = relativePath.split(path.sep);
-    return parts.some(part => this.BLACKLIST.includes(part));
+    return parts.find(part => this.BLACKLIST.includes(part)) || null;
   }
 
-  /**
-   * 執行工具的核心邏輯 (由子類實作)
-   */
-  abstract run(input: TIn, context: IToolContext): Promise<TOut>;
+  private isBlacklisted(relativePath: string): boolean {
+    return this.getBlacklistedPart(relativePath) !== null;
+  }
+
+  abstract run(input: TIn, context: IAgentExecuteContext): Promise<TOut>;
 }

@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { logger } from '../infra/LogManager';
+
+import { recorder } from '../infra/LogManager';
 
 /**
  * Prompt 加載器
@@ -25,7 +26,7 @@ export class PromptLoader {
     try {
       // 2. 檢查檔案是否存在
       if (!fs.existsSync(absolutePath)) {
-        logger.warn(`[PromptLoader] File not found: ${absolutePath}. Using fallback.`, { type: 'SYSTEM' });
+        recorder.warn(`[PromptLoader] File not found: ${absolutePath}. Using fallback.`, { type: 'SYSTEM' });
         return fallback;
       }
 
@@ -34,7 +35,7 @@ export class PromptLoader {
       this.cache.set(absolutePath, content);
       return content;
     } catch (error: any) {
-      logger.error(`[PromptLoader] Failed to read prompt at ${absolutePath}: ${error.message}`, { type: 'SYSTEM' });
+      recorder.error(`[PromptLoader] Failed to read prompt at ${absolutePath}: ${error.message}`, { type: 'SYSTEM' });
       return fallback;
     }
   }
@@ -89,7 +90,7 @@ export class PromptLoader {
   }
 
   /**
-   * 清除快取 (用於開發模式或動態更新)
+   * 清除快取 (用於開發模式時動態更新)
    */
   public static clearCache(): void {
     this.cache.clear();

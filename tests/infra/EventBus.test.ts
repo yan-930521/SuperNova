@@ -2,14 +2,8 @@ import { EventBus } from '../../src/infra/EventBus';
 import { Event } from '../../src/models/Event';
 
 describe('EventBus', () => {
-  it('should be a singleton', () => {
-    const instance1 = EventBus.getInstance();
-    const instance2 = EventBus.getInstance();
-    expect(instance1).toBe(instance2);
-  });
-
   it('should publish and subscribe to events', () => {
-    const eventBus = EventBus.getInstance();
+    const eventBus = new EventBus();
     const mockHandler = jest.fn();
     const eventType = 'test-event';
     const event: Event = {

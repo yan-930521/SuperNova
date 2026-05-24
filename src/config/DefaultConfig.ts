@@ -1,11 +1,11 @@
-import { IConfig } from '../../interfaces/config/IConfig';
+import { Config } from './Config';
 
 /**
  * 系統預設配置 (Default Configuration)
  * 這是 SuperNova 系統運行的基準配置，所有加載的配置都會基於此物件進行合併覆蓋。
  * 提供合理的預設值確保系統即便在沒有設定檔的情況下也能正常啟動。
  */
-export const DEFAULT_CONFIG: IConfig = {
+export const DEFAULT_CONFIG: Config = {
   runtime: {
     /** 預設 Tick 頻率為 100ms */
     tick_rate_ms: 100,

@@ -4,3 +4,4 @@ docs/*
 .env
 GEMINI.md
 workspace/*
+src_bk/*

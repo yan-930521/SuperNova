@@ -1,23 +1,23 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { logger } from '../infra/LogManager';
-import { IConfig, DeepPartial } from '../../interfaces/config/IConfig';
-import { IConfigLoader } from '../../interfaces/config/IConfigLoader';
+
+import { recorder } from '../../src/infra/LogManager';
+import { Config, DeepPartial } from './Config';
 import { DEFAULT_CONFIG } from './DefaultConfig';
 
 /**
- * ConfigLoader 實作類
+ * ConfigLoader 類
  * 負責系統配置的加載、合併、持久化與不可變性處理。
  */
-export class ConfigLoader implements IConfigLoader {
+export class ConfigLoader {
   /**
    * 系統引導啟動 (Bootstrap)
    * 執行「檢查檔案 -> 缺失則生成 -> 讀取 -> 合併 -> 凍結」的完整流程。
    * @param targetPath 配置檔案的儲存路徑
    * @returns 最終生效的完整且不可變的配置物件
    */
-  async bootstrap(targetPath: string): Promise<IConfig> {
-    let customConfig: DeepPartial<IConfig> = {};
+  async bootstrap(targetPath: string): Promise<Config> {
+    let customConfig: DeepPartial<Config> = {};
 
     try {
       // 嘗試訪問檔案
@@ -29,13 +29,13 @@ export class ConfigLoader implements IConfigLoader {
         customConfig = JSON.parse(content);
       } catch (parseError) {
         // 若解析失敗，記錄錯誤並拋出，防止以損壞的配置啟動
-        logger.error(`[ConfigLoader] Failed to parse config file at ${targetPath}:`, { payload: { error: parseError }, type: 'SYSTEM' });
+        recorder.error(`[ConfigLoader] Failed to parse config file at ${targetPath}:`, { payload: { error: parseError }, type: 'SYSTEM' });
         throw parseError;
       }
     } catch (error: any) {
       if (error.code === 'ENOENT') {
         // 檔案不存在：執行初始化生成邏輯
-        logger.info(`[ConfigLoader] Config file not found. Generating default at ${targetPath}`, { type: 'SYSTEM' });
+        recorder.info(`[ConfigLoader] Config file not found. Generating default at ${targetPath}`, { type: 'SYSTEM' });
         
         // 確保目標目錄存在
         const dir = path.dirname(targetPath);
@@ -60,15 +60,15 @@ export class ConfigLoader implements IConfigLoader {
    * @param custom 局部自定義配置
    * @returns 合併後的完整配置
    */
-  load(custom?: DeepPartial<IConfig>): IConfig {
+  load(custom?: DeepPartial<Config>): Config {
     // 深度拷貝預設配置作為基礎，避免修改原始 DEFAULT_CONFIG 參照
-    const base: IConfig = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+    const base: Config = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
     
     // 執行合併邏輯
     const merged = this.deepMerge(base, custom || {});
     
     // 執行深度凍結並返回
-    return this.deepFreeze(merged) as IConfig;
+    return this.deepFreeze(merged) as Config;
   }
 
   /**
