@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { IAgentExecuteContext } from '../../task/types';
+
+import { IAgentExecuteContext } from '../../infra/types/agent';
 import { GlobalRuntime } from '../../runtime/GlobalRuntime';
 import { BaseTool } from '../BaseTool';
 

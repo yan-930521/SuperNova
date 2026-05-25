@@ -2,8 +2,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 
 import { recorder } from '../../infra/LogManager';
+import { IAgentExecuteContext } from '../../infra/types/agent';
 import { GlobalRuntime } from '../../runtime/GlobalRuntime';
-import { IAgentExecuteContext } from '../../task/types';
 import { BaseTool } from '../BaseTool';
 
 /**
@@ -33,7 +33,7 @@ export class TaskCreateTool extends BaseTool {
     
     // 1. 權限驗證：檢查指派的 Agent 是否在呼叫者的可用名單內
     if (assignedAgentId) {
-      const callingAgent = runtime.agentRegistry.getAgent(context.agentId);
+      const callingAgent = runtime.agentManager.getAgent(context.agentId);
       if (callingAgent && callingAgent.availableAgents && callingAgent.availableAgents.length > 0) {
         if (!callingAgent.availableAgents.includes(assignedAgentId)) {
           throw new Error(`Access denied: You are not authorized to coordinate Agent "${assignedAgentId}". Available agents: ${callingAgent.availableAgents.join(', ')}`);

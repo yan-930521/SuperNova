@@ -1,9 +1,10 @@
-import { HumanMessage, AIMessage } from '@langchain/core/messages';
-import { Session } from '../../src/models/Session';
+import { AIMessage, HumanMessage } from '@langchain/core/messages';
+
 import { EventBus } from '../../src/infra/EventBus';
-import { MessageRole } from '../../src/task/types';
-import { GlobalRuntime } from '../../src/runtime/GlobalRuntime';
 import { SystemEventType } from '../../src/infra/types/events';
+import { MessageRole } from '../../src/infra/types/session';
+import { Session } from '../../src/models/Session';
+import { GlobalRuntime } from '../../src/runtime/GlobalRuntime';
 
 describe('Session', () => {
   let session: Session;

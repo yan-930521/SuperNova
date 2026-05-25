@@ -4,8 +4,8 @@ import { createReactAgent } from '@langchain/langgraph/prebuilt';
 
 import { RecordAction, recorder } from '../infra/LogManager';
 import { ModelPreset } from '../infra/ModelRegistry';
+import { IAgentExecuteContext, IAgentExecuteResult } from '../infra/types/agent';
 import { GlobalRuntime } from '../runtime/GlobalRuntime';
-import { IAgentExecuteContext, IAgentExecuteResult } from '../task/types';
 import { ITool } from '../tool/BaseTool';
 import { CodeExecutorTool } from '../tool/common/CodeExecutorTool';
 import { MathTool } from '../tool/common/MathTool';
@@ -137,7 +137,8 @@ export abstract class BaseAgent {
       this.buildExecutionEngine();
     }
 
-    const session = runtime.sessionManager.getSession(sessionId);
+    // --- 關鍵修正：等待異步 Session 加載 ---
+    const session = await runtime.sessionManager.getSession(sessionId);
     if (!session) throw new Error(`Session ${sessionId} not found.`);
 
     recorder.record(RecordAction.TOOL_CALL, `Agent [${this.id}] starting ReAct execution for: ${taskGoal}`, {

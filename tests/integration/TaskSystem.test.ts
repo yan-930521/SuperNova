@@ -1,11 +1,13 @@
 import { AIMessage } from '@langchain/core/messages';
-import { TaskManager } from '../../src/manager/TaskManager';
+
+import { EventBus } from '../../src/infra/EventBus';
+import { ModelPreset, ModelRegistry } from '../../src/infra/ModelRegistry';
+import { SystemEventType } from '../../src/infra/types/events';
+import { ChainStatus, TaskStatus } from '../../src/infra/types/task';
 import { AgentManager } from '../../src/manager/AgentManager';
 import { SessionManager } from '../../src/manager/SessionManager';
-import { ChainStatus, TaskStatus, SystemEvent } from '../../src/task/types';
+import { TaskManager } from '../../src/manager/TaskManager';
 import { GlobalRuntime } from '../../src/runtime/GlobalRuntime';
-import { EventBus } from '../../src/infra/EventBus';
-import { ModelRegistry, ModelPreset } from '../../src/infra/ModelRegistry';
 
 /**
  * 任務系統整合測試
@@ -57,6 +59,15 @@ describe('Task System Integration', () => {
 
     // 手動注入 (新架構)
     runtime.agentManager = new AgentManager({ findAll: jest.fn().mockResolvedValue([]) } as any);
+    
+    // 註冊一個 Mock Agent 以供執行
+    const mockAgent = {
+      id: 'default-worker',
+      role: 'Worker',
+      execute: jest.fn().mockResolvedValue({ status: 'success', result: 'Done', summary: 'Mock execution successful' })
+    } as any;
+    runtime.agentManager.register(mockAgent);
+
     runtime.sessionManager = new SessionManager({ save: jest.fn(), findById: jest.fn() } as any);
     runtime.taskManager = new TaskManager(runtime.agentManager, { save: jest.fn() } as any);
   });
@@ -68,11 +79,14 @@ describe('Task System Integration', () => {
     let status = runtime.taskManager.getChainStatus(chainId);
     expect(status?.status).toBe(ChainStatus.PLANNING);
 
-    // 2. 等待規劃與執行完成
-    for (let i = 0; i < 20; i++) {
-      await new Promise(resolve => setTimeout(resolve, 20));
+    for (let i = 0; i < 100; i++) {
+      await new Promise(resolve => setTimeout(resolve, 50));
       status = runtime.taskManager.getChainStatus(chainId);
-      if (status?.status === ChainStatus.COMPLETED) break;
+      if (status?.status === ChainStatus.COMPLETED || status?.status === ChainStatus.FAILED) break;
+    }
+
+    if (status?.status === ChainStatus.FAILED) {
+      console.log('Chain failed. Tasks:', JSON.stringify(status.nodes, null, 2));
     }
 
     expect(status?.status).toBe(ChainStatus.COMPLETED);

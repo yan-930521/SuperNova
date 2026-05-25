@@ -1,6 +1,6 @@
-import { TaskDispatcherTool } from '../../src/tool/core/TaskDispatcherTool';
+import { IAgentExecuteContext } from '../../src/infra/types/agent';
 import { GlobalRuntime } from '../../src/runtime/GlobalRuntime';
-import { IAgentExecuteContext } from '../../src/task/types';
+import { TaskDispatcherTool } from '../../src/tool/core/TaskDispatcherTool';
 
 describe('TaskDispatcherTool', () => {
   let tool: TaskDispatcherTool;

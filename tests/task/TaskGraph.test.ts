@@ -1,5 +1,5 @@
+import { TaskStatus } from '../../src/infra/types/task';
 import { TaskGraph } from '../../src/models/TaskGraph';
-import { TaskStatus } from '../../src/task/types';
 
 /**
  * TaskGraph Unit Tests

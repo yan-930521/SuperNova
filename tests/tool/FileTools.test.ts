@@ -1,7 +1,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
-import { IAgentExecuteContext } from '../../src/task/types';
+import { IAgentExecuteContext } from '../../src/infra/types/agent';
 import { ReadFileTool } from '../../src/tool/file/ReadFileTool';
 import { WriteFileTool } from '../../src/tool/file/WriteFileTool';
 

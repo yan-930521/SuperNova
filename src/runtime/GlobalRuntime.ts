@@ -1,23 +1,25 @@
 import * as path from 'path';
+
 import { Config } from '../config/Config';
 import { ConfigLoader } from '../config/ConfigLoader';
-import { AgentManager } from '../infra/AgentManager';
 import { EventBus } from '../infra/EventBus';
-import { recorder, LogLevel } from '../infra/LogManager';
-import { ModelRegistry } from '../infra/ModelRegistry';
-import { SessionManager } from '../infra/SessionManager';
-import { ConsoleTransport } from '../infra/transports/ConsoleTransport';
-import { FileTransport } from '../infra/transports/FileTransport';
-import { TaskManager } from '../task/TaskManager';
 import { GlobalRegistry } from '../infra/GlobalRegistry';
-import { FileSystemUserRepository } from '../infra/storage/FileSystemUserRepository';
+import { LogLevel, recorder } from '../infra/LogManager';
+import { ModelRegistry } from '../infra/ModelRegistry';
+import { FileSystemAgentRepository } from '../infra/storage/FileSystemAgentRepository';
 import { FileSystemSessionRepository } from '../infra/storage/FileSystemSessionRepository';
 import { FileSystemTaskRepository } from '../infra/storage/FileSystemTaskRepository';
-import { FileSystemAgentRepository } from '../infra/storage/FileSystemAgentRepository';
+import { FileSystemUserRepository } from '../infra/storage/FileSystemUserRepository';
+import { ConsoleTransport } from '../infra/transports/ConsoleTransport';
+import { FileTransport } from '../infra/transports/FileTransport';
+import { AgentManager } from '../manager/AgentManager';
+import { SessionManager } from '../manager/SessionManager';
+import { TaskManager } from '../manager/TaskManager';
+import { UserManager } from '../manager/UserManager';
 
 /**
  * 全局運行時類 (Global Runtime) - SuperNova 2.0
- * 系統的核心入口，負責初始化基礎設施並管理生命週期。
+ * 系統的核心入口，負責初始化基礎設施、Manager 層並管理生命週期。
  */
 export class GlobalRuntime {
   /** 儲存 Runtime 實例，供靜態方法 getInstance 獲取 (實現單例存取) */
@@ -29,18 +31,17 @@ export class GlobalRuntime {
   /** 全局配置對象 */
   public config?: Config;
   
-  /** 全局任務管理器 (控制 Planning 與 Execution) */
+  // --- 核心管理器 (從 GlobalRegistry 存取或直接持有) ---
+  public userManager!: UserManager;
+  public sessionManager!: SessionManager;
+  public agentManager!: AgentManager;
   public taskManager!: TaskManager;
 
   /**
-   * @param sessionManager 會話管理器 (已整合 Repository)
-   * @param agentManager 代理管理器 (已整合 Repository)
    * @param eventBus 全局事件總線
    * @param modelRegistry 模型註冊表
    */
   constructor(
-    public readonly sessionManager: SessionManager,
-    public readonly agentManager: AgentManager,
     public readonly eventBus: EventBus,
     public readonly modelRegistry: ModelRegistry
   ) {
@@ -48,7 +49,7 @@ export class GlobalRuntime {
   }
 
   /**
-   * 獲取全域 Runtime 實例
+   * 獲獲全域 Runtime 實例
    */
   public static getInstance(): GlobalRuntime {
     if (!GlobalRuntime.instance) {
@@ -68,7 +69,7 @@ export class GlobalRuntime {
       this.config = await loader.bootstrap('./supernova.json');
     }
 
-    // --- 1. 初始化新版模塊化持久層 (Phase 1.5) ---
+    // --- 1. 初始化持久層 (Repositories) ---
     const root = process.cwd();
     GlobalRegistry.userRepo = new FileSystemUserRepository(path.join(root, 'workspace/users'));
     GlobalRegistry.sessionRepo = new FileSystemSessionRepository(path.join(root, 'workspace/sessions'));
@@ -77,20 +78,29 @@ export class GlobalRuntime {
     const agentsDir = this.config?.runtime.agents_dir || './agents';
     GlobalRegistry.agentRepo = new FileSystemAgentRepository(agentsDir);
 
-    // --- 2. 初始化可觀測性與日誌 ---
+    // --- 2. 初始化業務層 (Managers) ---
+    this.userManager = new UserManager(GlobalRegistry.userRepo);
+    this.sessionManager = new SessionManager(GlobalRegistry.sessionRepo);
+    this.agentManager = new AgentManager(GlobalRegistry.agentRepo);
+    this.taskManager = new TaskManager(this.agentManager, GlobalRegistry.taskRepo);
+
+    // 註冊到全局註冊表
+    GlobalRegistry.userManager = this.userManager;
+    GlobalRegistry.sessionManager = this.sessionManager;
+    GlobalRegistry.agentManager = this.agentManager;
+    GlobalRegistry.taskManager = this.taskManager;
+    GlobalRegistry.eventBus = this.eventBus;
+
+    // --- 3. 初始化可觀測性與日誌 ---
     const consoleLevel = (process.env.CONSOLE_LOG_LEVEL as LogLevel) || 'INFO';
     recorder.addTransport(new ConsoleTransport(consoleLevel));
     recorder.addTransport(new FileTransport('DEBUG'));
     
     recorder.info('SuperNova 2.0 Runtime Initializing...', { type: 'SYSTEM' });
 
-    // --- 3. 載入代理配置與實例化 ---
+    // --- 4. 載入代理配置 ---
     recorder.info(`Loading all agents from repository: ${agentsDir}...`, { type: 'SYSTEM' });
     await this.agentManager.loadAllAgents();
-
-    // --- 4. 初始化任務系統 ---
-    // 在 Agent 載入與模型配置完成後，才初始化 TaskManager
-    this.taskManager = new TaskManager(this.agentManager);
 
     this.isRunning = true;
     recorder.info('SuperNova 2.0 Runtime is active and ready.', { type: 'SYSTEM' });

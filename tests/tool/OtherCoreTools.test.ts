@@ -1,8 +1,8 @@
+import { IAgentExecuteContext } from '../../src/infra/types/agent';
+import { GlobalRuntime } from '../../src/runtime/GlobalRuntime';
 import { AgentListTool } from '../../src/tool/core/AgentListTool';
 import { AgentRegisterTool } from '../../src/tool/core/AgentRegisterTool';
 import { DeepThinkingTool } from '../../src/tool/core/DeepThinkingTool';
-import { GlobalRuntime } from '../../src/runtime/GlobalRuntime';
-import { IAgentExecuteContext } from '../../src/task/types';
 
 describe('OtherCoreTools', () => {
   let mockContext: IAgentExecuteContext;

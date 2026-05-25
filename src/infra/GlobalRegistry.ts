@@ -1,5 +1,5 @@
 import { IUserRepository } from './types/identity';
-import { ISessionRepository } from './types/storage';
+import { ISessionRepository } from './types/session';
 import { IEventBus } from './types/events';
 import { ITaskRepository } from './types/task';
 import { IAgentRepository } from './types/agent';

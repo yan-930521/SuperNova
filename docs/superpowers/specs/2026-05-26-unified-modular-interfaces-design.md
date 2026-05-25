@@ -10,12 +10,11 @@ SuperNova 2.0 旨在從「原型玩具」進化為「工業級 AI 運行時」�
 
 ## 3. 核心介面定義
 
-### 3.1 身份與儲存層 (Identity & Storage)
+### 3.1 身份層 (Identity)
 
-#### `IUser` & `IUserRepository`
-管理用戶畫像、偏好與權限。
+#### `UserDTO` & `IUserRepository`
 ```typescript
-export interface IUser {
+export interface UserDTO {
   id: string;
   name: string;
   preferences: Record<string, any>;
@@ -23,31 +22,92 @@ export interface IUser {
 }
 
 export interface IUserRepository {
-  findById(id: string): Promise<IUser | null>;
-  save(user: IUser): Promise<void>;
+  findById(id: string): Promise<UserDTO | null>;
+  save(user: UserDTO): Promise<void>;
 }
 ```
 
-#### `ISessionRepository`
-領域儲存庫模式，負責會話層數據。
+#### `UserManager`
+負責用戶緩存、偏好設置的動態加載與權限校驗。
 ```typescript
-export interface ISession {
+export class UserManager {
+  constructor(private repo: IUserRepository) {}
+  async getUser(id: string): Promise<UserEntity | null>;
+}
+```
+
+### 3.2 會話層 (Session)
+
+#### `SessionDTO` & `ISessionRepository`
+```typescript
+export interface SessionDTO {
   id: string;
   userId: string;
   goal: string;
-  status: 'ACTIVE' | 'ARCHIVED';
-  summary?: string;
+  status: string;
+  history: any[]; // 存儲序列化後的訊息
+  metadata: Record<string, any>;
 }
 
 export interface ISessionRepository {
-  create(userId: string, goal: string): Promise<ISession>;
-  findById(id: string): Promise<ISession | null>;
-  findByUser(userId: string): Promise<ISession[]>;
-  update(session: ISession): Promise<void>;
+  save(session: SessionDTO): Promise<void>;
+  findById(id: string): Promise<SessionDTO | null>;
+  findByUser(userId: string): Promise<SessionDTO[]>;
 }
 ```
 
-### 3.2 智能適配層 (Inference Adapter)
+#### `SessionManager`
+負責活動會話的生命週期、事件訂閱與內存管理。
+
+### 3.3 任務層 (Task)
+
+#### `TaskDTO` & `ITaskRepository`
+```typescript
+export interface TaskDTO {
+  id: string;
+  sessionId: string;
+  goal: string;
+  status: string;
+  assignedAgentId?: string;
+  dependencies: string[];
+  result?: any;
+}
+
+export interface ITaskRepository {
+  save(task: TaskDTO): Promise<void>;
+  findBySession(sessionId: string): Promise<TaskDTO[]>;
+  findById(id: string): Promise<TaskDTO | null>;
+}
+```
+
+#### `TaskManager`
+負責任務的 JIT 規劃、並行調度執行與錯誤重試邏輯。
+
+### 3.4 代理層 (Agent)
+
+#### `AgentDTO` & `IAgentRepository`
+儲存代理的靜態配置、角色定義、能力清單與模型偏好。
+```typescript
+export interface AgentDTO {
+  id: string;
+  role: string;
+  identity: string;      // 系統提示詞片段
+  capabilities: string[]; // 擁有的能力標籤
+  modelPreset: string;   // 偏好的模型預設 (FAST/SMART/EVAL)
+  config: Record<string, any>;
+}
+
+export interface IAgentRepository {
+  findById(id: string): Promise<AgentDTO | null>;
+  findAll(): Promise<AgentDTO[]>;
+  save(agent: AgentDTO): Promise<void>;
+}
+```
+
+#### `AgentManager` (原 AgentRegistry)
+負責將 `AgentDTO` 實例化為 `BaseAgent` 子類（如 `WorkerAgent`），管理活躍代理的註冊與查詢。
+
+### 3.5 智能適配層 (Inference Adapter)
 
 #### `IInferenceAdapter`
 包裝底層 LLM 供應商，專注於結構化輸出。

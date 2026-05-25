@@ -1,6 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { SessionDTO, ISessionRepository } from '../types/storage';
+import { SessionDTO, ISessionRepository } from '../types/session';
 
 export class FileSystemSessionRepository implements ISessionRepository {
   constructor(private baseDir: string) {}

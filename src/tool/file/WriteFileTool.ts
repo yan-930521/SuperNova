@@ -1,8 +1,9 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { z } from 'zod';
+
 import { recorder } from '../../infra/LogManager';
-import { IAgentExecuteContext } from '../../task/types';
+import { IAgentExecuteContext } from '../../infra/types/agent';
 import { BaseFileTool } from './BaseFileTool';
 
 /**

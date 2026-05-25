@@ -1,7 +1,24 @@
 /**
+ * 對話訊息角色 Enum
+ * 定義訊息在會話歷史中的發送者身份。
+ */
+export enum MessageRole {
+  /** 使用者 (Human) */
+  USER = 'USER',
+  /** 主代理 (AI Assistant) */
+  ASSISTANT = 'ASSISTANT',
+  /** 執行任務的 Worker */
+  WORKER = 'WORKER',
+  /** 系統提示或指令 */
+  SYSTEM = 'SYSTEM',
+  /** 工具執行結果 */
+  TOOL = 'TOOL'
+}
+
+/**
  * 會話數據傳輸對象 (Session Data Transfer Object)
  * 紀錄使用者與 AI 之間的高層次對話狀態與歷史摘要。
- * 對齊 src/session/Session.ts 中的業務實體。
+ * 對齊 src/models/Session.ts 中的業務實體。
  */
 export interface SessionDTO {
   /** 會話唯一識別碼 */
@@ -12,7 +29,7 @@ export interface SessionDTO {
   responsibleAgentId: string;
   /** 使用者發起的初始目標或問題 */
   goal: string;
-  /** 會話狀態：IDLE (閒置), RUNNING (執行中), COMPLETED (完成), INTERRUPTED (中斷), CRASHED (崩潰) */
+  /** 會話狀態：IDLE | RUNNING | COMPLETED | INTERRUPTED | CRASHED */
   status: string;
   /** 對話歷史序列：存儲序列化後的 LangChain 訊息對象 (BaseMessage) */
   history: any[];

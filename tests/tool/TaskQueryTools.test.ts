@@ -1,7 +1,7 @@
+import { IAgentExecuteContext } from '../../src/infra/types/agent';
+import { GlobalRuntime } from '../../src/runtime/GlobalRuntime';
 import { TaskInfoTool } from '../../src/tool/core/TaskInfoTool';
 import { TaskListTool } from '../../src/tool/core/TaskListTool';
-import { GlobalRuntime } from '../../src/runtime/GlobalRuntime';
-import { IAgentExecuteContext } from '../../src/task/types';
 
 describe('TaskQueryTools', () => {
   let mockContext: IAgentExecuteContext;

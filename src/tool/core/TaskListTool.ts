@@ -1,7 +1,8 @@
 import { z } from 'zod';
-import { IAgentExecuteContext } from '../../task/types';
-import { BaseTool } from '../BaseTool';
+
+import { IAgentExecuteContext } from '../../infra/types/agent';
 import { GlobalRuntime } from '../../runtime/GlobalRuntime';
+import { BaseTool } from '../BaseTool';
 
 /**
  * TaskListTool
@@ -44,7 +45,7 @@ export class TaskListTool extends BaseTool {
           chainId: c.chainId,
           status: c.status,
           taskCount: c.nodes.length,
-          completedCount: c.nodes.filter(n => n.status === 'completed').length
+          completedCount: c.nodes.filter((n: any) => n.status === 'completed').length
         }))
       };
     }

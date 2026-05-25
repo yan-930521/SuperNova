@@ -1,7 +1,7 @@
 import { BaseMessage } from '@langchain/core/messages';
 import { Annotation, messagesStateReducer } from '@langchain/langgraph';
 
-import { TaskGraphData } from '../task/types';
+import { TaskGraphData } from '../infra/types/task';
 
 /**
  * 評價記錄結構

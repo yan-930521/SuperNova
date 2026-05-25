@@ -2,7 +2,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { FileSystemTaskRepository } from '../../src/infra/storage/FileSystemTaskRepository';
-import { TaskDTO } from '../../src/infra/types/task';
+import { TaskDTO, TaskStatus } from '../../src/infra/types/task';
 
 describe('FileSystemTaskRepository', () => {
   let tempDir: string;
@@ -23,7 +23,7 @@ describe('FileSystemTaskRepository', () => {
     sessionId: 'sess-456',
     type: 'work',
     goal: 'Test task',
-    status: 'pending',
+    status: TaskStatus.PENDING,
     dependencies: [],
     metadata: {}
   };

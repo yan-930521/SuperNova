@@ -1,7 +1,8 @@
 import { z } from 'zod';
-import { IAgentExecuteContext } from '../../task/types';
-import { BaseTool } from '../BaseTool';
+
 import { GlobalRuntime } from '../../runtime/GlobalRuntime';
+import { IAgentExecuteContext } from '../../infra/types/agent';
+import { BaseTool } from '../BaseTool';
 
 /**
  * AgentRegisterTool
@@ -25,7 +26,7 @@ export class AgentRegisterTool extends BaseTool {
     const { agentId, agentsDir } = input;
     const runtime = GlobalRuntime.getInstance();
     
-    const agent = await runtime.agentRegistry.loadAgentById(agentId, agentsDir);
+    const agent = await runtime.agentManager.loadAgentById(agentId);
     
     return {
       message: `Agent ${agentId} registered successfully.`,

@@ -1,4 +1,4 @@
-import { TaskDTO } from '../infra/types/task';
+import { TaskDTO, TaskStatus } from '../infra/types/task';
 
 /**
  * Task (任務實體)
@@ -9,7 +9,7 @@ export class Task {
   public sessionId: string;
   public type: string;
   public goal: string;
-  public status: 'pending' | 'ready' | 'running' | 'completed' | 'failed';
+  public status: TaskStatus;
   public dependencies: string[] = [];
   public assignedAgentId?: string | null;
   public requiredCapabilities?: string[];
@@ -65,14 +65,14 @@ export class Task {
    */
   setResult(result: any): void {
     this.result = result;
-    this.status = 'completed';
+    this.status = TaskStatus.COMPLETED;
   }
 
   /**
    * 標記為失敗
    */
   fail(error?: string): void {
-    this.status = 'failed';
+    this.status = TaskStatus.FAILED;
     this.metadata = { ...this.metadata, error };
   }
 }

@@ -39,3 +39,38 @@ export interface IAgentRepository {
    */
   save(agent: AgentDTO): Promise<void>;
 }
+
+/**
+ * Agent 執行上下文介面 (Execution Context)
+ * 傳遞給 Agent 的運行時環境資訊。
+ */
+export interface IAgentExecuteContext {
+  /** 會話 ID */
+  sessionId: string;
+  /** 全鏈路追蹤 ID */
+  traceId: string;
+  /** 發起執行或工具調用的 Agent ID */
+  agentId: string;
+  /** 當前執行的任務 ID (如果有) */
+  taskId?: string;
+  /** 會話的全域目標 */
+  sessionGoal?: string;
+  /** 額外的元數據 */
+  metadata?: Record<string, any>;
+}
+
+/**
+ * Agent 執行結果介面 (Execution Result)
+ */
+export interface IAgentExecuteResult {
+  /** 執行狀態 */
+  status: 'success' | 'failed';
+  /** 具體產出的數據 */
+  result: any;
+  /** 供會話歷史使用的摘要內容 (對話式輸出) */
+  summary: string;
+  /** 錯誤訊息 (僅在失敗時) */
+  error?: string;
+  /** 建議的下一步行動 */
+  next_steps?: string;
+}

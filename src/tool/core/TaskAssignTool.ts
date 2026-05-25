@@ -1,7 +1,8 @@
 import { z } from 'zod';
-import { IAgentExecuteContext } from '../../task/types';
-import { BaseTool } from '../BaseTool';
+
+import { IAgentExecuteContext } from '../../infra/types/agent';
 import { GlobalRuntime } from '../../runtime/GlobalRuntime';
+import { BaseTool } from '../BaseTool';
 
 /**
  * TaskAssignTool
@@ -28,7 +29,7 @@ export class TaskAssignTool extends BaseTool {
     const runtime = GlobalRuntime.getInstance();
     
     // 1. 權限驗證：檢查指派的 Agent 是否在呼叫者的可用名單內
-    const callingAgent = runtime.agentRegistry.getAgent(context.agentId);
+    const callingAgent = runtime.agentManager.getAgent(context.agentId);
     if (callingAgent && callingAgent.availableAgents && callingAgent.availableAgents.length > 0) {
       if (!callingAgent.availableAgents.includes(targetAgentId)) {
         throw new Error(`Access denied: You are not authorized to coordinate Agent "${targetAgentId}". Available agents: ${callingAgent.availableAgents.join(', ')}`);
@@ -36,7 +37,7 @@ export class TaskAssignTool extends BaseTool {
     }
 
     // 2. 執行指派
-    runtime.taskManager.assignTask(chainId, taskId, targetAgentId);
+    await runtime.taskManager.assignTask(chainId, taskId, targetAgentId);
     
     return {
       message: `Task ${taskId} in chain ${chainId} has been assigned to Agent ${targetAgentId}.`,

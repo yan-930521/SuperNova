@@ -1,6 +1,6 @@
-import { TaskCreateTool } from '../../src/tool/core/TaskCreateTool';
+import { IAgentExecuteContext } from '../../src/infra/types/agent';
 import { GlobalRuntime } from '../../src/runtime/GlobalRuntime';
-import { IAgentExecuteContext } from '../../src/task/types';
+import { TaskCreateTool } from '../../src/tool/core/TaskCreateTool';
 
 describe('TaskCreateTool', () => {
   let tool: TaskCreateTool;

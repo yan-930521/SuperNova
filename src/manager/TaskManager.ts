@@ -1,22 +1,35 @@
 import { v4 as uuidv4 } from 'uuid';
+
 import { recorder } from '../infra/LogManager';
-import { AgentState } from '../models/AgentState';
-import { GlobalRuntime } from '../runtime/GlobalRuntime';
-import { TaskGraph } from '../models/TaskGraph';
-import { TaskPlanner } from '../task/TaskPlanner';
-import { Task } from '../models/Task';
-import { ITaskRepository } from '../infra/types/task';
-import { AgentManager } from './AgentManager';
 import {
-    ChainStatus, IChainStatusSummary, ITaskChainState, ITaskRequest, TaskStatus, LogType
-} from '../task/types';
+    ChainStatus, IChainStatusSummary, ITaskRequest, LogType, TaskStatus
+} from '../infra/types/task';
 import { SystemEventType } from '../infra/types/events';
+import { ITaskRepository } from '../infra/types/task';
+import { AgentState } from '../models/AgentState';
+import { Task } from '../models/Task';
+import { TaskGraph } from '../models/TaskGraph';
+import { GlobalRuntime } from '../runtime/GlobalRuntime';
+import { TaskPlanner } from '../task/TaskPlanner';
+import { AgentManager } from './AgentManager';
+
+/**
+ * 任務鏈運行時狀態介面 (用於 TaskManager 追蹤)
+ */
+export interface ITaskChainState {
+  status: ChainStatus;
+  graph: TaskGraph; 
+  sessionId: string;
+  traceId: string;
+  goal: string;
+}
 
 /**
  * TaskManager (任務管理器)
  * 負責協調任務的規劃與並行執行流程，並透過 ITaskRepository 實現狀態持久化。
  */
 export class TaskManager {
+
 	private inbox: ITaskRequest[] = [];
 	private chains = new Map<string, ITaskChainState>();
 	private activeTasks = new Map<string, Task>(); // 內存中的任務實體緩存
@@ -250,7 +263,7 @@ export class TaskManager {
 		const task = this.activeTasks.get(taskId);
 		if (!task) return;
 
-		task.updateStatus('running');
+		task.updateStatus(TaskStatus.RUNNING);
 		await this.repo.save(task.toDTO());
 
 		recorder.info(`[TaskManager] Executing: ${taskId} (${task.goal})`, { session_id: chain.sessionId });

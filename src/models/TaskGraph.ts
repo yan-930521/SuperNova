@@ -1,12 +1,12 @@
-import { TaskNode, TaskGraphData, TaskStatus } from '../task/types';
 import { recorder } from '../infra/LogManager';
+import { TaskDTO, TaskGraphData, TaskStatus } from '../infra/types/task';
 
 /**
  * TaskGraph 負責維護任務（節點）與依賴（邊）的關係。
  * 使用入度 (In-degree) 算法來管理任務的就緒狀態。
  */
 export class TaskGraph {
-  private nodes = new Map<string, TaskNode>();
+  private nodes = new Map<string, TaskDTO>();
   private adjList = new Map<string, Set<string>>();
   private inDegreeMap = new Map<string, number>();
 
@@ -20,7 +20,7 @@ export class TaskGraph {
   /**
    * 獲取所有任務節點。
    */
-  getAllTasks(): TaskNode[] {
+  getAllTasks(): TaskDTO[] {
     return Array.from(this.nodes.values());
   }
 
@@ -29,11 +29,11 @@ export class TaskGraph {
    * @param taskId 任務唯一標識
    * @param node 任務節點數據 (部分提供)
    */
-  addTask(taskId: string, node: Partial<TaskNode> = {}): void {
+  addTask(taskId: string, node: Partial<TaskDTO> = {}): void {
     const isNew = !this.nodes.has(taskId);
     
-    // 提供預設值以補齊 TaskNode
-    const fullNode: TaskNode = {
+    // 提供預設值以補齊 TaskDTO
+    const fullNode: TaskDTO = {
       id: taskId,
       sessionId: node.sessionId || 'unknown',
       type: node.type || 'default',
@@ -41,7 +41,7 @@ export class TaskGraph {
       dependencies: node.dependencies || [],
       status: node.status || TaskStatus.PENDING,
       ...node
-    } as TaskNode;
+    } as TaskDTO;
 
     this.nodes.set(taskId, fullNode);
     if (isNew) {
@@ -141,7 +141,7 @@ export class TaskGraph {
    * 獲取任務節點。
    * @param taskId 任務唯一標識
    */
-  getTask(taskId: string): TaskNode | undefined {
+  getTask(taskId: string): TaskDTO | undefined {
     return this.nodes.get(taskId);
   }
 
@@ -167,14 +167,14 @@ export class TaskGraph {
     if (!data.nodes) return;
 
     // 1. 先註冊所有節點
-    data.nodes.forEach((node: TaskNode) => {
+    data.nodes.forEach((node: TaskDTO) => {
       this.nodes.set(node.id, node);
       this.adjList.set(node.id, new Set());
       this.inDegreeMap.set(node.id, 0);
     });
 
     // 2. 建立邊與計算入度
-    data.nodes.forEach((node: TaskNode) => {
+    data.nodes.forEach((node: TaskDTO) => {
       node.dependencies.forEach((parentId: string) => {
         const successors = this.adjList.get(parentId);
         if (successors) {

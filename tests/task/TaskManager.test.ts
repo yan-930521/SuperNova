@@ -1,12 +1,13 @@
-import { TaskManager } from '../../src/manager/TaskManager';
-import { ChainStatus } from '../../src/task/types';
-import { AgentManager } from '../../src/manager/AgentManager';
-import { GlobalRuntime } from '../../src/runtime/GlobalRuntime';
-import { SessionManager } from '../../src/manager/SessionManager';
-import { EventBus } from '../../src/infra/EventBus';
-import { ModelRegistry } from '../../src/infra/ModelRegistry';
 import * as fs from 'fs';
 import * as path from 'path';
+
+import { EventBus } from '../../src/infra/EventBus';
+import { ModelRegistry } from '../../src/infra/ModelRegistry';
+import { ChainStatus } from '../../src/infra/types/task';
+import { AgentManager } from '../../src/manager/AgentManager';
+import { SessionManager } from '../../src/manager/SessionManager';
+import { TaskManager } from '../../src/manager/TaskManager';
+import { GlobalRuntime } from '../../src/runtime/GlobalRuntime';
 
 describe('TaskManager', () => {
   let agentManager: AgentManager;

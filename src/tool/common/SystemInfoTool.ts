@@ -1,6 +1,7 @@
 import * as os from 'os';
 import { z } from 'zod';
-import { IAgentExecuteContext } from '../../task/types';
+
+import { IAgentExecuteContext } from '../../infra/types/agent';
 import { BaseTool } from '../BaseTool';
 
 /**

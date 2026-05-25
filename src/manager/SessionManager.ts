@@ -1,6 +1,6 @@
-import { Session } from '../models/Session';
 import { recorder } from '../infra/LogManager';
-import { ISessionRepository } from '../infra/types/storage';
+import { ISessionRepository } from '../infra/types/session';
+import { Session } from '../models/Session';
 
 /**
  * 會話生命週期管理器 (SessionManager)

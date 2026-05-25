@@ -4,14 +4,14 @@ import { END, START, StateGraph } from '@langchain/langgraph';
 
 import { recorder } from '../infra/LogManager';
 import { InferenceEngine, ModelPreset, ModelRegistry } from '../infra/ModelRegistry';
+import { TaskDTO, TaskGraphData } from '../infra/types/task';
 import { AgentState, AgentStateAnnotation } from '../models/AgentState';
+import { TaskGraph } from '../models/TaskGraph';
 import { GlobalRuntime } from '../runtime/GlobalRuntime';
 import {
     ContextProjectionSchema, MilestonePlanSchema, PlanReviewSchema, TaskExpandResponseSchema
 } from '../schemas/agent/AgentOutputSchemas';
-import { TaskGraph } from '../models/TaskGraph';
 import { PromptLoader } from '../utils/PromptLoader';
-import { TaskGraphData, TaskNode } from './types';
 
 /**
  * TaskPlanner
@@ -146,7 +146,7 @@ export class TaskPlanner {
         }
       });
 
-      const currentMilestoneNodes: TaskNode[] = result.nodes.map((n: any) => {
+      const currentMilestoneNodes: TaskDTO[] = result.nodes.map((n: any) => {
         const originalId = n.id || uuidv4();
         const globalId = `${milestonePrefix}${originalId}`;
         const internalDeps = (n.dependencies || []).map((d: any) => `${milestonePrefix}${d}`);
@@ -194,7 +194,7 @@ export class TaskPlanner {
       }
     });
 
-    const nodes: TaskNode[] = result.nodes.map((n: any) => ({
+    const nodes: TaskDTO[] = result.nodes.map((n: any) => ({
       ...n,
       id: n.id || uuidv4(),
       status: 'pending' as const

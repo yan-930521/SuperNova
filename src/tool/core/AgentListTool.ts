@@ -1,7 +1,8 @@
 import { z } from 'zod';
-import { IAgentExecuteContext } from '../../task/types';
-import { BaseTool } from '../BaseTool';
+
+import { IAgentExecuteContext } from '../../infra/types/agent';
 import { GlobalRuntime } from '../../runtime/GlobalRuntime';
+import { BaseTool } from '../BaseTool';
 
 /**
  * AgentListTool
@@ -23,10 +24,10 @@ export class AgentListTool extends BaseTool {
     const runtime = GlobalRuntime.getInstance();
     
     // 1. 獲取發起調用的 Agent 實例
-    const callingAgent = runtime.agentRegistry.getAgent(context.agentId);
+    const callingAgent = runtime.agentManager.getAgent(context.agentId);
     
     // 2. 獲取所有 Agent
-    let agents = runtime.agentRegistry.getAllAgents();
+    let agents = runtime.agentManager.getAllAgents();
 
     // 3. 根據白名單過濾 (如果調用者定義了 availableAgents)
     if (callingAgent && callingAgent.availableAgents && callingAgent.availableAgents.length > 0) {

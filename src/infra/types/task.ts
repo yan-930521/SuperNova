@@ -1,7 +1,38 @@
 /**
+ * 任務執行狀態 Enum
+ */
+export enum TaskStatus {
+  PENDING = 'pending',
+  READY = 'ready',
+  RUNNING = 'running',
+  COMPLETED = 'completed',
+  FAILED = 'failed'
+}
+
+/**
+ * 任務鏈/流程狀態 Enum
+ */
+export enum ChainStatus {
+  PLANNING = 'planning',
+  RUNNING = 'running',
+  COMPLETED = 'completed',
+  FAILED = 'failed'
+}
+
+/**
+ * 任務日誌分類 Enum
+ */
+export enum LogType {
+  SYSTEM = 'SYSTEM',
+  LIFECYCLE = 'LIFECYCLE',
+  PLAN = 'PLAN',
+  TOOL = 'TOOL',
+  THOUGHT = 'THOUGHT'
+}
+
+/**
  * 任務數據傳輸對象 (Task Data Transfer Object)
- * 代表執行層中的單一任務節點，包含目標、依賴關係、執行狀態與結果。
- * 對齊 src/task/types.ts 中的 TaskNode 定義。
+ * 代表執行層中的單一任務節點。
  */
 export interface TaskDTO {
   /** 任務唯一識別碼 */
@@ -13,7 +44,7 @@ export interface TaskDTO {
   /** 任務具體要達成的目標 */
   goal: string;
   /** 執行狀態 */
-  status: 'pending' | 'ready' | 'running' | 'completed' | 'failed';
+  status: TaskStatus;
   /** 依賴的前置任務 ID 列表 */
   dependencies: string[];
   /** 被指派執行此任務的代理 ID */
@@ -24,7 +55,7 @@ export interface TaskDTO {
   toolRouting?: {
     /** 優先使用的工具名稱列表 */
     preferredTools?: string[];
-    /** 嚴禁使用的工具名稱列表 (基於安全考量) */
+    /** 嚴禁使用的工具名稱列表 */
     forbiddenTools?: string[];
   };
   /** 執行選項與策略 */
@@ -44,24 +75,102 @@ export interface TaskDTO {
 
 /**
  * 任務儲存庫接口
- * 負責 TaskDTO 的持久化，確保任務鏈在系統重啟後可恢復。
+ * 負責 TaskDTO 的持久化。
  */
 export interface ITaskRepository {
-  /**
-   * 保存或更新任務狀態
-   * @param task 任務數據對象
-   */
+  /** 保存或更新任務 */
   save(task: TaskDTO): Promise<void>;
-
-  /**
-   * 獲取指定會話下的所有任務
-   * @param sessionId 會話識別碼
-   */
+  /** 獲取指定會話下的所有任務 */
   findBySession(sessionId: string): Promise<TaskDTO[]>;
-
-  /**
-   * 根據 ID 查找單一任務
-   * @param id 任務識別碼
-   */
+  /** 根據 ID 查找單一任務 */
   findById(id: string): Promise<TaskDTO | null>;
+}
+
+/**
+ * 任務請求介面 (用於 TaskManager Inbox)
+ */
+export interface ITaskRequest {
+  goal: string;
+  sessionId: string;
+  chainId: string;
+  traceId: string;
+  requesterId: string;
+}
+
+/**
+ * 任務鏈狀態摘要
+ */
+export interface IChainStatusSummary {
+  chainId: string;
+  status: ChainStatus;
+  nodes: TaskDTO[];
+  sessionId?: string;
+  goal?: string;
+}
+
+/**
+ * 任務圖資料結構 (TaskGraphData)
+ */
+export interface TaskGraphData {
+  nodes: TaskDTO[];
+  milestones: string[];
+  currentMilestoneIndex: number;
+}
+
+/**
+ * 環境投影數據介面 (Context Projection)
+ */
+export interface IContextProjection {
+  /** 預期的環境快照描述 */
+  expectedSnapshot: string;
+  /** 關鍵產出物列表 */
+  keyDeliverables: string[];
+  /** 新增的約束條件 */
+  newConstraints: string[];
+}
+
+/**
+ * 規劃審查結果介面 (Plan Review)
+ */
+export interface IPlanReview {
+  /** 評分 (1-10) */
+  score: number;
+  /** 評分理由 */
+  rationale: string;
+}
+
+/**
+ * 任務展開響應介面
+ */
+export interface ITaskExpandResponse {
+  /** 展開後的子任務節點列表 */
+  nodes: TaskDTO[];
+}
+
+/**
+ * 規劃器內部狀態介面 (用於 LangGraph 運作)
+ */
+export interface IPlanningState {
+  /** 原始目標 */
+  goal: string;
+  /** 里程碑列表 */
+  milestones: string[];
+  /** 環境投影 */
+  projectedContext: IContextProjection;
+  /** 最近的審查分數 */
+  reviewScore: number;
+  /** 當前生成的任務節點 */
+  nodes: TaskDTO[];
+  /** 執行時元數據 */
+  metadata: Record<string, any>;
+}
+
+/**
+ * 任務執行上下文介面
+ */
+export interface ITaskExecutionContext {
+  /** 會話總體目標 */
+  sessionGoal: string;
+  /** 父級上下文數據 */
+  parentContext: Record<string, any>;
 }

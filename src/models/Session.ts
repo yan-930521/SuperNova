@@ -1,8 +1,11 @@
-import { BaseMessage, mapStoredMessagesToChatMessages, HumanMessage, AIMessage, SystemMessage, ToolMessage } from '@langchain/core/messages';
-import { MessageRole } from '../task/types';
-import { GlobalRuntime } from '../runtime/GlobalRuntime';
-import { SessionDTO } from '../infra/types/storage';
+import {
+    AIMessage, BaseMessage, HumanMessage, mapStoredMessagesToChatMessages, SystemMessage,
+    ToolMessage
+} from '@langchain/core/messages';
+
 import { SystemEventType } from '../infra/types/events';
+import { SessionDTO, MessageRole } from '../infra/types/session';
+import { GlobalRuntime } from '../runtime/GlobalRuntime';
 
 /**
  * 會話狀態 Enum

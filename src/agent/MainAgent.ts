@@ -1,6 +1,7 @@
 import { recorder } from '../infra/LogManager';
-import { Session } from '../session/Session';
-import { IAgentExecuteContext, IAgentExecuteResult, MessageRole } from '../task/types';
+import { IAgentExecuteContext, IAgentExecuteResult } from '../infra/types/agent';
+import { MessageRole } from '../infra/types/session';
+import { Session } from '../models/Session';
 import { AgentListTool } from '../tool/core/AgentListTool';
 import { AgentRegisterTool } from '../tool/core/AgentRegisterTool';
 import { TaskAssignTool } from '../tool/core/TaskAssignTool';
