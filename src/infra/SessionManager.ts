@@ -1,68 +1,100 @@
 import { Session } from '../session/Session';
 import { recorder } from './LogManager';
+import { ISessionRepository } from './types/storage';
 
 /**
  * 會話生命週期管理器 (SessionManager)
- * 管理輕量級「會話層總帳」的生命週期。
+ * 負責管理活躍中 (In-memory) 的會話實體，並協調 Repository 進行持久化。
  */
 export class SessionManager {
+  /** 內存緩存：儲存當前活動中的會話對象 */
   private sessions: Map<string, Session> = new Map();
+
+  /**
+   * @param repo 注入會話儲存庫，負責底層 IO
+   */
+  constructor(private repo: ISessionRepository) {}
 
   /**
    * 創建一個新的會話
    * @param goal 會話目標
    * @param responsibleAgentId 負責此會話的主代理 ID
-   * @param id 會話 ID (選擇性)
+   * @param userId 所屬用戶 ID (預設為 default-user)
+   * @param id 指定會話 ID (選擇性)
    */
-  createSession(goal: string, responsibleAgentId: string, id?: string): Session {
+  async createSession(goal: string, responsibleAgentId: string, userId: string = 'default-user', id?: string): Promise<Session> {
     const sessionId = id || `session-${Date.now()}`;
-    recorder.info(`[SessionManager] Creating new session: ${sessionId} for agent ${responsibleAgentId}`, { type: 'LIFECYCLE' });
+    recorder.info(`[SessionManager] Creating new session: ${sessionId}`, { type: 'LIFECYCLE' });
     
-    const session = new Session(sessionId, goal, responsibleAgentId);
+    const session = new Session(sessionId, goal, responsibleAgentId, userId);
+    
+    // 1. 存入內存緩存
     this.sessions.set(sessionId, session);
+    
+    // 2. 初始持久化
+    await this.repo.save(session.toDTO());
+    
     return session;
   }
 
   /**
-   * 從 JSON 數據恢復會話
-   * @param data 序列化數據
+   * 獲取指定 ID 的會話實體
+   * 採「緩存優先」策略，緩存失效則嘗試從 Repository 加載。
    */
-  async restoreFromJSON(data: Record<string, any>): Promise<Session> {
-    const id = data.id;
-    const goal = data.goal || 'No goal specified';
-    const responsibleAgentId = data.responsibleAgentId || 'unknown';
-    
-    if (!id) throw new Error('Session ID is required for restoration.');
+  async getSession(id: string): Promise<Session | undefined> {
+    // 1. 檢查內存
+    if (this.sessions.has(id)) {
+      return this.sessions.get(id);
+    }
 
-    recorder.info(`[SessionManager] Restoring session from JSON: ${id}`, { type: 'LIFECYCLE' });
-    const session = new Session(id, goal, responsibleAgentId);
-    await session.initFromJSON(data);
-    
-    this.sessions.set(id, session);
-    return session;
+    // 2. 嘗試從 Repository 加載 (持久層)
+    recorder.debug(`[SessionManager] Cache miss for session ${id}, attempting load from repo...`);
+    const dto = await this.repo.findById(id);
+    if (dto) {
+      const session = new Session(dto.id, dto.goal, dto.responsibleAgentId, dto.userId);
+      await session.initFromDTO(dto);
+      this.sessions.set(id, session); // 補回緩存
+      return session;
+    }
+
+    return undefined;
   }
 
   /**
-   * 獲取指定 ID 的會話
-   * @param id 會話 ID
+   * 保存指定會話的當前狀態到持久層
    */
-  getSession(id: string): Session | undefined {
-    return this.sessions.get(id);
+  async saveSession(id: string): Promise<void> {
+    const session = this.sessions.get(id);
+    if (session) {
+      await this.repo.save(session.toDTO());
+      recorder.debug(`[SessionManager] Session ${id} persisted to storage.`);
+    }
   }
 
   /**
-   * 刪除會話
-   * @param id 會話 ID
+   * 刪除會話 (同時清理緩存與持久層 - 注意：實務中通常建議僅 ARCHIVE)
    */
-  deleteSession(id: string): void {
+  async deleteSession(id: string): Promise<void> {
     recorder.info(`[SessionManager] Deleting session: ${id}`, { type: 'LIFECYCLE' });
     this.sessions.delete(id);
+    // 註：目前 ISessionRepository 尚未定義 delete 方法，若有需要應於介面補齊
   }
 
   /**
-   * 獲取所有活動中的會話
+   * 獲取當前內存中所有活動的會話
    */
-  getAllSessions(): Session[] {
+  getAllActiveSessions(): Session[] {
     return Array.from(this.sessions.values());
+  }
+
+  /**
+   * 從 JSON 恢復會話 (舊版兼容介面)
+   */
+  async restoreFromJSON(data: Record<string, any>): Promise<Session> {
+    const session = new Session(data.id, data.goal, data.responsibleAgentId, data.userId);
+    await session.initFromJSON(data);
+    this.sessions.set(session.id, session);
+    await this.repo.save(session.toDTO());
+    return session;
   }
 }
