@@ -1,6 +1,8 @@
 import { recorder } from '../infra/LogManager';
 import { Session } from '../session/Session';
 import { IAgentExecuteContext, IAgentExecuteResult, MessageRole } from '../task/types';
+import { AgentListTool } from '../tool/core/AgentListTool';
+import { AgentRegisterTool } from '../tool/core/AgentRegisterTool';
 import { TaskAssignTool } from '../tool/core/TaskAssignTool';
 import { TaskCreateTool } from '../tool/core/TaskCreateTool';
 import { TaskDispatcherTool } from '../tool/core/TaskDispatcherTool';
@@ -25,6 +27,8 @@ export class MainAgent extends BaseAgent {
 		this.registerTool(new TaskAssignTool());
 		this.registerTool(new TaskListTool());
 		this.registerTool(new TaskInfoTool());
+		this.registerTool(new AgentListTool());
+		this.registerTool(new AgentRegisterTool());
 	}
 
 	/**

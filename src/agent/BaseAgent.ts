@@ -7,7 +7,14 @@ import { ModelPreset } from '../infra/ModelRegistry';
 import { GlobalRuntime } from '../runtime/GlobalRuntime';
 import { IAgentExecuteContext, IAgentExecuteResult } from '../task/types';
 import { ITool } from '../tool/BaseTool';
+import { CodeExecutorTool } from '../tool/common/CodeExecutorTool';
+import { MathTool } from '../tool/common/MathTool';
+import { SystemInfoTool } from '../tool/common/SystemInfoTool';
 import { TavilySearchTool } from '../tool/common/TavilySearchTool';
+import { TextSummarizerTool } from '../tool/common/TextSummarizerTool';
+import { TimeTool } from '../tool/common/TimeTool';
+import { UnitConverterTool } from '../tool/common/UnitConverterTool';
+import { WebFetchTool } from '../tool/common/WebFetchTool';
 import { AgentListTool } from '../tool/core/AgentListTool';
 import { AgentRegisterTool } from '../tool/core/AgentRegisterTool';
 import { DeepThinkingTool } from '../tool/core/DeepThinkingTool';
@@ -53,14 +60,22 @@ export abstract class BaseAgent {
    * 註冊系統所有預設工具
    */
   protected registerDefaultTools(): void {
+    // 1. 核心編排與查詢工具    
     this.registerTool(new DeepThinkingTool());
-    
-    // 代理管理工具
-    this.registerTool(new AgentListTool());
-    this.registerTool(new AgentRegisterTool());
-    
-    // 外部能力與檔案工具
+
+    // 2. 外部能力工具
     this.registerTool(new TavilySearchTool());
+    this.registerTool(new WebFetchTool());
+    
+    // 3. 通用公用工具
+    this.registerTool(new TimeTool());
+    this.registerTool(new SystemInfoTool());
+    this.registerTool(new MathTool());
+    this.registerTool(new UnitConverterTool());
+    this.registerTool(new CodeExecutorTool());
+    this.registerTool(new TextSummarizerTool());
+    
+    // 4. 檔案操作工具
     this.registerTool(new WriteFileTool());
     this.registerTool(new ReadFileTool());
     this.registerTool(new ListFilesTool());
