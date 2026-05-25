@@ -1,6 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { IUser, IUserRepository } from '../types/identity';
+import { UserDTO, IUserRepository } from '../types/identity';
 
 /**
  * 基於檔案系統的用戶存儲實現。
@@ -17,7 +17,7 @@ export class FileSystemUserRepository implements IUserRepository {
    * @param id 用戶 ID
    * @returns 返回用戶對象，若不存在則返回 null。
    */
-  async findById(id: string): Promise<IUser | null> {
+  async findById(id: string): Promise<UserDTO | null> {
     const filePath = path.join(this.baseDir, `${id}.json`);
     try {
       const data = await fs.readFile(filePath, 'utf-8');
@@ -32,7 +32,7 @@ export class FileSystemUserRepository implements IUserRepository {
    * 保存或更新用戶信息。
    * @param user 用戶對象
    */
-  async save(user: IUser): Promise<void> {
+  async save(user: UserDTO): Promise<void> {
     const filePath = path.join(this.baseDir, `${user.id}.json`);
     
     // 確保基礎目錄存在

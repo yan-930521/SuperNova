@@ -1,4 +1,4 @@
-export interface IUser {
+export interface UserDTO {
   id: string;
   name: string;
   preferences: Record<string, any>;
@@ -6,6 +6,6 @@ export interface IUser {
 }
 
 export interface IUserRepository {
-  findById(id: string): Promise<IUser | null>;
-  save(user: IUser): Promise<void>;
+  findById(id: string): Promise<UserDTO | null>;
+  save(user: UserDTO): Promise<void>;
 }

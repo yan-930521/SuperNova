@@ -1,14 +1,15 @@
-export interface ISession {
+export interface SessionDTO {
   id: string;
   userId: string;
+  responsibleAgentId: string;
   goal: string;
-  status: 'ACTIVE' | 'ARCHIVED';
-  summary?: string;
+  status: string; // IDLE | RUNNING | COMPLETED | INTERRUPTED | CRASHED
+  history: any[]; // Stores serialized LangChain messages
+  metadata: Record<string, any>;
 }
 
 export interface ISessionRepository {
-  create(userId: string, goal: string): Promise<ISession>;
-  findById(id: string): Promise<ISession | null>;
-  findByUser(userId: string): Promise<ISession[]>;
-  update(session: ISession): Promise<void>;
+  save(session: SessionDTO): Promise<void>;
+  findById(id: string): Promise<SessionDTO | null>;
+  findByUser(userId: string): Promise<SessionDTO[]>;
 }
