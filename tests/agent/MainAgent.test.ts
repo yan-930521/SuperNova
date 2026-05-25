@@ -1,6 +1,6 @@
 import { HumanMessage } from '@langchain/core/messages';
 import { MainAgent } from '../../src/agent/MainAgent';
-import { Session } from '../../src/session/Session';
+import { Session } from '../../src/models/Session';
 import { EventBus } from '../../src/infra/EventBus';
 
 describe('MainAgent', () => {

@@ -1,4 +1,4 @@
-import { TaskGraph } from '../../src/session/TaskGraph';
+import { TaskGraph } from '../../src/models/TaskGraph';
 import { TaskStatus } from '../../src/task/types';
 
 /**

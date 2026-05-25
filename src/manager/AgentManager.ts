@@ -1,8 +1,8 @@
 import { BaseAgent } from '../agent/BaseAgent';
 import { MainAgent } from '../agent/MainAgent';
 import { WorkerAgent } from '../agent/WorkerAgent';
-import { recorder } from './LogManager';
-import { IAgentRepository } from './types/agent';
+import { recorder } from '../infra/LogManager';
+import { IAgentRepository } from '../infra/types/agent';
 
 /**
  * 代理生命週期管理器 (AgentManager)

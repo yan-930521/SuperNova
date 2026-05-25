@@ -1,33 +1,47 @@
 import { EventBus } from '../../src/infra/EventBus';
-import { Event } from '../../src/models/Event';
+import { SystemEventType, ISystemEvent } from '../../src/infra/types/events';
 
 describe('EventBus', () => {
-  it('should publish and subscribe to events', () => {
-    const eventBus = new EventBus();
+  let eventBus: EventBus;
+
+  beforeEach(() => {
+    eventBus = new EventBus();
+  });
+
+  it('should notify subscribers when an event is published', () => {
     const mockHandler = jest.fn();
-    const eventType = 'test-event';
-    const event: Event = {
+    const eventType = SystemEventType.TASK_STARTED;
+    const event: ISystemEvent = {
       type: eventType,
-      payload: { data: 'test' },
-      timestamp: Date.now(),
+      userId: 'user-1',
+      sessionId: 'sess-1',
+      payload: { taskId: 't1' },
+      timestamp: Date.now()
     };
 
     eventBus.subscribe(eventType, mockHandler);
     eventBus.publish(event);
 
     expect(mockHandler).toHaveBeenCalledWith(event);
+
     eventBus.unsubscribe(eventType, mockHandler);
   });
 
-  it('should support optional session_id and trace_id in Event', () => {
-    const event: Event = {
-      type: 'test',
-      payload: {},
-      timestamp: Date.now(),
-      session_id: 'session-123',
-      trace_id: 'trace-456',
+  it('should not notify unsubscribed handlers', () => {
+    const mockHandler = jest.fn();
+    const eventType = SystemEventType.TASK_COMPLETED;
+    const event: ISystemEvent = {
+      type: eventType,
+      userId: 'user-1',
+      sessionId: 'sess-1',
+      payload: { taskId: 't1' },
+      timestamp: Date.now()
     };
-    expect(event.session_id).toBe('session-123');
-    expect(event.trace_id).toBe('trace-456');
+
+    eventBus.subscribe(eventType, mockHandler);
+    eventBus.unsubscribe(eventType, mockHandler);
+    eventBus.publish(event);
+
+    expect(mockHandler).not.toHaveBeenCalled();
   });
 });

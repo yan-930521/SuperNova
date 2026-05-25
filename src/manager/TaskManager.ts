@@ -1,26 +1,31 @@
 import { v4 as uuidv4 } from 'uuid';
-
-import { AgentRegistry } from '../infra/AgentRegistry';
 import { recorder } from '../infra/LogManager';
 import { AgentState } from '../models/AgentState';
 import { GlobalRuntime } from '../runtime/GlobalRuntime';
-import { TaskGraph } from '../session/TaskGraph';
-import { TaskPlanner } from './TaskPlanner';
+import { TaskGraph } from '../models/TaskGraph';
+import { TaskPlanner } from '../task/TaskPlanner';
+import { Task } from '../models/Task';
+import { ITaskRepository } from '../infra/types/task';
+import { AgentManager } from './AgentManager';
 import {
-    ChainStatus, IChainStatusSummary, ITaskChainState, ITaskRequest, LogType, SystemEvent, TaskNode,
+    ChainStatus, IChainStatusSummary, ITaskChainState, ITaskRequest, LogType, SystemEvent,
     TaskStatus
-} from './types';
+} from '../task/types';
 
 /**
  * TaskManager (任務管理器)
- * 負責協調任務的規劃與並行執行流程。
+ * 負責協調任務的規劃與並行執行流程，並透過 ITaskRepository 實現狀態持久化。
  */
 export class TaskManager {
 	private inbox: ITaskRequest[] = [];
 	private chains = new Map<string, ITaskChainState>();
+	private activeTasks = new Map<string, Task>(); // 內存中的任務實體緩存
 	private planner: TaskPlanner;
 
-	constructor(private agentRegistry: AgentRegistry) {
+	constructor(
+		private agentManager: AgentManager,
+		private repo: ITaskRepository
+	) {
 		this.planner = new TaskPlanner();
 	}
 
@@ -52,7 +57,7 @@ export class TaskManager {
 	/**
 	 * 手動建立一個任務鏈 (用於對話式操控)
 	 */
-	createChain(goal: string, sessionId: string, requesterId: string): string {
+	async createChain(goal: string, sessionId: string, requesterId: string): Promise<string> {
 		const chainId = `chain-manual-${Date.now()}`;
 		const graph = new TaskGraph();
 
@@ -69,32 +74,36 @@ export class TaskManager {
 	}
 
 	/**
-	 * 向指定鏈中新增任務
+	 * 向指定鏈中新增任務並持久化
 	 */
-	addTaskToChain(chainId: string, taskData: Partial<TaskNode>): string {
+	async addTaskToChain(chainId: string, taskData: any): Promise<string> {
 		const chain = this.chains.get(chainId);
 		if (!chain) throw new Error(`Chain ${chainId} not found.`);
 
 		const taskId = taskData.id || `task-${uuidv4().substring(0, 8)}`;
-		const node: TaskNode = {
+		const task = new Task({
+			...taskData,
 			id: taskId,
-			type: taskData.type || 'work',
-			goal: taskData.goal || 'No goal',
-			dependencies: taskData.dependencies || [],
-			status: TaskStatus.PENDING,
-			assignedAgentId: taskData.assignedAgentId
-		};
-
-		chain.graph.addTask(taskId, node);
-
-		// 建立依賴
-		node.dependencies.forEach(depId => {
-			try { chain.graph.addDependency(depId, taskId); } catch (e) { }
+			sessionId: chain.sessionId,
+			status: 'pending'
 		});
 
-		recorder.info(`[TaskManager] Task ${taskId} added to ${chainId}`, { type: LogType.LIFECYCLE });
+		// 1. 存入儲存庫
+		await this.repo.save(task.toDTO());
+		
+		// 2. 更新任務圖 (保持舊有圖邏輯)
+		chain.graph.addTask(taskId, task.toDTO() as any);
+		this.activeTasks.set(taskId, task);
 
-		// 觸發執行
+		// 建立依賴
+		if (taskData.dependencies && Array.isArray(taskData.dependencies)) {
+			taskData.dependencies.forEach((depId: string) => {
+				try { chain.graph.addDependency(depId, taskId); } catch (e) { }
+			});
+		}
+
+		recorder.info(`[TaskManager] Task ${taskId} added and persisted.`, { type: LogType.LIFECYCLE });
+		
 		this.driveExecution(chainId).catch(() => { });
 		return taskId;
 	}
@@ -102,21 +111,30 @@ export class TaskManager {
 	/**
 	 * 手動指派任務
 	 */
-	assignTask(chainId: string, taskId: string, agentId: string): void {
+	async assignTask(chainId: string, taskId: string, agentId: string): Promise<void> {
 		const chain = this.chains.get(chainId);
 		if (!chain) throw new Error(`Chain ${chainId} not found.`);
 
-		const task = chain.graph.getTask(taskId);
-		if (!task) throw new Error(`Task ${taskId} not found in ${chainId}.`);
+		const task = this.activeTasks.get(taskId);
+		if (!task) throw new Error(`Task ${taskId} not found in memory.`);
 
 		task.assignedAgentId = agentId;
+		await this.repo.save(task.toDTO());
+		
+		// 同步更新圖中的節點資料
+		const graphTask = chain.graph.getTask(taskId);
+		if (graphTask) graphTask.assignedAgentId = agentId;
+
 		recorder.info(`[TaskManager] Task ${taskId} assigned to ${agentId}`, { type: LogType.LIFECYCLE });
 
 		this.driveExecution(chainId).catch(() => { });
 	}
 
-	// --- 查詢介面 ---
+	// --- 查詢介面 (兼容舊版 Tool 調用) ---
 
+	/**
+	 * 列出所有當前的任務鏈
+	 */
 	listChains(): IChainStatusSummary[] {
 		return Array.from(this.chains.entries()).map(([chainId, state]) => ({
 			chainId,
@@ -127,6 +145,9 @@ export class TaskManager {
 		}));
 	}
 
+	/**
+	 * 獲取指定鏈的狀態摘要
+	 */
 	getChainStatus(chainId: string): IChainStatusSummary | null {
 		const state = this.chains.get(chainId);
 		if (!state) return null;
@@ -139,15 +160,25 @@ export class TaskManager {
 		};
 	}
 
-	getChainTasks(chainId: string): TaskNode[] {
+	/**
+	 * 獲取指定鏈中的所有任務
+	 */
+	getChainTasks(chainId: string): any[] {
 		return this.chains.get(chainId)?.graph.getAllTasks() || [];
 	}
 
-	getTaskInfo(chainId: string, taskId: string): TaskNode | null {
-		return this.chains.get(chainId)?.graph.getTask(taskId) || null;
+	/**
+	 * 獲取特定任務的詳細資訊
+	 */
+	getTaskInfo(chainId: string, taskId: string): Task | null {
+		// 先看內存
+		if (this.activeTasks.has(taskId)) {
+			return this.activeTasks.get(taskId)!;
+		}
+		return null;
 	}
 
-	// --- 內部核心邏輯 ---
+	// --- 核心執行邏輯 ---
 
 	private async processInbox() {
 		if (this.inbox.length === 0) return;
@@ -163,22 +194,27 @@ export class TaskManager {
 		});
 
 		try {
-			const agents = this.agentRegistry.getAllAgents().map(a => ({ id: a.id, role: a.role, capabilities: a.capabilities }));
+			const agents = this.agentManager.getAllAgents().map(a => ({ id: a.id, role: a.role, capabilities: a.capabilities }));
 			const initialState = this.createInitialState(request.goal, agents, request.sessionId, request.traceId);
 			const finalState = await this.planner.run(initialState);
 
 			if (!finalState.planning?.taskGraph) throw new Error("Planning produced no graph.");
 
 			const nodes = finalState.planning.taskGraph.nodes;
-			nodes.forEach(n => graph.addTask(n.id, n));
-			nodes.forEach(n => n.dependencies.forEach(d => { try { graph.addDependency(d, n.id); } catch (e) { } }));
+			for (const n of nodes) {
+				const task = new Task({ ...n, sessionId: request.sessionId });
+				await this.repo.save(task.toDTO());
+				graph.addTask(n.id, n);
+				this.activeTasks.set(n.id, task);
+			}
 
 			const chain = this.chains.get(request.chainId)!;
 			chain.status = ChainStatus.RUNNING;
 
 			GlobalRuntime.getInstance().eventBus.publish({
-				type: SystemEvent.SESSION_START,
-				session_id: request.sessionId,
+				type: SystemEvent.SESSION_START as any,
+				userId: 'system',
+				sessionId: request.sessionId,
 				payload: { goal: request.goal, nodes: graph.getAllTasks() },
 				timestamp: Date.now()
 			});
@@ -198,32 +234,32 @@ export class TaskManager {
 		const readyTasks = chain.graph.getReadyTasks();
 		if (readyTasks.length === 0) {
 			const allTasks = chain.graph.getAllTasks();
-			if (allTasks.length > 0 && allTasks.every(n => n.status === TaskStatus.COMPLETED)) {
+			if (allTasks.length > 0 && allTasks.every((n: any) => n.status === TaskStatus.COMPLETED)) {
 				chain.status = ChainStatus.COMPLETED;
 				recorder.info(`[TaskManager] Chain ${chainId} completed.`);
 			}
 			return;
 		}
 
-		await Promise.all(readyTasks.map(tid => this.executeNode(chainId, tid)));
+		await Promise.all(readyTasks.map((tid: string) => this.executeNode(chainId, tid)));
 		await this.driveExecution(chainId);
 	}
 
 	private async executeNode(chainId: string, taskId: string) {
 		const chain = this.chains.get(chainId)!;
-		const node = chain.graph.getTask(taskId)!;
+		const task = this.activeTasks.get(taskId);
+		if (!task) return;
 
-		node.status = TaskStatus.RUNNING;
-		recorder.info(`[TaskManager] Executing: ${taskId} (${node.goal})`, { session_id: chain.sessionId });
+		task.updateStatus('running');
+		await this.repo.save(task.toDTO());
+
+		recorder.info(`[TaskManager] Executing: ${taskId} (${task.goal})`, { session_id: chain.sessionId });
 
 		try {
-			const agent = this.agentRegistry.getAgent(node.assignedAgentId || 'default-worker');
-			if (!agent) {
-				throw new Error(`Agent ${node.assignedAgentId || 'default-worker'} not found.`);
-			}
+			const agent = this.agentManager.getAgent(task.assignedAgentId || 'default-worker');
+			if (!agent) throw new Error(`Agent ${task.assignedAgentId} not found.`);
 
-			// 統一調用 execute，不論是 MainAgent 還是 WorkerAgent
-			const executeResult = await agent.execute(node.goal, { 
+			const executeResult = await agent.execute(task.goal, { 
 				sessionId: chain.sessionId,
 				traceId: chain.traceId,
 				agentId: agent.id,
@@ -231,35 +267,17 @@ export class TaskManager {
 				sessionGoal: chain.goal
 			});
 			
-			node.result = executeResult.result;
-			
-			if (executeResult.status === 'failed') {
-				throw new Error(executeResult.error || 'Agent execution failed');
-			}
+			if (executeResult.status === 'failed') throw new Error(executeResult.error);
 
-			// 發布摘要到會話總帳
-			GlobalRuntime.getInstance().eventBus.publish({
-				type: SystemEvent.ACTION_SUMMARY,
-				session_id: chain.sessionId,
-				payload: { taskId, summary: executeResult.summary },
-				timestamp: Date.now()
-			});
+			task.setResult(executeResult.result);
+			await this.repo.save(task.toDTO());
 
-			node.status = TaskStatus.COMPLETED;
 			chain.graph.completeTask(taskId);
 		} catch (err: any) {
-			await this.handleNodeFailure(chainId, taskId, err.message);
+			task.fail(err.message);
+			await this.repo.save(task.toDTO());
+			chain.status = ChainStatus.FAILED;
 		}
-	}
-
-	private async handleNodeFailure(chainId: string, taskId: string, error: string) {
-		recorder.error(`[TaskManager] Task ${taskId} failed in chain ${chainId}: ${error}`);
-		const chain = this.chains.get(chainId)!;
-		const node = chain.graph.getTask(taskId);
-		if (node) {
-			node.status = TaskStatus.FAILED;
-		}
-		chain.status = ChainStatus.FAILED;
 	}
 
 	private createInitialState(goal: string, agents: any[], sessionId: string, traceId: string): AgentState {

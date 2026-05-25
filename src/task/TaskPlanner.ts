@@ -9,7 +9,7 @@ import { GlobalRuntime } from '../runtime/GlobalRuntime';
 import {
     ContextProjectionSchema, MilestonePlanSchema, PlanReviewSchema, TaskExpandResponseSchema
 } from '../schemas/agent/AgentOutputSchemas';
-import { TaskGraph } from '../session/TaskGraph';
+import { TaskGraph } from '../models/TaskGraph';
 import { PromptLoader } from '../utils/PromptLoader';
 import { TaskGraphData, TaskNode } from './types';
 

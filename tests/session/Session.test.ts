@@ -1,8 +1,9 @@
 import { HumanMessage, AIMessage } from '@langchain/core/messages';
-import { Session } from '../../src/session/Session';
+import { Session } from '../../src/models/Session';
 import { EventBus } from '../../src/infra/EventBus';
 import { MessageRole } from '../../src/task/types';
 import { GlobalRuntime } from '../../src/runtime/GlobalRuntime';
+import { SystemEventType } from '../../src/infra/types/events';
 
 describe('Session', () => {
   let session: Session;
@@ -30,11 +31,12 @@ describe('Session', () => {
     expect(session.history[0].content).toBe('Hello');
   });
 
-  it('should listen to ACTION_SUMMARY events and add to history', () => {
+  it('should listen to TASK_COMPLETED events and add to history', () => {
     const summary = 'Worker did something useful';
     eventBus.publish({
-      type: 'ACTION_SUMMARY',
-      session_id: sessionId,
+      type: SystemEventType.TASK_COMPLETED,
+      userId: 'user-1',
+      sessionId: sessionId,
       payload: { summary, taskId: 't1' },
       timestamp: Date.now()
     });
@@ -44,10 +46,11 @@ describe('Session', () => {
     expect(session.history[0].content).toContain(summary);
   });
 
-  it('should not add ACTION_SUMMARY messages from other sessions', () => {
+  it('should not add TASK_COMPLETED messages from other sessions', () => {
     eventBus.publish({
-      type: 'ACTION_SUMMARY',
-      session_id: 'different-session-id',
+      type: SystemEventType.TASK_COMPLETED,
+      userId: 'user-1',
+      sessionId: 'different-session-id',
       payload: { summary: 'Other session summary', taskId: 't2' },
       timestamp: Date.now()
     });

@@ -1,4 +1,4 @@
-import { TaskGraph } from '../session/TaskGraph';
+import { TaskGraph } from '../models/TaskGraph';
 
 /**
  * 任務請求介面 (用於 TaskManager Inbox)

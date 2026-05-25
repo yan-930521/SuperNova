@@ -1,7 +1,7 @@
 import { WorkerAgent } from '../../src/agent/WorkerAgent';
 import { GlobalRuntime } from '../../src/runtime/GlobalRuntime';
 import { EventBus } from '../../src/infra/EventBus';
-import { Session } from '../../src/session/Session';
+import { Session } from '../../src/models/Session';
 
 describe('WorkerAgent', () => {
   it('executes task and returns summary', async () => {

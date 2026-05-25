@@ -3,10 +3,10 @@ import * as readline from 'readline';
 import { ChatOpenAI } from '@langchain/openai';
 
 import { MainAgent } from '../src/agent/MainAgent';
-import { AgentRegistry } from '../src/infra/AgentRegistry';
+import { AgentManager } from '../src/manager/AgentManager';
 import { EventBus } from '../src/infra/EventBus';
 import { InferenceEngine, ModelPreset, ModelRegistry } from '../src/infra/ModelRegistry';
-import { SessionManager } from '../src/infra/SessionManager';
+import { SessionManager } from '../src/manager/SessionManager';
 import { GlobalRuntime } from '../src/runtime/GlobalRuntime';
 
 dotenv.config();
@@ -20,12 +20,10 @@ async function runChatDemo() {
 
   // 1. 初始化全域運行時
   const runtime = new GlobalRuntime(
-    new SessionManager(),
-    new AgentRegistry(),
     new EventBus(),
     new ModelRegistry()
   );
-
+  
   // 2. 配置真實模型 (ReAct 模式強烈建議使用 GPT-4o 或同等級模型)
   const realModel = new ChatOpenAI({ 
     modelName: "gpt-4o-mini", 
@@ -40,11 +38,10 @@ async function runChatDemo() {
   await runtime.start();
 
   // 3. 獲取 MainAgent 並建立 Session
-  const mainAgent = runtime.agentRegistry.getAgent('main-agent-01') as MainAgent;
-  const session = runtime.sessionManager.createSession(
-    "多輪對話會話", 
-    mainAgent.id, 
-    "interactive-chat-session"
+  const mainAgent = runtime.agentManager.getAgent('main-agent-01') as MainAgent;
+  const session = await runtime.sessionManager.createSession(
+    "interactive-chat-session",
+    "多輪對話會話"
   );
 
   // 4. 建立 Readline 介面
