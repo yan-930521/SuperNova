@@ -1,3 +1,4 @@
+import * as path from 'path';
 import { Config } from '../config/Config';
 import { ConfigLoader } from '../config/ConfigLoader';
 import { AgentRegistry } from '../infra/AgentRegistry';
@@ -8,6 +9,9 @@ import { SessionManager } from '../infra/SessionManager';
 import { ConsoleTransport } from '../infra/transports/ConsoleTransport';
 import { FileTransport } from '../infra/transports/FileTransport';
 import { TaskManager } from '../task/TaskManager';
+import { GlobalRegistry } from '../infra/GlobalRegistry';
+import { FileSystemUserRepository } from '../infra/storage/FileSystemUserRepository';
+import { FileSystemSessionRepository } from '../infra/storage/FileSystemSessionRepository';
 
 /**
  * 全局運行時類 (Global Runtime) - SuperNova 2.0
@@ -62,6 +66,12 @@ export class GlobalRuntime {
       this.config = await loader.bootstrap('./supernova.json');
     }
 
+    // --- 初始化新版模塊化基礎設施 (Phase 1) ---
+    const root = process.cwd();
+    GlobalRegistry.userRepo = new FileSystemUserRepository(path.join(root, 'workspace/users'));
+    GlobalRegistry.sessionRepo = new FileSystemSessionRepository(path.join(root, 'workspace/sessions'));
+    // 註：EventBus 接口適配將在後續階段完成，目前仍使用構造函數傳入的 eventBus
+    
     const consoleLevel = (process.env.CONSOLE_LOG_LEVEL as LogLevel) || 'INFO';
     recorder.addTransport(new ConsoleTransport(consoleLevel));
     recorder.addTransport(new FileTransport('DEBUG'));
