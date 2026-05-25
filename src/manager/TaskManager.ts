@@ -8,9 +8,9 @@ import { Task } from '../models/Task';
 import { ITaskRepository } from '../infra/types/task';
 import { AgentManager } from './AgentManager';
 import {
-    ChainStatus, IChainStatusSummary, ITaskChainState, ITaskRequest, LogType, SystemEvent,
-    TaskStatus
+    ChainStatus, IChainStatusSummary, ITaskChainState, ITaskRequest, TaskStatus, LogType
 } from '../task/types';
+import { SystemEventType } from '../infra/types/events';
 
 /**
  * TaskManager (任務管理器)
@@ -212,7 +212,7 @@ export class TaskManager {
 			chain.status = ChainStatus.RUNNING;
 
 			GlobalRuntime.getInstance().eventBus.publish({
-				type: SystemEvent.SESSION_START as any,
+				type: SystemEventType.SESSION_CREATED,
 				userId: 'system',
 				sessionId: request.sessionId,
 				payload: { goal: request.goal, nodes: graph.getAllTasks() },

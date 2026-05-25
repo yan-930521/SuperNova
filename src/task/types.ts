@@ -1,4 +1,10 @@
 import { TaskGraph } from '../models/TaskGraph';
+import { TaskDTO } from '../infra/types/task';
+
+/**
+ * 任務節點定義 (TaskNode) - 別名為 TaskDTO 以保持與持久化層一致
+ */
+export type TaskNode = TaskDTO;
 
 /**
  * 任務請求介面 (用於 TaskManager Inbox)
@@ -44,55 +50,6 @@ export enum ChainStatus {
 }
 
 /**
- * 系統事件類型 Enum
- */
-export enum SystemEvent {
-  SESSION_START = 'SESSION_START',
-  SESSION_COMPLETE = 'SESSION_COMPLETE',
-  SESSION_INTERRUPT = 'SESSION_INTERRUPT',
-  SESSION_CRASH = 'SESSION_CRASH',
-  TASK_START = 'TASK_START',
-  TASK_COMPLETE = 'TASK_COMPLETE',
-  ACTION_SUMMARY = 'ACTION_SUMMARY'
-}
-
-/**
- * 日誌分類 Enum
- */
-export enum LogType {
-  SYSTEM = 'SYSTEM',
-  LIFECYCLE = 'LIFECYCLE',
-  PLAN = 'PLAN',
-  TOOL = 'TOOL',
-  THOUGHT = 'THOUGHT'
-}
-
-/**
- * 任務節點定義 (TaskNode)
- */
-export interface TaskNode {
-  id: string;
-  type: string;
-  goal: string;
-  requiredCapabilities?: string[];
-  assignedAgentId?: string | null;
-  assignedRole?: string | null;
-  toolRouting?: {
-    preferredTools?: string[];
-    forbiddenTools?: string[];
-  };
-  dependencies: string[];
-  status: TaskStatus;
-  result?: any;
-  options?: {
-    timeout?: number;
-    maxRetries?: number;
-    isCritical?: boolean;
-  };
-  metadata?: Record<string, any>;
-}
-
-/**
  * 任務鏈狀態摘要
  */
 export interface IChainStatusSummary {
@@ -113,38 +70,15 @@ export interface TaskGraphData {
 }
 
 /**
- * 單次操作記錄介面
+ * 任務日誌分類 Enum
+ * 用於分類系統產出的結構化日誌。
  */
-export interface IOperationRecord {
-  taskId: string;
-  action: string;      
-  summary: string;     
-  input?: any;
-  output?: any;
-  error?: string;
-  timestamp: number;
-}
-
-/**
- * 任務節點狀態介面
- */
-export interface ITaskNodeState {
-  id: string;
-  type: string;
-  goal: string;
-  status: TaskStatus;
-  assignedAgentId?: string | null;
-  assignedRole?: string | null;
-  requiredCapabilities?: string[];
-  result?: any;
-  records: IOperationRecord[];
-  dependencies: string[];
-  options?: {
-    timeout?: number;
-    maxRetries?: number;
-    isCritical?: boolean;
-  };
-  metadata?: Record<string, any>;
+export enum LogType {
+  SYSTEM = 'SYSTEM',
+  LIFECYCLE = 'LIFECYCLE',
+  PLAN = 'PLAN',
+  TOOL = 'TOOL',
+  THOUGHT = 'THOUGHT'
 }
 
 /**

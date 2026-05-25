@@ -35,12 +35,13 @@ export class TaskGraph {
     // 提供預設值以補齊 TaskNode
     const fullNode: TaskNode = {
       id: taskId,
+      sessionId: node.sessionId || 'unknown',
       type: node.type || 'default',
       goal: node.goal || taskId,
       dependencies: node.dependencies || [],
       status: node.status || TaskStatus.PENDING,
       ...node
-    };
+    } as TaskNode;
 
     this.nodes.set(taskId, fullNode);
     if (isNew) {
