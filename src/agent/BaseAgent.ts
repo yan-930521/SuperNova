@@ -134,7 +134,7 @@ export abstract class BaseAgent {
 			// 我們將任務目標包裝為指令輸入
 			const resultState = await this.reactAgent.invoke({
 				messages: [
-					...session.history,
+					...session.getLangChainMessages(),
 					{ role: 'user', content: `[DIRECTIVE]: 你當前的任務目標是「${taskGoal}」。請直接開始執行並回報結果。` }
 				]
 			}, {

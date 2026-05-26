@@ -62,7 +62,7 @@ export class MainAgent extends BaseAgent {
 		try {
 			// 2. 執行 ReAct 引擎 (直接傳遞 Session 中的 BaseMessage[] 歷史)
 			const resultState = await this.reactAgent.invoke({
-				messages: session.history
+				messages: session.getLangChainMessages()
 			}, {
 				recursionLimit: 50,
 				configurable: {

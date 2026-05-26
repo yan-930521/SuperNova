@@ -6,6 +6,7 @@ import { ChatOpenAI } from '@langchain/openai';
 import { MainAgent } from '../src/agent/MainAgent';
 import { InferenceEngine, ModelRegistry } from '../src/infra/ModelRegistry';
 import { ModelPreset } from '../src/infra/types/agent';
+import { Session } from '../src/models/Session';
 import { GlobalRuntime } from '../src/runtime/GlobalRuntime';
 
 dotenv.config();
@@ -14,78 +15,86 @@ dotenv.config();
  * 多輪對話互動演示 (Multi-turn Chat Demo)
  */
 async function runChatDemo() {
-  console.log("💬 [SuperNova 2.0] 啟動多輪對話模式...");
-  console.log("輸入 'exit' 或 'quit' 結束對話。\n");
+	console.log("💬 [SuperNova 2.0] 啟動多輪對話模式...");
+	console.log("輸入 'exit' 或 'quit' 結束對話。\n");
 
-  // 初始化運行時
-  const runtime = new GlobalRuntime();
+	// 初始化運行時
+	const runtime = new GlobalRuntime();
 
-  
-  // 2. 配置真實模型 (ReAct 模式強烈建議使用 GPT-4o 或同等級模型)
-  const realModel = new ChatOpenAI({ 
-    modelName: "gpt-4o-mini", 
-    temperature: 0,
-    apiKey: process.env.OPENAI_API_KEY
-  });
-  const inference = new InferenceEngine(realModel as any);
-  runtime.modelRegistry.registerModel(ModelPreset.SMART, inference);
-  runtime.modelRegistry.registerModel(ModelPreset.FAST, inference);
-  runtime.modelRegistry.registerModel(ModelPreset.EVAL, inference);
-  
-  await runtime.start();
 
-  // 3. 獲取 MainAgent 並建立 Session
-  const mainAgent = runtime.agentManager.getAgent('main-agent-01') as MainAgent;
-  if (!mainAgent) {
-    throw new Error("MainAgent 'main-agent-01' not found. Please check agents/ directory.");
-  }
+	// 2. 配置真實模型 (ReAct 模式強烈建議使用 GPT-4o 或同等級模型)
+	const realModel = new ChatOpenAI({
+		modelName: "gpt-4o-mini",
+		temperature: 0,
+		apiKey: process.env.OPENAI_API_KEY
+	});
+	const inference = new InferenceEngine(realModel as any);
+	runtime.modelRegistry.registerModel(ModelPreset.SMART, inference);
+	runtime.modelRegistry.registerModel(ModelPreset.FAST, inference);
+	runtime.modelRegistry.registerModel(ModelPreset.EVAL, inference);
 
-  const session = await runtime.sessionManager.createSession(
-    "進行多輪對話互動，協助使用者解決問題。", // goal
-    mainAgent.id,                           // responsibleAgentId
-    "ADMIN",                             // userId
-    `demo-session-${Date.now()}`                        // id
-  );
+	await runtime.start();
 
-  // 4. 建立 Readline 介面
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-    prompt: '【User】> '
-  });
+	// 3. 獲取 MainAgent 並建立 Session
+	const mainAgent = runtime.agentManager.getAgent('main-agent-01') as MainAgent;
+	if (!mainAgent) {
+		throw new Error("MainAgent 'main-agent-01' not found. Please check agents/ directory.");
+	}
 
-  rl.prompt();
+	const EnableHistory = true;
 
-  rl.on('line', async (line) => {
-    const input = line.trim();
+	let session: Session;
 
-    if (input.toLowerCase() === 'exit' || input.toLowerCase() === 'quit') {
-      console.log("\n👋 感謝使用，再見！");
-      process.exit(0);
-    }
+	if (EnableHistory) {
+		session = await runtime.sessionManager.getSession("demo-session") as any as Session;
+	} else {
+		session = await runtime.sessionManager.createSession(
+			"進行多輪對話互動，協助使用者解決問題。", // goal
+			mainAgent.id,                         // responsibleAgentId
+			"ADMIN",                             // userId
+			`demo-session-${Date.now()}`        // id
+		);
+	}
 
-    if (!input) {
-      rl.prompt();
-      return;
-    }
+	// 4. 建立 Readline 介面
+	const rl = readline.createInterface({
+		input: process.stdin,
+		output: process.stdout,
+		prompt: '【User】> '
+	});
 
-    try {
-      // 呼叫 MainAgent 處理訊息 (ReAct 模式)
-      // 要改成動態呼叫agent
-      const response = await mainAgent.handleUserMessage(session, input);
-      console.log(`\n【Assistant】> ${response}\n`);
-    } catch (err: any) {
-      console.error(`\n❌ 發生錯誤: ${err.message}\n`);
-    }
+	rl.prompt();
 
-    rl.prompt();
-  }).on('close', () => {
-    console.log("\n👋 會話已關閉。");
-    process.exit(0);
-  });
+	rl.on('line', async (line) => {
+		const input = line.trim();
+
+		if (input.toLowerCase() === 'exit' || input.toLowerCase() === 'quit') {
+			console.log("\n👋 感謝使用，再見！");
+			process.exit(0);
+		}
+
+		if (!input) {
+			rl.prompt();
+			return;
+		}
+
+		try {
+			// 呼叫 MainAgent 處理訊息 (ReAct 模式)
+			// 要改成動態呼叫agent
+			const response = await mainAgent.handleUserMessage(session, input);
+			console.log(`\n【Assistant】> ${response}\n`);
+		} catch (err: any) {
+			console.error(`\n❌ 發生錯誤: ${err.message}\n`);
+		}
+
+		rl.prompt();
+	}).on('close', () => {
+		console.log("\n👋 會話已關閉。");
+		process.exit(0);
+	});
 }
 
 runChatDemo().catch(err => {
-  console.error("Chat Demo failed:", err);
-  process.exit(1);
+	console.error("Chat Demo failed:", err);
+	process.exit(1);
 });
