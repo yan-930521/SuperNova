@@ -3,6 +3,7 @@
 [![TypeScript](https://img.shields.io/badge/Language-TypeScript-blue.svg)](https://www.typescriptlang.org/)
 [![Architecture](https://img.shields.io/badge/Architecture-Decoupled--Runtime-orange.svg)](#-核心設計-sessionmanager-vs-taskmanager)
 [![Stage](https://img.shields.io/badge/Stage-Research--Prototype-yellow.svg)](#-開發進度-roadmap)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/yan-930521/SuperNova)
 
 SuperNova 是一個專為長期任務設計的 **AI Runtime (執行時)** 實驗。它的目標是探索如何讓 AI Agent 在處理複雜、跨領域且具備長期目標的任務時，透過架構上的解耦來解決 **Context Drift (上下文漂移)** 與 **Goal Drift (目標偏移)** 問題。
 
