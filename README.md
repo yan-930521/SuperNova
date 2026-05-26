@@ -1,40 +1,157 @@
-# SuperNova: 一個關於「執行狀態與對話分離」的 AI Runtime 實驗
+# SuperNova: A Persistent Multi-Agent Runtime for Autonomous Coordination
 
 [![TypeScript](https://img.shields.io/badge/Language-TypeScript-blue.svg)](https://www.typescriptlang.org/)
 [![Architecture](https://img.shields.io/badge/Architecture-Decoupled--Runtime-orange.svg)](#-核心設計-sessionmanager-vs-taskmanager)
 [![Stage](https://img.shields.io/badge/Stage-Research--Prototype-yellow.svg)](#-開發進度-roadmap)
 
-SuperNova 是一個正在開發中的 **AI Runtime (執行時)** 實驗。它的目標是探索如何讓 AI Agent 在處理複雜、長期任務時，不會因為對話內容過長而「迷失目標」。
+SuperNova 是一個專為長期任務設計的 **AI Runtime (執行時)** 實驗。它的目標是探索如何讓 AI Agent 在處理複雜、跨領域且具備長期目標的任務時，透過架構上的解耦來解決 **Context Drift (上下文漂移)** 與 **Goal Drift (目標偏移)** 問題。
 
-## 💡 核心挑戰：Context 與目標的漂移 (Goal Drift)
+## 💡 核心挑戰：Communication vs. Execution
 
-在開發 Agent 時，我發現了一個常見問題：當我們讓 Agent 執行複雜任務時，思考過程、工具輸出、與原始對話全都混在同一個 Context 裡。這會導致：
-1.  **Token 浪費**：為了讓 Agent 記得目標，必須重複輸入大量重複的背景資訊。
-2.  **目標漂移 (Goal Drift)**：Agent 容易被中間繁雜的執行細節干擾，忘記最初要解決的問題。
+在傳統 Agent 框架中，對話紀錄 (Context) 同時承載了「人機溝通」與「工具執行細節」，這會導致：
+1.  **Token 污染**：底層工具的冗長輸出會迅速耗盡 Context 窗口，淹沒原始目標。
+2.  **邏輯混亂**：Agent 容易被執行過程中的技術報錯干擾，導致高層次的決策發生偏移。
+
+**SuperNova 透過「雙層總帳」機制，將通訊狀態與執行狀態完全隔離。**
+
+---
 
 ## 🏗️ 核心設計：SessionManager 與 TaskManager 的雙層分離
 
-SuperNova 並非傳統的「聊天機器人」，它試圖透過雙層管理機制來分離「溝通狀態」與「執行狀態」：
+SuperNova 的 Runtime 核心由兩個對稱的管理者組成，分別維護系統的兩大生命週期：
 
 ### 1. 會話層 (SessionManager - Communication State)
-*   **職責**：維護與用戶的溝通連貫性，記錄人機對話與任務的高階摘要。
-*   **目的**：讓 MainAgent 始終專注於與用戶的溝通，不被底層技術報錯或複雜的執行日誌干擾。
+*   **職責**：維護與用戶的溝通連貫性，記錄人機對話與任務的高階狀態摘要。
+*   **核心**：`Session.ts`。它確保 MainAgent 始終在用戶可理解的層次上進行決策，保持 Context 的高度精煉。
 
 ### 2. 執行層 (TaskManager - Execution State)
-*   **職責**：負責任務的動態規劃、並行調度、以及任務圖 (TaskGraph) 的維護。
-*   **目的**：確保任務執行的可靠性，記錄所有詳細的工具呼叫數據，支持異步的背景操作。
+*   **職責**：負責任務的動態規劃、並行調度以及執行路徑的維持。
+*   **核心**：`TaskGraph.ts`。它記錄了所有工具呼叫的原始數據 (OpLog) 與依賴關係，支持背景異步執行。
 
 ---
 
 ## 🤖 代理架構：遞歸編排與協作 (Agentic Core)
 
-SuperNova 的代理系統採用了具備高度靈活性的編排模型：
+SuperNova 的代理系統不再是單純的「腳本執行員」，而是一套具備 **遞歸能力 (Recursive Orchestration)** 的協作網絡：
 
--   **主代理 (MainAgent) 的多重角色**：
-    -   **任務調度**：MainAgent 可以直接調用工具來提交目標給 `TaskManager`，觸發自動規劃流。
-    -   **子任務指派**：MainAgent 具備建立子任務與指派子代理 (WorkerAgent) 的能力。
-    -   **同行協作 (Recursive Orchestration)**：MainAgent 可以指派任務給另一個 MainAgent。例如：一個「研究型 MainAgent」可以將程式實作部分的子目標，指派給一個「開發型 MainAgent」，實現複雜多段任務的深度協作。
--   **統一執行介面**：所有代理不論角色類型，均繼承自相同的基類並內建 ReAct 思考循環，確保了全系統行為的一致性。
+-   **主代理 (MainAgent) 的多維編排能力**：
+    -   **任務調度**：MainAgent 作為用戶目標的守護者，負責將高階目標提交給 `TaskManager` 進行拆解。
+    -   **子代理供給 (Provisioning)**：MainAgent 具備動態建立子任務並指派專屬 `WorkerAgent` 的能力，專注於執行特定的技術動作。
+    -   **同行遞歸協作 (Main-to-Main)**：這是 SuperNova 的核心特性。一個 MainAgent 可以根據任務需求，將複雜的子目標指派給另一個具備不同專業知識的 MainAgent。例如：
+        -   `Research MainAgent` 負責收集資訊與制定策略。
+        -   `Coder MainAgent` 負責根據策略編寫測試與實現功能。
+        -   兩者透過 `TaskManager` 在同一個 `TaskGraph` 中進行非同步協作。
+-   **統一執行引擎**：所有代理（無論 Main 或 Worker）均繼承自 `BaseAgent` 並內建 ReAct 思考循環，確保了全系統在行為決策上的一致性與可靠性。
+
+---
+
+## 🗺️ 系統架構全景圖 (Runtime System Map)
+
+```mermaid
+flowchart TD
+
+subgraph group_runtime["Runtime core"]
+  node_global_runtime["Global runtime<br/>composition root<br/>[GlobalRuntime.ts]"]
+  node_session_manager["Session manager<br/>conversation state<br/>[SessionManager.ts]"]
+  node_task_manager["Task manager<br/>execution state<br/>[TaskManager.ts]"]
+  node_session_model["Session<br/>domain model<br/>[Session.ts]"]
+  node_config["Config<br/>[Config.ts]"]
+end
+
+subgraph group_execution["Agents and tasks"]
+  node_task_planner["Task planner<br/>goal decomposition<br/>[TaskPlanner.ts]"]
+  node_main_agent["Main agent<br/>orchestrator agent<br/>[MainAgent.ts]"]
+  node_worker_agent["Worker agent<br/>execution agent<br/>[WorkerAgent.ts]"]
+  node_base_agent["Base agent<br/>agent base<br/>[BaseAgent.ts]"]
+  node_task_graph["Task graph<br/>domain model<br/>[TaskGraph.ts]"]
+  node_task_model["Task<br/>domain model<br/>[Task.ts]"]
+end
+
+subgraph group_support["Infra and tools"]
+  node_event_bus(("Event bus<br/>coordination bus<br/>[EventBus.ts]"))
+  node_mutation_validator{{"Mutation validator<br/>state guard"}}
+  node_log_manager["Log manager<br/>observability<br/>[LogManager.ts]"]
+  node_task_repository[("Task repo<br/>filesystem persistence")]
+  node_session_repository[("Session repo<br/>filesystem persistence")]
+  node_agent_repository[("Agent repo<br/>filesystem persistence")]
+  node_tool_registry["Tool registry<br/>tool catalog<br/>[ToolRegistry.ts]"]
+  node_core_tools["Core tools<br/>orchestration tools"]
+  node_common_tools["Common tools<br/>general tools"]
+  node_file_tools["File tools<br/>workspace tools"]
+end
+
+subgraph group_assets["Prompts and profiles"]
+  node_prompt_assets["Prompt assets<br/>prompt library"]
+  node_agent_profiles["Agent profiles<br/>agent configs"]
+end
+
+node_global_runtime -->|"loads"| node_config
+node_global_runtime -->|"wires"| node_session_manager
+node_global_runtime -->|"wires"| node_task_manager
+node_global_runtime -->|"wires"| node_tool_registry
+node_global_runtime -->|"wires"| node_event_bus
+node_global_runtime -->|"wires"| node_log_manager
+node_session_manager -->|"stores"| node_session_model
+node_session_manager -->|"persists"| node_session_repository
+node_task_manager -->|"stores"| node_task_model
+node_task_manager -->|"tracks"| node_task_graph
+node_task_manager -->|"persists"| node_task_repository
+node_task_manager -->|"validates"| node_mutation_validator
+node_task_planner -->|"produces"| node_task_graph
+node_main_agent -->|"extends"| node_base_agent
+node_worker_agent -->|"extends"| node_base_agent
+node_main_agent -->|"plans"| node_task_planner
+node_main_agent -->|"delegates"| node_worker_agent
+node_main_agent -->|"uses"| node_tool_registry
+node_worker_agent -->|"uses"| node_tool_registry
+node_tool_registry -->|"contains"| node_core_tools
+node_tool_registry -->|"contains"| node_common_tools
+node_tool_registry -->|"contains"| node_file_tools
+node_core_tools -->|"controls"| node_task_manager
+node_core_tools -->|"reads"| node_agent_repository
+node_event_bus -->|"publishes"| node_session_manager
+node_event_bus -->|"publishes"| node_task_manager
+node_task_manager -->|"emits"| node_event_bus
+node_session_manager -->|"emits"| node_event_bus
+node_agent_profiles -->|"configures"| node_main_agent
+node_prompt_assets -->|"guides"| node_main_agent
+
+click node_global_runtime "https://github.com/yan-930521/supernova/blob/main/src/runtime/GlobalRuntime.ts"
+click node_session_manager "https://github.com/yan-930521/supernova/blob/main/src/manager/SessionManager.ts"
+click node_task_manager "https://github.com/yan-930521/supernova/blob/main/src/manager/TaskManager.ts"
+click node_task_planner "https://github.com/yan-930521/supernova/blob/main/src/task/TaskPlanner.ts"
+click node_main_agent "https://github.com/yan-930521/supernova/blob/main/src/agent/MainAgent.ts"
+click node_worker_agent "https://github.com/yan-930521/supernova/blob/main/src/agent/WorkerAgent.ts"
+click node_base_agent "https://github.com/yan-930521/supernova/blob/main/src/agent/BaseAgent.ts"
+click node_task_graph "https://github.com/yan-930521/supernova/blob/main/src/models/TaskGraph.ts"
+click node_session_model "https://github.com/yan-930521/supernova/blob/main/src/models/Session.ts"
+click node_task_model "https://github.com/yan-930521/supernova/blob/main/src/models/Task.ts"
+click node_event_bus "https://github.com/yan-930521/supernova/blob/main/src/infra/EventBus.ts"
+click node_mutation_validator "https://github.com/yan-930521/supernova/blob/main/src/infra/MutationValidator.ts"
+click node_log_manager "https://github.com/yan-930521/supernova/blob/main/src/infra/LogManager.ts"
+click node_task_repository "https://github.com/yan-930521/supernova/blob/main/src/infra/storage/FileSystemTaskRepository.ts"
+click node_session_repository "https://github.com/yan-930521/supernova/blob/main/src/infra/storage/FileSystemSessionRepository.ts"
+click node_agent_repository "https://github.com/yan-930521/supernova/blob/main/src/infra/storage/FileSystemAgentRepository.ts"
+click node_tool_registry "https://github.com/yan-930521/supernova/blob/main/src/tool/ToolRegistry.ts"
+click node_core_tools "https://github.com/yan-930521/supernova/tree/main/src/tool/core"
+click node_common_tools "https://github.com/yan-930521/supernova/tree/main/src/tool/common"
+click node_file_tools "https://github.com/yan-930521/supernova/tree/main/src/tool/file"
+click node_prompt_assets "https://github.com/yan-930521/supernova/tree/main/prompts"
+click node_agent_profiles "https://github.com/yan-930521/supernova/tree/main/agents"
+click node_config "https://github.com/yan-930521/supernova/blob/main/src/config/Config.ts"
+
+classDef toneNeutral fill:#f8fafc,stroke:#334155,stroke-width:1.5px,color:#0f172a
+classDef toneBlue fill:#dbeafe,stroke:#2563eb,stroke-width:1.5px,color:#172554
+classDef toneAmber fill:#fef3c7,stroke:#d97706,stroke-width:1.5px,color:#78350f
+classDef toneMint fill:#dcfce7,stroke:#16a34a,stroke-width:1.5px,color:#14532d
+classDef toneRose fill:#ffe4e6,stroke:#e11d48,stroke-width:1.5px,color:#881337
+classDef toneIndigo fill:#e0e7ff,stroke:#4f46e5,stroke-width:1.5px,color:#312e81
+classDef toneTeal fill:#ccfbf1,stroke:#0f766e,stroke-width:1.5px,color:#134e4a
+class node_global_runtime,node_session_manager,node_task_manager,node_session_model,node_config toneBlue
+class node_task_planner,node_main_agent,node_worker_agent,node_base_agent,node_task_graph,node_task_model toneAmber
+class node_event_bus,node_mutation_validator,node_log_manager,node_task_repository,node_session_repository,node_agent_repository,node_tool_registry,node_core_tools,node_common_tools,node_file_tools toneMint
+class node_prompt_assets,node_agent_profiles toneRose
+```
 
 ---
 
