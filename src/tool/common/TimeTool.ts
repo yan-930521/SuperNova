@@ -9,15 +9,16 @@ import { BaseTool } from '../BaseTool';
  */
 export class TimeTool extends BaseTool {
   constructor() {
-    super(
-      'get_now',
-      'Get the current system time and date.',
-      'TIER_1',
-      ['utility'],
-      z.object({
+    super({
+      name: 'get_now',
+      description: 'Get the current system time and date.',
+      category: 'common',
+      safety_tier: 'TIER_1',
+      required_capabilities: ['utility'],
+      schema: z.object({
         timezone: z.string().optional().describe('Optional timezone (e.g., "Asia/Taipei"). Defaults to system timezone.')
       })
-    );
+    });
   }
 
   async run(input: { timezone?: string }, _context: IAgentExecuteContext): Promise<any> {

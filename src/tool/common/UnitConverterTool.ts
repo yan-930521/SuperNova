@@ -9,17 +9,18 @@ import { BaseTool } from '../BaseTool';
  */
 export class UnitConverterTool extends BaseTool {
   constructor() {
-    super(
-      'unit_converter',
-      'Convert between different units (length, weight, temperature).',
-      'TIER_1',
-      ['utility'],
-      z.object({
+    super({
+      name: 'unit_converter',
+      description: 'Convert between different units (length, weight, temperature).',
+      category: 'common',
+      safety_tier: 'TIER_1',
+      required_capabilities: ['utility'],
+      schema: z.object({
         value: z.number().describe('The value to convert.'),
         from: z.string().describe('Source unit (e.g., "km", "kg", "celsius").'),
         to: z.string().describe('Target unit (e.g., "mile", "lb", "fahrenheit").')
       })
-    );
+    });
   }
 
   async run(input: { value: number; from: string; to: string }, _context: IAgentExecuteContext): Promise<any> {

@@ -1,5 +1,5 @@
 import { recorder } from '../infra/LogManager';
-import { ISessionRepository } from '../infra/types/session';
+import { ISessionRepository, MessageDTO } from '../infra/types/session';
 import { Session } from '../models/Session';
 
 /**
@@ -72,12 +72,19 @@ export class SessionManager {
   }
 
   /**
-   * 刪除會話 (同時清理緩存與持久層 - 注意：實務中通常建議僅 ARCHIVE)
+   * 僅附加一條訊息到會話歷史 (效能優化)
+   */
+  async appendMessage(id: string, message: MessageDTO): Promise<void> {
+    await this.repo.appendMessage(id, message);
+    recorder.debug(`[SessionManager] Message appended to session ${id}.`);
+  }
+
+  /**
+   * 刪除會話
    */
   async deleteSession(id: string): Promise<void> {
     recorder.info(`[SessionManager] Deleting session: ${id}`, { type: 'LIFECYCLE' });
     this.sessions.delete(id);
-    // 註：目前 ISessionRepository 尚未定義 delete 方法，若有需要應於介面補齊
   }
 
   /**
@@ -85,16 +92,5 @@ export class SessionManager {
    */
   getAllActiveSessions(): Session[] {
     return Array.from(this.sessions.values());
-  }
-
-  /**
-   * 從 JSON 恢復會話 (舊版兼容介面)
-   */
-  async restoreFromJSON(data: Record<string, any>): Promise<Session> {
-    const session = new Session(data.id, data.goal, data.responsibleAgentId, data.userId);
-    await session.initFromJSON(data);
-    this.sessions.set(session.id, session);
-    await this.repo.save(session.toDTO());
-    return session;
   }
 }

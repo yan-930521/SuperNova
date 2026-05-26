@@ -2,7 +2,7 @@ import * as path from 'path';
 import { z } from 'zod';
 
 import { IAgentExecuteContext } from '../../infra/types/agent';
-import { BaseTool, ToolSafetyTier } from '../BaseTool';
+import { BaseTool, ToolMetadata } from '../BaseTool';
 
 /**
  * BaseFileTool
@@ -19,14 +19,8 @@ export abstract class BaseFileTool<TIn = any, TOut = any> extends BaseTool<TIn, 
     'package-lock.json'
   ];
 
-  constructor(
-    name: string,
-    description: string,
-    safety_tier: ToolSafetyTier,
-    required_capabilities: string[] = [],
-    schema: z.ZodType<TIn> = z.any() as any
-  ) {
-    super(name, description, safety_tier, required_capabilities, schema);
+  constructor(metadata: ToolMetadata<TIn>) {
+    super(metadata);
     this.PROJECT_ROOT = path.resolve(process.cwd());
     this.WORKSPACE_DIR = path.resolve(this.PROJECT_ROOT, 'workspace');
   }

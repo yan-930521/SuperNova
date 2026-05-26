@@ -35,13 +35,14 @@ export class TavilySearchTool extends BaseTool<TavilySearchInput, any> {
   private innerTool: TavilySearch;
 
   constructor() {
-    super(
-      'web_search',
-      'Search the web using Tavily API for real-time information.',
-      'TIER_1',
-      ['WEB_SEARCH'],
-      TavilySearchSchema
-    );
+    super({
+      name: 'web_search',
+      description: 'Search the web using Tavily API for real-time information.',
+      category: 'common',
+      safety_tier: 'TIER_1',
+      required_capabilities: ['WEB_SEARCH'],
+      schema: TavilySearchSchema
+    });
 
     this.innerTool = new TavilySearch({
       maxResults: 5

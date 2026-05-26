@@ -11,13 +11,14 @@ import { BaseTool } from '../BaseTool';
  */
 export class AgentListTool extends BaseTool {
   constructor() {
-    super(
-      'agent_list',
-      'List all active agents that you are authorized to coordinate.',
-      'TIER_1',
-      ['admin'],
-      z.object({})
-    );
+    super({
+      name: 'agent_list',
+      description: 'List all active agents that you are authorized to coordinate.',
+      category: 'core',
+      safety_tier: 'TIER_1',
+      required_capabilities: ['admin'],
+      schema: z.object({})
+    });
   }
 
   async run(_input: any, context: IAgentExecuteContext): Promise<any> {

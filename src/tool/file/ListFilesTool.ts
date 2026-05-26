@@ -10,15 +10,16 @@ import { BaseFileTool } from './BaseFileTool';
  */
 export class ListFilesTool extends BaseFileTool<{ path?: string }, string[]> {
   constructor() {
-    super(
-      'list_files',
-      'List files and directories. The path is relative to your current sandbox root.',
-      'TIER_1',
-      ['file_read'],
-      z.object({
+    super({
+      name: 'list_files',
+      description: 'List files and directories. The path is relative to your current sandbox root.',
+      category: 'file',
+      safety_tier: 'TIER_1',
+      required_capabilities: ['file_read'],
+      schema: z.object({
         path: z.string().optional().describe("Target directory path. Defaults to '.' (sandbox root). Do NOT include 'workspace/' prefix.")
       })
-    );
+    });
   }
 
   async run(input: { path?: string }, context: IAgentExecuteContext): Promise<string[]> {

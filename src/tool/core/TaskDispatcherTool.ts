@@ -10,15 +10,16 @@ import { BaseTool } from '../BaseTool';
  */
 export class TaskDispatcherTool extends BaseTool {
   constructor() {
-    super(
-      'task_dispatcher',
-      'Submit a high-level goal to the system for automatic planning and parallel execution.',
-      'TIER_2',
-      ['planning'],
-      z.object({
+    super({
+      name: 'task_dispatcher',
+      description: 'Submit a high-level goal to the system for automatic planning and parallel execution.',
+      category: 'core',
+      safety_tier: 'TIER_2',
+      required_capabilities: ['planning'],
+      schema: z.object({
         goal: z.string().describe('The overall objective to achieve.')
       })
-    );
+    });
   }
 
   async run(input: any, context: IAgentExecuteContext): Promise<any> {

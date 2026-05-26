@@ -11,17 +11,18 @@ import { BaseTool } from '../BaseTool';
  */
 export class TaskAssignTool extends BaseTool {
   constructor() {
-    super(
-      'task_assign',
-      'Assign a specific task to an agent. You must be authorized to coordinate the target agent.',
-      'TIER_2',
-      ['orchestration'],
-      z.object({
+    super({
+      name: 'task_assign',
+      description: 'Assign a specific task to an agent. You must be authorized to coordinate the target agent.',
+      category: 'core',
+      safety_tier: 'TIER_2',
+      required_capabilities: ['orchestration'],
+      schema: z.object({
         chainId: z.string().describe('The ID of the task chain.'),
         taskId: z.string().describe('The ID of the task to assign.'),
         agentId: z.string().describe('The ID of the agent to assign the task to.')
       })
-    );
+    });
   }
 
   async run(input: any, context: IAgentExecuteContext): Promise<any> {

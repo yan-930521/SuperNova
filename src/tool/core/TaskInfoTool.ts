@@ -10,16 +10,17 @@ import { BaseTool } from '../BaseTool';
  */
 export class TaskInfoTool extends BaseTool {
   constructor() {
-    super(
-      'task_info',
-      'Get detailed information about a specific task node.',
-      'TIER_1',
-      ['orchestration'],
-      z.object({
+    super({
+      name: 'task_info',
+      description: 'Get detailed information about a specific task node.',
+      category: 'core',
+      safety_tier: 'TIER_1',
+      required_capabilities: ['orchestration'],
+      schema: z.object({
         chainId: z.string().describe('The ID of the task chain.'),
         taskId: z.string().describe('The ID of the specific task node.')
       })
-    );
+    });
   }
 
   async run(input: any, context: IAgentExecuteContext): Promise<any> {

@@ -8,6 +8,7 @@ SuperNova 2.0 採用 **「狀態分離與職責解耦」**。系統明確區分 
 ### 2.1 會話層 (Session - Conversation Ledger)
 - **定位:** 輕量級、面向對話的記錄器。
 - **內容:** 儲存用戶原始目標、對話歷史及任務引擎回傳的高階狀態摘要。
+- **指派機制:** 當一個 Session 被建立時，系統會從 `AgentRegistry` 中選取或建立一個 **MainAgent** 並與之綁定。該 MainAgent 成為該會話的首席負責人與用戶交互唯一窗口。
 - **職責:** 負責維護與用戶的「溝通連貫性」。
 
 ### 2.2 任務層 (Task System - Execution Ledger)
@@ -28,7 +29,7 @@ SuperNova 2.0 採用 **「狀態分離與職責解耦」**。系統明確區分 
 
 ### 3.2 遞歸編排模型 (Recursive Orchestration)
 所有代理類（MainAgent, WorkerAgent）均繼承自 `BaseAgent` 並共用 `execute` 接口。這允許：
-- **層級指派**: MainAgent A 可以指派任務給 MainAgent B (如 Coder)，後者再進一步拆解子任務。
+- **同行/層級指派**: MainAgent 之間可以互相指派任務。例如：通用型 MainAgent 可以指派專業任務給 Coder型 MainAgent。
 - **統一調用**: 任務管理器 (TaskManager) 以多態方式調用所有代理，不需區分角色類型。
 
 ## 4. 雙環執行模式 (Dual-Loop)
@@ -43,4 +44,6 @@ SuperNova 2.0 採用 **「狀態分離與職責解耦」**。系統明確區分 
 ## 5. 執行安全與隔離 (Execution Sandbox)
 - **路徑重定向**: 所有檔案工具自動將相對路徑映射至 `workspace/` 目錄。
 - **逃逸偵測**: 嚴禁透過 `..` 跳轉訪問沙盒外的敏感檔案（如 `.env`）。
+- **無狀態 Worker**: 所有的執行上下文、依賴結果與操作權限由「任務層」在派發時注入。
+�過 `..` 跳轉訪問沙盒外的敏感檔案（如 `.env`）。
 - **無狀態 Worker**: 所有的執行上下文、依賴結果與操作權限由「任務層」在派發時注入。

@@ -10,16 +10,17 @@ import { BaseTool } from '../BaseTool';
  */
 export class WebFetchTool extends BaseTool {
   constructor() {
-    super(
-      'web_fetch',
-      'Fetch the content of a specific URL.',
-      'TIER_1',
-      ['network'],
-      z.object({
+    super({
+      name: 'web_fetch',
+      description: 'Fetch the content of a specific URL.',
+      category: 'common',
+      safety_tier: 'TIER_1',
+      required_capabilities: ['network'],
+      schema: z.object({
         url: z.string().url().describe('The URL to fetch.'),
         format: z.enum(['text', 'json', 'html']).optional().default('text').describe('Expected response format.')
       })
-    );
+    });
   }
 
   async run(input: { url: string; format: string }, _context: IAgentExecuteContext): Promise<any> {

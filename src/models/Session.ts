@@ -4,18 +4,18 @@ import {
 } from '@langchain/core/messages';
 
 import { SystemEventType } from '../infra/types/events';
-import { SessionDTO, MessageRole } from '../infra/types/session';
+import { MessageDTO, MessageRole, SessionDTO } from '../infra/types/session';
 import { GlobalRuntime } from '../runtime/GlobalRuntime';
 
 /**
  * 會話狀態 Enum
  */
 export enum SessionStatus {
-  IDLE = 'IDLE',
-  RUNNING = 'RUNNING',
-  COMPLETED = 'COMPLETED',
-  INTERRUPTED = 'INTERRUPTED',
-  CRASHED = 'CRASHED'
+	IDLE = 'IDLE',
+	RUNNING = 'RUNNING',
+	COMPLETED = 'COMPLETED',
+	INTERRUPTED = 'INTERRUPTED',
+	CRASHED = 'CRASHED'
 }
 
 /**
@@ -23,161 +23,183 @@ export enum SessionStatus {
  * 負責追蹤與使用者的對話歷史以及高層次的 Worker 執行摘要。
  */
 export interface ISession {
-  /** 會話 UUID */
-  id: string;
-  /** 隸屬的用戶 ID */
-  userId: string;
-  /** 負責此會話的主代理 ID */
-  responsibleAgentId: string;
-  /** 當前狀態 */
-  status: SessionStatus;
-  /** 初始目標 */
-  goal: string;
-  /** 對話歷史 (總帳) - 使用 LangGraph 標準格式 */
-  history: BaseMessage[];
-  
-  /** 新增訊息到對話歷史 */
-  addMessage(role: MessageRole, content: string, metadata?: Record<string, any>): void;
-  /** 轉換為 DTO 用於持久化 */
-  toDTO(): SessionDTO;
-  /** 從 DTO 加載狀態 */
-  initFromDTO(dto: SessionDTO): Promise<void>;
+	/** 會話 UUID */
+	id: string;
+	/** 隸屬的用戶 ID */
+	userId: string;
+	/** 負責此會話的主代理 ID */
+	responsibleAgentId: string;
+	/** 當前狀態 */
+	status: SessionStatus;
+	/** 初始目標 */
+	goal: string;
+	/** 完整對話歷史 (包含身分數據) */
+	history: MessageDTO[];
+
+	/** 
+	 * 獲取純 LangChain 訊息序列 
+	 * 用於傳遞給推理引擎 (LLM)。
+	 */
+	getLangChainMessages(): BaseMessage[];
+
+	/** 新增訊息到對話歷史 */
+	addMessage(authorId: string, role: MessageRole, content: string, metadata?: Record<string, any>): void;
+	/** 轉換為 DTO 用於持久化 */
+	toDTO(): SessionDTO;
+	/** 從 DTO 加載狀態 */
+	initFromDTO(dto: SessionDTO): Promise<void>;
 }
 
 /**
  * Session (會話層實體)
  * 負責維護與用戶的「溝通連貫性」。
- * 它被定義為一個輕量級、面向對話的記錄器。
  */
 export class Session implements ISession {
-  /** 會話狀態管理 */
-  public status: SessionStatus = SessionStatus.IDLE;
-  
-  /** 
-   * 對話歷史：系統的「會話總帳」
-   * 採用 LangChain 的 BaseMessage 格式，以便直接與推理引擎對接。
-   */
-  public history: BaseMessage[] = [];
-  
-  /** 額外元數據存儲 */
-  protected _metadata: Record<string, any> = {};
+	/** 會話狀態管理 */
+	public status: SessionStatus = SessionStatus.IDLE;
 
-  /**
-   * 初始化 Session 並設置事件訂閱
-   */
-  constructor(
-    public id: string, 
-    public goal: string, 
-    public responsibleAgentId: string,
-    public userId: string = 'default-user'
-  ) {
-    this.setupSubscribers();
-  }
+	/** 
+	 * 對話歷史：系統的「會話總帳」
+	 * 封裝了 LangChain 訊息與額外的身分溯源數據。
+	 */
+	public history: MessageDTO[] = [];
 
-  /**
-   * 設置事件訂閱
-   */
-  private setupSubscribers() {
-    const bus = GlobalRuntime.getInstance().eventBus;
-    
-    // 訂閱 Worker 摘要事件
-    // 註：此處假設 TASK_COMPLETED 包含摘要資訊，或維持原有 SystemEvent 邏輯
-    bus.subscribe(SystemEventType.TASK_COMPLETED, (event) => {
-      if (event.sessionId === this.id) {
-        this.addMessage(MessageRole.WORKER, event.payload.summary || 'Task completed', { taskId: event.payload.taskId });
-      }
-    });
+	/** 額外元數據存儲 */
+	protected _metadata: Record<string, any> = {};
 
-    // 訂閱生命週期事件
-    bus.subscribe(SystemEventType.SESSION_CREATED, (event) => {
-      if (event.sessionId === this.id) this.status = SessionStatus.RUNNING;
-    });
+	/**
+	 * 初始化 Session 並設置事件訂閱
+	 */
+	constructor(
+		public id: string,
+		public goal: string,
+		public responsibleAgentId: string,
+		public userId: string = 'default-user'
+	) {
+		this.setupSubscribers();
+	}
 
-    // 其他事件可依需求擴展...
-  }
+	/**
+	 * 設置事件訂閱
+	 */
+	private setupSubscribers() {
+		const runtime = GlobalRuntime.getInstance();
+		if (!runtime) return;
 
-  /**
-   * 新增訊息到對話歷史
-   * @param role 角色 (Enum)
-   * @param content 訊息內容
-   * @param metadata 額外元數據 (例如 tool_call_id)
-   */
-  addMessage(role: MessageRole, content: string, metadata: Record<string, any> = {}) {
-    let message: BaseMessage;
+		const bus = runtime.eventBus;
 
-    switch (role) {
-      case MessageRole.USER:
-        message = new HumanMessage({ content });
-        break;
-      case MessageRole.ASSISTANT:
-        message = new AIMessage({ content });
-        break;
-      case MessageRole.SYSTEM:
-        message = new SystemMessage({ content });
-        break;
-      case MessageRole.TOOL:
-        message = new ToolMessage({ 
-          content, 
-          tool_call_id: metadata.tool_call_id || `tool-${Date.now()}` 
-        });
-        break;
-      case MessageRole.WORKER:
-        // Worker 摘要在對話歷史中視為 AI 的一種行為觀察
-        message = new AIMessage({ 
-          content: `[Worker Observation] ${content}`,
-          additional_kwargs: { is_worker_summary: true, ...metadata }
-        });
-        break;
-      default:
-        message = new SystemMessage({ content: `[${role}] ${content}` });
-    }
+		// 訂閱 Worker 摘要事件
+		bus.subscribe(SystemEventType.TASK_COMPLETED, (event) => {
+			if (event.sessionId === this.id) {
+				this.addMessage(
+					event.payload.agentId || 'system-worker',
+					MessageRole.WORKER,
+					event.payload.summary || 'Task completed',
+					{ taskId: event.payload.taskId }
+				);
+			}
+		});
 
-    this.history.push(message);
-  }
+		// 訂閱生命週期事件
+		bus.subscribe(SystemEventType.SESSION_CREATED, (event) => {
+			if (event.sessionId === this.id) this.status = SessionStatus.RUNNING;
+		});
+	}
 
-  /**
-   * 轉換為 DTO
-   */
-  toDTO(): SessionDTO {
-    return {
-      id: this.id,
-      userId: this.userId,
-      responsibleAgentId: this.responsibleAgentId,
-      goal: this.goal,
-      status: this.status.toString(),
-      history: this.history.map(m => m.toDict()),
-      metadata: this._metadata
-    };
-  }
+	/**
+	 * 獲取純 LangChain 訊息序列
+	 */
+	public getLangChainMessages(): BaseMessage[] {
+		return this.history.map(item => item.message);
+	}
 
-  /**
-   * 從 DTO 初始化
-   */
-  async initFromDTO(dto: SessionDTO): Promise<void> {
-    this.id = dto.id;
-    this.userId = dto.userId;
-    this.responsibleAgentId = dto.responsibleAgentId;
-    this.goal = dto.goal;
-    this.status = dto.status as SessionStatus;
-    
-    if (dto.history && Array.isArray(dto.history)) {
-      this.history = mapStoredMessagesToChatMessages(dto.history);
-    }
-    
-    this._metadata = dto.metadata || {};
-  }
+	/**
+	 * 新增訊息到對話歷史
+	 * @param authorId 發送者 ID (User ID 或 Agent ID)
+	 * @param role 角色 (Enum)
+	 * @param content 訊息內容
+	 * @param metadata 額外元數據
+	 */
+	addMessage(authorId: string, role: MessageRole, content: string, metadata: Record<string, any> = {}) {
+		let message: BaseMessage;
 
-  /**
-   * 舊版序列化兼容 (toJSON)
-   */
-  toJSON(): Record<string, any> {
-    return this.toDTO() as any;
-  }
+		switch (role) {
+			case MessageRole.USER:
+				message = new HumanMessage({ content });
+				break;
+			case MessageRole.ASSISTANT:
+				message = new AIMessage({ content });
+				break;
+			case MessageRole.SYSTEM:
+				message = new SystemMessage({ content });
+				break;
+			case MessageRole.TOOL:
+				message = new ToolMessage({
+					content,
+					tool_call_id: metadata.tool_call_id || `tool-${Date.now()}`
+				});
+				break;
+			case MessageRole.WORKER:
+				message = new AIMessage({
+					content: `[Worker Observation] ${content}`,
+					additional_kwargs: { is_worker_summary: true, ...metadata }
+				});
+				break;
+			default:
+				message = new SystemMessage({ content: `[${role}] ${content}` });
+		}
 
-  /**
-   * 舊版初始化兼容 (initFromJSON)
-   */
-  async initFromJSON(data: Record<string, any>): Promise<void> {
-    return this.initFromDTO(data as any);
-  }
+		// 封裝為 MessageDTO
+		const dto: MessageDTO = {
+			message,
+			identity: {
+				role,
+				authorId,
+				name: metadata.authorName || authorId,
+				...metadata
+			}
+		};
+
+		this.history.push(dto);
+	}
+
+	/**
+	 * 轉換為 DTO
+	 */
+	toDTO(): SessionDTO {
+		return {
+			id: this.id,
+			userId: this.userId,
+			responsibleAgentId: this.responsibleAgentId,
+			goal: this.goal,
+			status: this.status.toString(),
+			history: this.history, // MessageDTO[]
+			metadata: this._metadata
+		};
+	}
+
+	/**
+	 * 從 DTO 初始化
+	 */
+	async initFromDTO(dto: SessionDTO): Promise<void> {
+		this.id = dto.id;
+		this.userId = dto.userId;
+		this.responsibleAgentId = dto.responsibleAgentId;
+		this.goal = dto.goal;
+		this.status = dto.status as SessionStatus;
+
+		if (dto.history && Array.isArray(dto.history)) {
+			// 將存儲的 JSON 數據還原為 MessageDTO
+			this.history = dto.history.map(item => {
+				// 使用 LangChain 的工具將儲存的訊息字典轉回訊息對象
+				const chatMessages = mapStoredMessagesToChatMessages([item.message as any]);
+				return {
+					message: chatMessages[0],
+					identity: item.identity
+				};
+			});
+		}
+
+		this._metadata = dto.metadata || {};
+	}
 }

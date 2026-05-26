@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { ModelPreset } from '../../infra/ModelRegistry';
+import { ModelPreset } from '../../infra/types/agent';
 import { IAgentExecuteContext } from '../../infra/types/agent';
 import { GlobalRuntime } from '../../runtime/GlobalRuntime';
 import { BaseTool } from '../BaseTool';
@@ -11,16 +11,17 @@ import { BaseTool } from '../BaseTool';
  */
 export class TextSummarizerTool extends BaseTool {
   constructor() {
-    super(
-      'text_summarizer',
-      'Summarize long text into concise insights.',
-      'TIER_1',
-      ['utility'],
-      z.object({
+    super({
+      name: 'text_summarizer',
+      description: 'Summarize long text into concise insights.',
+      category: 'common',
+      safety_tier: 'TIER_1',
+      required_capabilities: ['utility'],
+      schema: z.object({
         text: z.string().describe('The long text to summarize.'),
         max_words: z.number().optional().default(100).describe('Target summary length in words.')
       })
-    );
+    });
   }
 
   async run(input: { text: string; max_words: number }, _context: IAgentExecuteContext): Promise<any> {

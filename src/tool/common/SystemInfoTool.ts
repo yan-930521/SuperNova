@@ -10,13 +10,14 @@ import { BaseTool } from '../BaseTool';
  */
 export class SystemInfoTool extends BaseTool {
   constructor() {
-    super(
-      'system_info',
-      'Get information about the operating system and hardware.',
-      'TIER_1',
-      ['utility'],
-      z.object({})
-    );
+    super({
+      name: 'system_info',
+      description: 'Get information about the operating system and hardware.',
+      category: 'common',
+      safety_tier: 'TIER_1',
+      required_capabilities: ['utility'],
+      schema: z.object({})
+    });
   }
 
   async run(_input: any, _context: IAgentExecuteContext): Promise<any> {

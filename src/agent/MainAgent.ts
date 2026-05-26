@@ -1,14 +1,7 @@
 import { recorder } from '../infra/LogManager';
-import { IAgentExecuteContext, IAgentExecuteResult } from '../infra/types/agent';
+import { IAgentExecuteContext, IAgentExecuteResult, ModelPreset } from '../infra/types/agent';
 import { MessageRole } from '../infra/types/session';
 import { Session } from '../models/Session';
-import { AgentListTool } from '../tool/core/AgentListTool';
-import { AgentRegisterTool } from '../tool/core/AgentRegisterTool';
-import { TaskAssignTool } from '../tool/core/TaskAssignTool';
-import { TaskCreateTool } from '../tool/core/TaskCreateTool';
-import { TaskDispatcherTool } from '../tool/core/TaskDispatcherTool';
-import { TaskInfoTool } from '../tool/core/TaskInfoTool';
-import { TaskListTool } from '../tool/core/TaskListTool';
 import { BaseAgent } from './BaseAgent';
 
 /**
@@ -21,15 +14,23 @@ export class MainAgent extends BaseAgent {
 	 */
 	constructor(id: string) {
 		super(id, 'MAIN_AGENT');
+	}
 
-		// 核心編排與查詢工具
-		this.registerTool(new TaskDispatcherTool());
-		this.registerTool(new TaskCreateTool());
-		this.registerTool(new TaskAssignTool());
-		this.registerTool(new TaskListTool());
-		this.registerTool(new TaskInfoTool());
-		this.registerTool(new AgentListTool());
-		this.registerTool(new AgentRegisterTool());
+	/**
+	 * 註冊 MainAgent 特有的編排工具
+	 */
+	public registerDefaultTools(): void {
+		super.registerDefaultTools(); // 先註冊通用工具
+		if (!this.runtime) return;
+
+		// 從 ToolRegistry 獲取核心編排工具
+		const coreTools = this.runtime.toolRegistry.getToolsByCategory('core');
+		coreTools.forEach(t => this.registerTool(t));
+
+		recorder.info(`MainAgent [${this.id}] registered ${coreTools.length} core tools.`, { 
+			type: 'SYSTEM',
+			agent_id: this.id 
+		});
 	}
 
 	/**
@@ -42,12 +43,21 @@ export class MainAgent extends BaseAgent {
 			type: 'LIFECYCLE'
 		});
 
+		if (!this.runtime) {
+			throw new Error(`Agent [${this.id}] runtime not injected.`);
+		}
+
 		if (!this.reactAgent) {
-			this.buildExecutionEngine();
+			const model = this.runtime.modelRegistry.getRawModel(ModelPreset.SMART);
+			this.buildExecutionEngine(model);
 		}
 
 		// 1. 記錄使用者訊息到 Session
-		session.addMessage(MessageRole.USER, message);
+		session.addMessage(session.userId, MessageRole.USER, message);
+
+		// 立即附加使用者訊息到持久層 (使用 BaseMessage 的標準字典格式)
+		const userMsg = session.history[session.history.length - 1];
+		await this.runtime.sessionManager.appendMessage(session.id, userMsg);
 
 		try {
 			// 2. 執行 ReAct 引擎 (直接傳遞 Session 中的 BaseMessage[] 歷史)
@@ -69,7 +79,12 @@ export class MainAgent extends BaseAgent {
 			const finalResponse = typeof lastMessage.content === 'string' ? lastMessage.content : JSON.stringify(lastMessage.content);
 
 			// 4. 同步 Session 歷史
-			session.addMessage(MessageRole.ASSISTANT, finalResponse);
+			session.addMessage(this.id, MessageRole.ASSISTANT, finalResponse);
+
+			// 5. 附加助理回覆到持久層 (使用 BaseMessage 的標準字典格式)
+			const assistantMsg = session.history[session.history.length - 1];
+			await this.runtime.sessionManager.appendMessage(session.id, assistantMsg);
+
 			return finalResponse;
 
 		} catch (error: any) {

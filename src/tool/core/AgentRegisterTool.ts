@@ -10,16 +10,17 @@ import { BaseTool } from '../BaseTool';
  */
 export class AgentRegisterTool extends BaseTool {
   constructor() {
-    super(
-      'agent_register',
-      'Register or load a new agent into the system.',
-      'TIER_2',
-      ['admin'],
-      z.object({
+    super({
+      name: 'agent_register',
+      description: 'Register or load a new agent into the system.',
+      category: 'core',
+      safety_tier: 'TIER_2',
+      required_capabilities: ['admin'],
+      schema: z.object({
         agentId: z.string().describe('The ID of the agent to load.'),
         agentsDir: z.string().optional().describe('Optional custom directory to load from.')
       })
-    );
+    });
   }
 
   async run(input: any, context: IAgentExecuteContext): Promise<any> {

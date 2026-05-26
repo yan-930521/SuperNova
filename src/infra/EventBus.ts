@@ -1,5 +1,5 @@
-import { IEventBus, ISystemEvent, SystemEventType } from './types/events';
 import { recorder } from './LogManager';
+import { IEventBus, ISystemEvent, SystemEventType } from './types/events';
 
 /**
  * 事件總線 (EventBus)
@@ -66,20 +66,5 @@ export class EventBus implements IEventBus {
         this.handlers.delete(type);
       }
     }
-  }
-
-  /**
-   * 舊版相容性發布方法 (可選)
-   * 允許發布非強型別事件 (內部轉換為 TASK_FAILED 或其他合適類型)
-   */
-  publishLegacy(type: string, payload: any, sessionId: string = 'unknown'): void {
-    // 這裡可以根據需要進行映射
-    this.publish({
-      type: SystemEventType.TASK_FAILED, // 預設映射或根據 type 判斷
-      userId: 'system',
-      sessionId,
-      payload,
-      timestamp: Date.now()
-    });
   }
 }

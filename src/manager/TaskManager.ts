@@ -1,11 +1,10 @@
 import { v4 as uuidv4 } from 'uuid';
 
 import { recorder } from '../infra/LogManager';
-import {
-    ChainStatus, IChainStatusSummary, ITaskRequest, LogType, TaskStatus
-} from '../infra/types/task';
 import { SystemEventType } from '../infra/types/events';
-import { ITaskRepository } from '../infra/types/task';
+import {
+    ChainStatus, IChainStatusSummary, ITaskRepository, ITaskRequest, LogType, TaskStatus
+} from '../infra/types/task';
 import { AgentState } from '../models/AgentState';
 import { Task } from '../models/Task';
 import { TaskGraph } from '../models/TaskGraph';
@@ -142,8 +141,6 @@ export class TaskManager {
 
 		this.driveExecution(chainId).catch(() => { });
 	}
-
-	// --- 查詢介面 (兼容舊版 Tool 調用) ---
 
 	/**
 	 * 列出所有當前的任務鏈

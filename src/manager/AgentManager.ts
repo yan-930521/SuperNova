@@ -4,6 +4,8 @@ import { WorkerAgent } from '../agent/WorkerAgent';
 import { recorder } from '../infra/LogManager';
 import { IAgentRepository } from '../infra/types/agent';
 
+import type { GlobalRuntime } from '../runtime/GlobalRuntime';
+
 /**
  * 代理生命週期管理器 (AgentManager)
  * 負責從 IAgentRepository 加載代理配置，並將其動態實例化為活躍的代理對象。
@@ -11,6 +13,8 @@ import { IAgentRepository } from '../infra/types/agent';
 export class AgentManager {
   /** 內存緩存：儲存當前已實例化的代理對象 */
   private agents: Map<string, BaseAgent> = new Map();
+  /** 全局運行時實例 */
+  private runtime?: GlobalRuntime;
 
   /**
    * @param repo 注入代理儲存庫，負責底層配置 IO
@@ -18,10 +22,24 @@ export class AgentManager {
   constructor(private repo: IAgentRepository) {}
 
   /**
+   * 注入運行時實例
+   */
+  public setRuntime(runtime: GlobalRuntime): void {
+    this.runtime = runtime;
+    // 同步給已存在的 Agent (如果是手動註冊的)
+    for (const agent of this.agents.values()) {
+      agent.setRuntime(runtime);
+    }
+  }
+
+  /**
    * 手動註冊一個已存在的 Agent 實例
    */
   register(agent: BaseAgent): void {
     recorder.info(`[AgentManager] Registering agent instance: ${agent.id} (role: ${agent.role})`, { type: 'SYSTEM' });
+    if (this.runtime) {
+      agent.setRuntime(this.runtime);
+    }
     this.agents.set(agent.id, agent);
   }
 
@@ -67,8 +85,18 @@ export class AgentManager {
 
     // 將 DTO 屬性注入實體 (舊版 initFromJSON 的 DTO 版本)
     await agent.initFromJSON(dto);
+
+    // 1. 先注入運行時實例 (這是註冊工具的前置條件)
+    if (this.runtime) {
+      agent.setRuntime(this.runtime);
+    }
+
+    // 2. 再註冊工具 (此時才有 runtime.toolRegistry 可用)
+    (agent as any).registerDefaultTools();
+
     this.register(agent);
     return agent;
+
   }
 
   /**

@@ -10,16 +10,17 @@ import { BaseTool } from '../BaseTool';
  */
 export class CodeExecutorTool extends BaseTool {
   constructor() {
-    super(
-      'code_executor',
-      'Execute JavaScript code in a sandboxed environment for data analysis or logic computation.',
-      'TIER_2',
-      ['coding'],
-      z.object({
+    super({
+      name: 'code_executor',
+      description: 'Execute JavaScript code in a sandboxed environment for data analysis or logic computation.',
+      category: 'common',
+      safety_tier: 'TIER_2',
+      required_capabilities: ['coding'],
+      schema: z.object({
         code: z.string().describe('The JavaScript code to execute.'),
         timeout: z.number().optional().default(5000).describe('Execution timeout in milliseconds.')
       })
-    );
+    });
   }
 
   async run(input: { code: string; timeout: number }, _context: IAgentExecuteContext): Promise<any> {

@@ -1,4 +1,16 @@
 /**
+ * 模型用途預設
+ */
+export enum ModelPreset {
+  /** 快速生成，適用於簡單的思維分支 */
+  FAST = 'fast',
+  /** 高智能，適用於複雜規劃與拆解 */
+  SMART = 'smart',
+  /** 嚴謹，專門用於評價與審核 */
+  EVAL = 'eval'
+}
+
+/**
  * 代理數據傳輸對象 (Agent Data Transfer Object)
  * 定義代理的靜態屬性、角色、能力以及與 LLM 對接的配置。
  */
@@ -11,8 +23,8 @@ export interface AgentDTO {
   identity: string;
   /** 代理具備的能力標籤清單，對齊工具調用權限 */
   capabilities: string[];
-  /** 偏好的模型預設：fast (快), smart (強), eval (評審) */
-  modelPreset: 'fast' | 'smart' | 'eval';
+  /** 偏好的模型預設 */
+  modelPreset: ModelPreset;
   /** 額外的運行時配置，如 temperature, max_tokens 等 */
   config: Record<string, any>;
 }

@@ -9,15 +9,16 @@ import { BaseTool } from '../BaseTool';
  */
 export class MathTool extends BaseTool {
   constructor() {
-    super(
-      'math_calculator',
-      'Perform precise mathematical calculations.',
-      'TIER_1',
-      ['utility'],
-      z.object({
+    super({
+      name: 'math_calculator',
+      description: 'Perform precise mathematical calculations.',
+      category: 'common',
+      safety_tier: 'TIER_1',
+      required_capabilities: ['utility'],
+      schema: z.object({
         expression: z.string().describe('The mathematical expression to evaluate (e.g., "Math.sqrt(144) + 12 * 5").')
       })
-    );
+    });
   }
 
   async run(input: { expression: string }, _context: IAgentExecuteContext): Promise<any> {

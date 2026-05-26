@@ -13,18 +13,19 @@ import { BaseTool } from '../BaseTool';
  */
 export class TaskCreateTool extends BaseTool {
   constructor() {
-    super(
-      'task_create',
-      'Create a new task node in the system. Can start a new chain or add to an existing one.',
-      'TIER_2',
-      ['orchestration'],
-      z.object({
+    super({
+      name: 'task_create',
+      description: 'Create a new task node in the system. Can start a new chain or add to an existing one.',
+      category: 'core',
+      safety_tier: 'TIER_2',
+      required_capabilities: ['orchestration'],
+      schema: z.object({
         goal: z.string().describe('The specific goal of the task.'),
         assignedAgentId: z.string().describe('ID of the agent to assign this task to.'),
         chainId: z.string().optional().describe('Existing chain ID. MANDATORY: Leave empty if starting a new goal. ONLY use IDs returned by previous tool calls.'),
         dependencies: z.array(z.string()).optional().describe('IDs of tasks this new task depends on.')
       })
-    );
+    });
   }
 
   async run(input: any, context: IAgentExecuteContext): Promise<any> {

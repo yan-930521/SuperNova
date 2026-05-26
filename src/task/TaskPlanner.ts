@@ -3,7 +3,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { END, START, StateGraph } from '@langchain/langgraph';
 
 import { recorder } from '../infra/LogManager';
-import { InferenceEngine, ModelPreset, ModelRegistry } from '../infra/ModelRegistry';
+import { InferenceEngine, ModelRegistry } from '../infra/ModelRegistry';
+import { ModelPreset } from '../infra/types/agent';
 import { TaskDTO, TaskGraphData } from '../infra/types/task';
 import { AgentState, AgentStateAnnotation } from '../models/AgentState';
 import { TaskGraph } from '../models/TaskGraph';
@@ -29,7 +30,6 @@ export class TaskPlanner {
     const smart = GlobalRuntime.getInstance().modelRegistry.getModel(ModelPreset.SMART);
     const evalModel = GlobalRuntime.getInstance().modelRegistry.getModel(ModelPreset.EVAL);
 
-    // 嚴格對標舊版 prompt 綁定邏輯
     this.milestoneEngine = smart.withSystemPrompt(
       PromptLoader.load('prompts/planning/milestone_plan.md', 'Plan milestones for goal: {goal}')
     );

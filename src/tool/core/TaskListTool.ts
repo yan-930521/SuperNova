@@ -10,15 +10,16 @@ import { BaseTool } from '../BaseTool';
  */
 export class TaskListTool extends BaseTool {
   constructor() {
-    super(
-      'task_list',
-      'List all current task chains and the status of all tasks within them.',
-      'TIER_1',
-      ['orchestration'],
-      z.object({
+    super({
+      name: 'task_list',
+      description: 'List all current task chains and the status of all tasks within them.',
+      category: 'core',
+      safety_tier: 'TIER_1',
+      required_capabilities: ['orchestration'],
+      schema: z.object({
         chainId: z.string().optional().describe('Optional ID of a specific chain to list tasks for.')
       })
-    );
+    });
   }
 
   async run(input: any, context: IAgentExecuteContext): Promise<any> {

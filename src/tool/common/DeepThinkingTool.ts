@@ -10,16 +10,17 @@ import { BaseTool } from '../BaseTool';
  */
 export class DeepThinkingTool extends BaseTool {
   constructor() {
-    super(
-      'deep_thinking',
-      'Perform deep logical reasoning or internal simulation for complex problems.',
-      'TIER_1',
-      ['reasoning'],
-      z.object({
+    super({
+      name: 'deep_thinking',
+      description: 'Perform deep logical reasoning or internal simulation for complex problems.',
+      category: 'common',
+      safety_tier: 'TIER_1',
+      required_capabilities: ['reasoning'],
+      schema: z.object({
         problem: z.string().describe('The complex problem or scenario to think about.'),
         steps: z.number().optional().default(3).describe('Number of reasoning steps to simulate.')
       })
-    );
+    });
   }
 
   async run(input: any, context: IAgentExecuteContext): Promise<any> {

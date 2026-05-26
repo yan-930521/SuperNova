@@ -12,16 +12,17 @@ import { BaseFileTool } from './BaseFileTool';
  */
 export class WriteFileTool extends BaseFileTool<{ path: string, content: string }, string> {
   constructor() {
-    super(
-      'write_file',
-      'Write content to a file. The path is relative to your current sandbox root.',
-      'TIER_2',
-      ['file_write'],
-      z.object({
+    super({
+      name: 'write_file',
+      description: 'Write content to a file. The path is relative to your current sandbox root.',
+      category: 'file',
+      safety_tier: 'TIER_2',
+      required_capabilities: ['file_write'],
+      schema: z.object({
         path: z.string().describe("Target file path (e.g., 'report.md' or 'logs/info.txt'). Do NOT include 'workspace/' prefix."),
         content: z.string().describe("Text content to write")
       })
-    );
+    });
   }
 
   async run(input: { path: string, content: string }, context: IAgentExecuteContext): Promise<string> {
