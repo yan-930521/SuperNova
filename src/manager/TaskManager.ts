@@ -21,6 +21,9 @@ export interface ITaskChainState {
   sessionId: string;
   traceId: string;
   goal: string;
+  milestones?: string[];
+  currentMilestoneIdx?: number;
+  projectedContext?: any;
 }
 
 /**
@@ -222,6 +225,11 @@ export class TaskManager {
 
 			const chain = this.chains.get(request.chainId)!;
 			chain.status = ChainStatus.RUNNING;
+			
+			// 存儲 JIT 需要的狀態
+			chain.milestones = finalState.planning?.milestones;
+			chain.currentMilestoneIdx = finalState.planning?.currentMilestoneIdx;
+			chain.projectedContext = finalState.planning?.projectedContext;
 
 			GlobalRuntime.getInstance().eventBus.publish({
 				type: SystemEventType.SESSION_CREATED,
@@ -246,14 +254,67 @@ export class TaskManager {
 		const readyTasks = chain.graph.getReadyTasks();
 		if (readyTasks.length === 0) {
 			const allTasks = chain.graph.getAllTasks();
-			if (allTasks.length > 0 && allTasks.every((n: any) => n.status === TaskStatus.COMPLETED)) {
-				chain.status = ChainStatus.COMPLETED;
-				recorder.info(`[TaskManager] Chain ${chainId} completed.`);
+			const isInitialAndEmpty = allTasks.length === 0 && chain.milestones && chain.milestones.length > 0;
+			const isMilestoneCompleted = allTasks.length > 0 && allTasks.every((n: any) => n.status === TaskStatus.COMPLETED);
+
+			if (isInitialAndEmpty || isMilestoneCompleted) {
+				const nextIdx = isInitialAndEmpty ? (chain.currentMilestoneIdx ?? 0) : (chain.currentMilestoneIdx ?? 0) + 1;
+				
+				if (chain.milestones && nextIdx < chain.milestones.length) {
+					await this.expandMilestone(chainId, nextIdx);
+				} else {
+					chain.status = ChainStatus.COMPLETED;
+					recorder.info(`[TaskManager] Chain ${chainId} completed.`);
+				}
 			}
 			return;
 		}
 
 		await Promise.all(readyTasks.map((tid: string) => this.executeNode(chainId, tid)));
+		await this.driveExecution(chainId);
+	}
+
+	private async expandMilestone(chainId: string, milestoneIdx: number) {
+		const chain = this.chains.get(chainId)!;
+		const agents = this.agentManager.getAllAgents().map(a => ({ id: a.id, role: a.role, capabilities: a.capabilities }));
+		
+		chain.currentMilestoneIdx = milestoneIdx;
+		
+		recorder.info(`[TaskManager] Expanding milestone ${chain.currentMilestoneIdx + 1}/${chain.milestones?.length}`, { type: LogType.PLAN });
+
+		const currentState: AgentState = {
+			goal: chain.goal,
+			currentTask: "",
+			messages: [],
+			thoughtTree: { nodes: [], rootId: null, activeNodeId: null, iterationCount: 0 },
+			planning: { 
+				milestones: chain.milestones || [], 
+				currentMilestoneIdx: chain.currentMilestoneIdx, 
+				taskGraph: (chain.graph as any).toJSON ? (chain.graph as any).toJSON() : { nodes: chain.graph.getAllTasks(), edges: [] }, 
+				projectedContext: chain.projectedContext || {} 
+			},
+			lastEvaluations: [],
+			errors: [],
+			metadata: { available_agents: agents, sessionId: chain.sessionId, traceId: chain.traceId }
+		};
+
+		const finalState = await this.planner.expandMilestone(currentState as any);
+		
+		if (!finalState.planning?.taskGraph) throw new Error("Milestone expansion produced no graph.");
+
+		const newNodes = finalState.planning.taskGraph.nodes.filter(n => !chain.graph.getTask(n.id));
+		for (const n of newNodes) {
+			const task = new Task({ ...n, sessionId: chain.sessionId });
+			await this.repo.save(task.toDTO());
+			chain.graph.addTask(n.id, n);
+			this.activeTasks.set(n.id, task);
+		}
+
+		// 同步更新里程碑索引（以 planner 返回的為準，如果有變化的話）
+		if (finalState.planning.currentMilestoneIdx !== undefined) {
+			chain.currentMilestoneIdx = finalState.planning.currentMilestoneIdx;
+		}
+
 		await this.driveExecution(chainId);
 	}
 
