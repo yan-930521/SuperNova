@@ -41,8 +41,33 @@ export class PulseEngine {
   private timer: NodeJS.Timeout | null = null;
   private tickCount: number = 0;
   private hooks: Map<string, IPulseHook> = new Map();
+  private statePool: Record<string, any> = {};
 
   constructor(private eventBus: IEventBus) {}
+
+  /**
+   * 設定狀態值
+   * 支援巢狀路徑，例如 'env.temp'
+   */
+  public setState(path: string, value: any): void {
+    const keys = path.split('.');
+    let current = this.statePool;
+    for (let i = 0; i < keys.length - 1; i++) {
+      if (!current[keys[i]] || typeof current[keys[i]] !== 'object') {
+        current[keys[i]] = {};
+      }
+      current = current[keys[i]];
+    }
+    current[keys[keys.length - 1]] = value;
+  }
+
+  /**
+   * 取得狀態值
+   * 支援巢狀路徑，例如 'env.temp'
+   */
+  public getState(path: string): any {
+    return path.split('.').reduce((obj, key) => obj?.[key], this.statePool);
+  }
 
   /**
    * 啟動引擎

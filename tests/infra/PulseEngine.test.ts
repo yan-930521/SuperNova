@@ -72,4 +72,32 @@ describe('PulseEngine', () => {
     jest.advanceTimersByTime(1000);
     expect(eventBus.publish).toHaveBeenCalledWith(expect.objectContaining({ type: 'TEST_EVENT' }));
   });
+
+  describe('State Pool', () => {
+    test('should set and get simple state values', () => {
+      pulseEngine.setState('temp', 25);
+      expect(pulseEngine.getState('temp')).toBe(25);
+    });
+
+    test('should set and get nested state values', () => {
+      pulseEngine.setState('env.temp', 22.5);
+      expect(pulseEngine.getState('env.temp')).toBe(22.5);
+      expect(pulseEngine.getState('env')).toEqual({ temp: 22.5 });
+    });
+
+    test('should return undefined for non-existent paths', () => {
+      expect(pulseEngine.getState('non.existent.path')).toBeUndefined();
+    });
+
+    test('should support deep nesting', () => {
+      pulseEngine.setState('a.b.c.d', 'value');
+      expect(pulseEngine.getState('a.b.c.d')).toBe('value');
+    });
+
+    test('should overwrite existing values', () => {
+      pulseEngine.setState('key', 'old');
+      pulseEngine.setState('key', 'new');
+      expect(pulseEngine.getState('key')).toBe('new');
+    });
+  });
 });
