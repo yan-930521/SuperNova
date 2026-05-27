@@ -22,7 +22,7 @@ export interface IPulseHook {
   config: {
     interval?: number; // For INTERVAL
     path?: string;     // For THRESHOLD (e.g., 'env.temp')
-    operator?: '>' | '<' | '==' | '>='; // For THRESHOLD
+    operator?: '>' | '<' | '==' | '>=' | '<=' | '!='; // For THRESHOLD
     threshold?: any;   // For THRESHOLD
     eventName?: string; // For EVENT
     logic?: (payload: any) => boolean; // For EVENT/THRESHOLD custom logic
@@ -86,7 +86,7 @@ export class PulseEngine {
    */
   private tick(): void {
     this.tickCount++;
-    console.log(`[PulseEngine] tick: ${this.tickCount}`);
+    recorder.debug(`[PulseEngine] tick: ${this.tickCount}`, { type: 'SYSTEM' });
     
     // 發布系統 Tick 事件
     this.eventBus.publish({
