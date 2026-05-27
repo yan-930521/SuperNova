@@ -39,6 +39,8 @@ export class TaskManager {
 		private repo: ITaskRepository
 	) {
 		this.planner = new TaskPlanner();
+		this.setupHeartbeatListener();
+		this.setupTaskFailureListener();
 	}
 
 	// --- 公開管理介面 (API) ---
@@ -265,7 +267,11 @@ export class TaskManager {
 
 		recorder.info(`[TaskManager] Executing: ${taskId} (${task.goal})`, { session_id: chain.sessionId });
 
+		const runtime = GlobalRuntime.getInstance();
 		try {
+			// 開始監控任務
+			runtime.pulseEngine.watchTask(taskId);
+
 			const agent = this.agentManager.getAgent(task.assignedAgentId || 'default-worker');
 			if (!agent) throw new Error(`Agent ${task.assignedAgentId} not found.`);
 
@@ -287,7 +293,62 @@ export class TaskManager {
 			task.fail(err.message);
 			await this.repo.save(task.toDTO());
 			chain.status = ChainStatus.FAILED;
+		} finally {
+			// 停止監控任務
+			runtime.pulseEngine.unwatchTask(taskId);
 		}
+	}
+
+	private setupHeartbeatListener() {
+		const runtime = GlobalRuntime.getInstance();
+		if (runtime && runtime.eventBus) {
+			runtime.eventBus.subscribe(SystemEventType.TASK_HEARTBEAT, (event) => {
+				const { taskId } = event.payload;
+				if (taskId) {
+					runtime.pulseEngine.updateHeartbeat(taskId);
+				}
+			});
+		}
+	}
+
+	private setupTaskFailureListener() {
+		const runtime = GlobalRuntime.getInstance();
+		if (runtime && runtime.eventBus) {
+			runtime.eventBus.subscribe(SystemEventType.TASK_FAILED, (event) => {
+				const { taskId, error } = event.payload;
+				if (error?.includes('timeout')) {
+					this.handleTaskFailure(taskId, error);
+				}
+			});
+		}
+	}
+
+	private async handleTaskFailure(taskId: string, error: string) {
+		const task = this.activeTasks.get(taskId);
+		if (!task) return;
+
+		recorder.error(`[TaskManager] Task ${taskId} failed: ${error}`);
+
+		task.fail(error);
+		await this.repo.save(task.toDTO());
+
+		const chainId = this.findChainIdByTaskId(taskId);
+		if (chainId) {
+			const chain = this.chains.get(chainId);
+			if (chain) {
+				chain.status = ChainStatus.FAILED;
+				recorder.error(`[TaskManager] Chain ${chainId} marked as FAILED due to task failure.`);
+			}
+		}
+	}
+
+	private findChainIdByTaskId(taskId: string): string | null {
+		for (const [chainId, state] of this.chains.entries()) {
+			if (state.graph.getTask(taskId)) {
+				return chainId;
+			}
+		}
+		return null;
 	}
 
 	private createInitialState(goal: string, agents: any[], sessionId: string, traceId: string): AgentState {
