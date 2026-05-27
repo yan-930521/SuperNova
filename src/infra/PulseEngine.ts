@@ -97,6 +97,49 @@ export class PulseEngine {
   registerHook(hook: IPulseHook): void {
     this.hooks.set(hook.id, hook);
     recorder.info(`Registered pulse hook: ${hook.id} (type: ${hook.type})`, { type: 'SYSTEM' });
+
+    // 如果是 EVENT 類型，需向 EventBus 訂閱
+    if (hook.type === PulseHookType.EVENT && hook.config.eventName) {
+      this.eventBus.subscribe(hook.config.eventName as SystemEventType, (event) => {
+        this.handleEventHook(hook, event);
+      });
+    }
+  }
+
+  /**
+   * 處理事件掛鉤
+   */
+  private handleEventHook(hook: IPulseHook, event: any): void {
+    try {
+      let triggered = true;
+      if (hook.config.logic) {
+        triggered = hook.config.logic(event.payload);
+      }
+      
+      if (triggered) {
+        this.executeAction(hook);
+      }
+    } catch (error) {
+      recorder.error(`Error in event hook ${hook.id}:`, { type: 'SYSTEM', payload: { error } });
+    }
+  }
+
+  /**
+   * 執行掛鉤動作
+   */
+  private executeAction(hook: IPulseHook): void {
+    const { action } = hook;
+    switch (action.type) {
+      case PulseActionType.EMIT_EVENT:
+        this.eventBus.publish(action.payload);
+        break;
+      case PulseActionType.LOG:
+        recorder.info(`PulseHook ${hook.id} log:`, { type: 'SYSTEM', payload: action.payload });
+        break;
+      case PulseActionType.START_TASK:
+        recorder.warn(`PulseHook ${hook.id}: START_TASK is not yet integrated with TaskManager.`, { type: 'SYSTEM' });
+        break;
+    }
   }
 
   /**
@@ -124,19 +167,44 @@ export class PulseEngine {
 
     // 執行過期的掛鉤
     for (const hook of this.hooks.values()) {
-      if (hook.type === PulseHookType.INTERVAL && hook.config.interval) {
-        if (this.tickCount % hook.config.interval === 0) {
-          try {
-            if (hook.action.type === PulseActionType.EMIT_EVENT) {
-              this.eventBus.publish(hook.action.payload);
-            } else if (hook.action.type === PulseActionType.LOG) {
-              recorder.info(`PulseHook ${hook.id} log:`, { type: 'SYSTEM', payload: hook.action.payload });
-            }
-          } catch (error) {
-            recorder.error(`Error in pulse hook ${hook.id}:`, { type: 'SYSTEM', payload: { error } });
-          }
+      try {
+        if (this.isTriggered(hook)) {
+          this.executeAction(hook);
         }
+      } catch (error) {
+        recorder.error(`Error in pulse hook ${hook.id}:`, { type: 'SYSTEM', payload: { error } });
       }
     }
+  }
+
+  /**
+   * 檢查掛鉤是否觸發
+   */
+  private isTriggered(hook: IPulseHook): boolean {
+    if (hook.type === PulseHookType.INTERVAL && hook.config.interval) {
+      return this.tickCount % hook.config.interval === 0;
+    }
+
+    if (hook.type === PulseHookType.THRESHOLD) {
+      const value = this.getState(hook.config.path || '');
+      const threshold = hook.config.threshold;
+      let triggered = false;
+
+      switch (hook.config.operator) {
+        case '>': triggered = value > threshold; break;
+        case '<': triggered = value < threshold; break;
+        case '==': triggered = value == threshold; break;
+        case '>=': triggered = value >= threshold; break;
+        case '<=': triggered = value <= threshold; break;
+        case '!=': triggered = value != threshold; break;
+      }
+
+      if (!triggered && hook.config.logic) {
+        triggered = hook.config.logic(value);
+      }
+      return triggered;
+    }
+
+    return false;
   }
 }
