@@ -42,6 +42,7 @@ export class PulseEngine {
   private tickCount: number = 0;
   private hooks: Map<string, IPulseHook> = new Map();
   private statePool: Record<string, any> = {};
+  private eventHandlers: Map<string, (event: any) => void> = new Map();
 
   constructor(private eventBus: IEventBus) {}
 
@@ -95,14 +96,20 @@ export class PulseEngine {
    * 註冊掛鉤
    */
   registerHook(hook: IPulseHook): void {
+    if (this.hooks.has(hook.id)) {
+      this.unregisterHook(hook.id);
+    }
+
     this.hooks.set(hook.id, hook);
     recorder.info(`Registered pulse hook: ${hook.id} (type: ${hook.type})`, { type: 'SYSTEM' });
 
     // 如果是 EVENT 類型，需向 EventBus 訂閱
     if (hook.type === PulseHookType.EVENT && hook.config.eventName) {
-      this.eventBus.subscribe(hook.config.eventName as SystemEventType, (event) => {
+      const handler = (event: any) => {
         this.handleEventHook(hook, event);
-      });
+      };
+      this.eventHandlers.set(hook.id, handler);
+      this.eventBus.subscribe(hook.config.eventName as SystemEventType, handler);
     }
   }
 
@@ -146,7 +153,20 @@ export class PulseEngine {
    * 移除掛鉤
    */
   unregisterHook(id: string): void {
+    const hook = this.hooks.get(id);
+    if (!hook) return;
+
+    // 如果是 EVENT 類型且有儲存的 handler，則取消訂閱
+    if (hook.type === PulseHookType.EVENT && hook.config.eventName) {
+      const handler = this.eventHandlers.get(id);
+      if (handler) {
+        this.eventBus.unsubscribe(hook.config.eventName as SystemEventType, handler);
+        this.eventHandlers.delete(id);
+      }
+    }
+
     this.hooks.delete(id);
+    recorder.info(`Unregistered pulse hook: ${id}`, { type: 'SYSTEM' });
   }
 
   /**
