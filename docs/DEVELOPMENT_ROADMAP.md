@@ -90,4 +90,5 @@
 - **2026-05-28**：實作 JIT 3x3 自癒機制，包含上下文隔離、前置任務依賴注入與任務內部軌跡持久化。
 
 ## 想法記錄
+- **2026-05-28**：主動告警機制：偵測到特定數據異常時，觸發 Agent Hook，透過 Webhook 實時發送消息給用戶（結合 Pulse Engine 的 THRESHOLD Hook 與 TailAgent）。
 - **2026-05-29**：https://blog.can.ac/2026/02/12/the-harness-problem/ 增強文本編輯tool
