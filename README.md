@@ -1,11 +1,11 @@
 # SuperNova: A Persistent Multi-Agent Runtime for Autonomous Coordination
 
 [![TypeScript](https://img.shields.io/badge/Language-TypeScript-blue.svg)](https://www.typescriptlang.org/)
+[![Runtime](https://img.shields.io/badge/Runtime-Bun-black.svg)](https://bun.sh/)
 [![Architecture](https://img.shields.io/badge/Architecture-Decoupled--Runtime-orange.svg)](#-核心設計-sessionmanager-vs-taskmanager)
 [![Stage](https://img.shields.io/badge/Stage-Research--Prototype-yellow.svg)](#-開發進度-roadmap)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/yan-930521/SuperNova)
 
-SuperNova 是一個專為長期任務設計的 **AI Runtime (執行時)** 實驗。它的目標是探索如何讓 AI Agent 在處理複雜、跨領域且具備長期目標的任務時，透過架構上的解耦來解決 **Context Drift (上下文漂移)** 與 **Goal Drift (目標偏移)** 問題。
+SuperNova 是一個專為長期任務設計的 **AI Runtime (執行時)** 實驗。它運行於 **Bun** 高性能環境，旨在探索如何讓 AI Agent 在處理複雜、跨領域且具備長期目標的任務時，透過架構上的解耦來解決 **Context Drift (上下文漂移)** 與 **Goal Drift (目標偏移)** 問題。
 
 ## 💡 核心挑戰：Communication vs. Execution
 
@@ -184,15 +184,17 @@ class node_prompt_assets,node_agent_profiles toneRose
 - [x] 具備 Zod 校驗的結構化推理引擎 (`InferenceEngine`)。
 - [x] 核心編排工具集 (Dispatcher, Create, Assign)。
 
-### 🏗️ 進行中 (Phase 3: Runtime 強化)
-- [ ] **JIT 規劃優化**：強化基於執行反饋的即時路徑修正。
-- [ ] **脈搏引擎 (Pulse Engine)**：實作定時監控與數據變動監聽。
-- [ ] **上下文壓縮**：自動化對話摘要以應對超長會話。
+### 🏗️ 進行中 (Phase 3: Runtime 強化 & JIT)
+- [x] **環境遷移**：全面從 Node.js 遷移至 Bun 高性能環境。
+- [x] **JIT 基礎架構**：實現按里程碑動態展開任務的執行流。
+- [x] **脈搏引擎 (Pulse Engine)**：實作核心心跳偵測與任務監控機制。
+- [ ] **JIT 自癒優化**：強化基於執行失敗的即時路徑重規劃。
+- [ ] **記憶系統 (Memory System)**：實作長短期記憶管理與 Context 壓縮。
 
 ### 📅 未來計畫
+- [ ] **TailAgent (./web)**：基於 React + Tailwind 的視覺化控制面板。
 - [ ] 數據庫遷移 (PostgreSQL / MongoDB / Redis)。
 - [ ] 生產級容器化 (Docker)。
-- [ ] Web UI 觀測面板。
 
 ---
 © 2026 SuperNova Project. 一個專注於系統架構與 AI 協作邏輯的開發實驗。
