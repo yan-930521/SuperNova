@@ -43,8 +43,38 @@ export class PulseEngine {
   private hooks: Map<string, IPulseHook> = new Map();
   private statePool: Record<string, any> = {};
   private eventHandlers: Map<string, (event: any) => void> = new Map();
+  private watchTasks: Map<string, { lastActive: number, timeout: number }> = new Map();
 
   constructor(private eventBus: IEventBus) {}
+
+  /**
+   * 將任務加入監控清單
+   * @param taskId 任務 ID
+   * @param timeout 超時時間 (ms)，預設 30000ms
+   */
+  public watchTask(taskId: string, timeout: number = 30000): void {
+    this.watchTasks.set(taskId, { lastActive: Date.now(), timeout });
+    recorder.info(`[PulseEngine] Watching task ${taskId} (timeout: ${timeout}ms)`, { type: 'SYSTEM' });
+  }
+
+  /**
+   * 移除任務監控
+   */
+  public unwatchTask(taskId: string): void {
+    this.watchTasks.delete(taskId);
+    recorder.info(`[PulseEngine] Unwatched task ${taskId}`, { type: 'SYSTEM' });
+  }
+
+  /**
+   * 更新任務心跳
+   */
+  public updateHeartbeat(taskId: string): void {
+    const info = this.watchTasks.get(taskId);
+    if (info) {
+      info.lastActive = Date.now();
+      recorder.debug(`[PulseEngine] Updated heartbeat for task ${taskId}`, { type: 'SYSTEM' });
+    }
+  }
 
   /**
    * 設定狀態值
@@ -184,6 +214,21 @@ export class PulseEngine {
       payload: { tickCount: this.tickCount },
       timestamp: Date.now()
     });
+
+    // 檢查任務超時
+    for (const [taskId, info] of this.watchTasks.entries()) {
+      if (Date.now() - info.lastActive > info.timeout) {
+        recorder.warn(`Task ${taskId} timed out in PulseEngine.`, { type: 'SYSTEM' });
+        this.eventBus.publish({
+          type: SystemEventType.TASK_FAILED,
+          userId: 'SYSTEM',
+          sessionId: 'SYSTEM',
+          payload: { taskId, error: `Execution timeout: No heartbeat received for ${info.timeout / 1000}s` },
+          timestamp: Date.now()
+        });
+        this.watchTasks.delete(taskId);
+      }
+    }
 
     // 執行過期的掛鉤
     for (const hook of this.hooks.values()) {

@@ -119,63 +119,68 @@ export class TaskPlanner {
   }
 
   async expandMilestone(state: typeof AgentStateAnnotation.State): Promise<Partial<typeof AgentStateAnnotation.State>> {
+    const finalGraphData = state.planning.taskGraph || { nodes: [], milestones: state.planning.milestones, currentMilestoneIndex: -1 };
     const finalGraph = new TaskGraph();
-    let prevMilestoneTaskIds: string[] = [];
+    finalGraph.loadFromJSON(finalGraphData);
 
-    recorder.info(`[TaskPlanner] Starting full expansion for ${state.planning.milestones.length} milestones.`, { 
+    const currentIdx = state.planning.currentMilestoneIdx;
+    if (currentIdx < 0 || currentIdx >= state.planning.milestones.length) {
+      recorder.warn(`[TaskPlanner] Invalid milestone index: ${currentIdx}`, { type: 'PLAN' });
+      return { planning: state.planning };
+    }
+
+    const milestone = state.planning.milestones[currentIdx];
+    const milestonePrefix = `m${currentIdx + 1}_`;
+
+    recorder.info(`[TaskPlanner] Expanding milestone [${currentIdx + 1}/${state.planning.milestones.length}]: ${milestone}`, { 
       type: 'PLAN',
       session_id: state.metadata?.sessionId,
       trace_id: state.metadata?.traceId
     });
 
-    for (let i = 0; i < state.planning.milestones.length; i++) {
-      const milestone = state.planning.milestones[i];
-      const milestonePrefix = `m${i + 1}_`;
+    // Determine previous milestone task IDs for cross-milestone dependencies
+    const prevTasks = finalGraph.getAllTasks().filter(t => t.id.startsWith(`m${currentIdx}_`));
+    const prevTaskIds = prevTasks.map(t => t.id);
 
-      recorder.info(`[TaskPlanner] Expanding milestone [${i + 1}/${state.planning.milestones.length}]: ${milestone}`, { 
-        type: 'PLAN',
-        session_id: state.metadata?.sessionId,
-        trace_id: state.metadata?.traceId
+    const result = await this.expansionEngine.infer(state as any, TaskExpandResponseSchema, {
+      variables: {
+        milestone: milestone,
+        projected_context: JSON.stringify(state.planning.projectedContext),
+        available_agents: JSON.stringify(state.metadata?.available_agents || []),
+        // Add results of previous tasks to context if available
+        execution_history: JSON.stringify(finalGraph.getAllTasks().filter(t => t.status === 'completed').map(t => ({ id: t.id, goal: t.goal, result: t.result })))
+      }
+    });
+
+    const currentMilestoneNodes: TaskDTO[] = result.nodes.map((n: any) => {
+      const originalId = n.id || uuidv4();
+      const globalId = `${milestonePrefix}${originalId}`;
+      const internalDeps = (n.dependencies || []).map((d: any) => `${milestonePrefix}${d}`);
+      
+      // If no internal dependencies, depend on all tasks from the previous milestone
+      const globalDeps = (internalDeps.length > 0) ? internalDeps : [...prevTaskIds];
+        
+      return {
+        ...n,
+        id: globalId,
+        dependencies: globalDeps,
+        status: 'pending' as const
+      };
+    });
+
+    currentMilestoneNodes.forEach(node => finalGraph.addTask(node.id, node as any));
+    currentMilestoneNodes.forEach(node => {
+      node.dependencies.forEach(depId => {
+        try { finalGraph.addDependency(depId, node.id); } catch (e) {}
       });
+    });
 
-      const result = await this.expansionEngine.infer(state as any, TaskExpandResponseSchema, {
-        variables: {
-          milestone: milestone,
-          projected_context: JSON.stringify(state.planning.projectedContext),
-          available_agents: JSON.stringify(state.metadata?.available_agents || [])
-        }
-      });
-
-      const currentMilestoneNodes: TaskDTO[] = result.nodes.map((n: any) => {
-        const originalId = n.id || uuidv4();
-        const globalId = `${milestonePrefix}${originalId}`;
-        const internalDeps = (n.dependencies || []).map((d: any) => `${milestonePrefix}${d}`);
-        const globalDeps = (internalDeps.length > 0) ? internalDeps : [...prevMilestoneTaskIds];
-          
-        return {
-          ...n,
-          id: globalId,
-          dependencies: globalDeps,
-          status: 'pending' as const
-        };
-      });
-
-      currentMilestoneNodes.forEach(node => finalGraph.addTask(node.id, node as any));
-      currentMilestoneNodes.forEach(node => {
-        node.dependencies.forEach(depId => {
-          try { finalGraph.addDependency(depId, node.id); } catch (e) {}
-        });
-      });
-
-      prevMilestoneTaskIds = currentMilestoneNodes.map(n => n.id);
-    }
-
-    const taskGraphData = finalGraph.toJSON() as unknown as TaskGraphData;
-    taskGraphData.milestones = state.planning.milestones;
-    taskGraphData.currentMilestoneIndex = state.planning.milestones.length - 1;
+    const updatedGraphData = finalGraph.toJSON() as unknown as TaskGraphData;
+    updatedGraphData.milestones = state.planning.milestones;
+    updatedGraphData.currentMilestoneIndex = currentIdx;
 
     return {
-      planning: { ...state.planning, taskGraph: taskGraphData }
+      planning: { ...state.planning, taskGraph: updatedGraphData }
     };
   }
 

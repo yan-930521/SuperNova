@@ -15,7 +15,7 @@ export class TaskCreateTool extends BaseTool {
   constructor() {
     super({
       name: 'task_create',
-      description: 'Create a new task node in the system. Can start a new chain or add to an existing one.',
+      description: 'Create a new task node in the system; you MUST call `agent_list` first to verify available agents before creating or assigning the task, whether starting a new chain or adding to an existing one.',
       category: 'core',
       safety_tier: 'TIER_2',
       required_capabilities: ['orchestration'],

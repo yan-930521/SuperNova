@@ -12,7 +12,7 @@ export class TaskInfoTool extends BaseTool {
   constructor() {
     super({
       name: 'task_info',
-      description: 'Get detailed information about a specific task node.',
+      description: 'Get detailed information about a specific task node; you MUST call `task_list` first to verify the target task exists before requesting details.',
       category: 'core',
       safety_tier: 'TIER_1',
       required_capabilities: ['orchestration'],

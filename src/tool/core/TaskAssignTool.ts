@@ -13,7 +13,7 @@ export class TaskAssignTool extends BaseTool {
   constructor() {
     super({
       name: 'task_assign',
-      description: 'Assign a specific task to an agent. You must be authorized to coordinate the target agent.',
+      description: 'Assign a specific task to an agent; you must be authorized to coordinate the target agent and MUST call `agent_list` first to verify the target agent exists and is available before assignment.',
       category: 'core',
       safety_tier: 'TIER_2',
       required_capabilities: ['orchestration'],

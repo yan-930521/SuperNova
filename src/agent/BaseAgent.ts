@@ -1,9 +1,11 @@
+import { BaseCallbackHandler } from '@langchain/core/callbacks/base';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { tool as langChainTool } from '@langchain/core/tools';
 import { createReactAgent } from '@langchain/langgraph/prebuilt';
 
 import { RecordAction, recorder } from '../infra/LogManager';
 import { IAgentExecuteContext, IAgentExecuteResult, ModelPreset } from '../infra/types/agent';
+import { SystemEventType } from '../infra/types/events';
 import { ITool } from '../tool/BaseTool';
 import { PromptLoader } from '../utils/PromptLoader';
 
@@ -16,6 +18,8 @@ import type { GlobalRuntime } from '../runtime/GlobalRuntime';
 export abstract class BaseAgent {
 	public identity: string = '';
 	public capabilities: string[] = [];
+	/** 代理可使用的具體工具 ID 列表 */
+	public toolsList: string[] = [];
 	/** 可調用的代理白名單 (ID 列表) */
 	public availableAgents: string[] = [];
 	protected _config: Record<string, any> = {};
@@ -53,11 +57,40 @@ export abstract class BaseAgent {
 			return;
 		}
 
-		// 從 ToolRegistry 獲取通用工具集
-		const commonTools = this.runtime.toolRegistry.getToolsByCategories(['common', 'file']);
-		commonTools.forEach(t => this.registerTool(t));
+		if (this.toolsList && this.toolsList.length > 0) {
+			// 如果指定了工具列表，則根據路徑規則導入
+			this.toolsList.forEach(toolPath => {
+				if (toolPath.endsWith('.*')) {
+					// 處理分類批次導入，例如 "common.*"
+					const category = toolPath.split('.')[0];
+					const tools = this.runtime?.toolRegistry.getToolsByCategory(category);
+					tools?.forEach(t => this.registerTool(t));
+				} else if (toolPath.includes('.')) {
+					// 處理精確路徑導入，例如 "file.write_file"
+					const [category, name] = toolPath.split('.');
+					const tool = this.runtime?.toolRegistry.getToolsByCategory(category).find(t => t.name === name);
+					if (tool) {
+						this.registerTool(tool);
+					} else {
+						recorder.warn(`Agent [${this.id}] tool [${name}] not found in category [${category}].`, { type: 'SYSTEM' });
+					}
+				} else {
+					// 全局搜尋 (相容舊格式)
+					const tool = this.runtime?.toolRegistry.getTool(toolPath);
+					if (tool) {
+						this.registerTool(tool);
+					} else {
+						recorder.warn(`Agent [${this.id}] tool [${toolPath}] not found in global registry.`, { type: 'SYSTEM' });
+					}
+				}
+			});
+		} else {
+			// 否則從 ToolRegistry 獲取通用工具集 (預設行為)
+			const commonTools = this.runtime.toolRegistry.getToolsByCategories(['common', 'file']);
+			commonTools.forEach(t => this.registerTool(t));
+		}
 
-		recorder.info(`Agent [${this.id}] registered ${this.tools.size} tools (default).`, { 
+		recorder.info(`Agent [${this.id}] registered ${this.tools.size} tools.`, { 
 			type: 'SYSTEM',
 			agent_id: this.id 
 		});
@@ -108,7 +141,7 @@ export abstract class BaseAgent {
 	 * 適用於所有繼承自 BaseAgent 的代理。
 	 */
 	async execute(taskGoal: string, context: IAgentExecuteContext): Promise<IAgentExecuteResult> {
-		const { sessionId, traceId } = context;
+		const { sessionId, traceId, taskId } = context;
 
 		if (!this.runtime) {
 			throw new Error(`Agent [${this.id}] runtime not injected.`);
@@ -178,11 +211,12 @@ export abstract class BaseAgent {
 	async initFromJSON(config: Record<string, any>): Promise<void> {
 		const resolvedConfig = await PromptLoader.resolvePrompts(config);
 
-		const { id, role, capabilities, availableAgents, prompts, ...rest } = resolvedConfig;
+		const { id, role, capabilities, tools, availableAgents, prompts, ...rest } = resolvedConfig;
 
 		if (id) this.id = id;
 		if (role) this.role = role;
 		if (capabilities) this.capabilities = capabilities;
+		if (tools) this.toolsList = tools;
 		if (availableAgents) this.availableAgents = availableAgents;
 		if (prompts?.identity) this.identity = prompts.identity;
 
@@ -201,6 +235,7 @@ export abstract class BaseAgent {
 			id: this.id,
 			role: this.role,
 			capabilities: this.capabilities,
+			tools: this.toolsList,
 			availableAgents: this.availableAgents,
 			prompts: {
 				identity: this.identity

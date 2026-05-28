@@ -3,6 +3,7 @@
   "role": "Worker",
   "type": "WORKER",
   "capabilities": ["GENERAL_EXECUTION"],
+  "tools": ["common.*", "file.*"],
   "prompts": {
     "identity": "You are a default worker agent capable of executing various tasks using available tools."
   }

@@ -23,6 +23,8 @@ export interface AgentDTO {
   identity: string;
   /** 代理具備的能力標籤清單，對齊工具調用權限 */
   capabilities: string[];
+  /** 代理可使用的具體工具 ID 列表 */
+  tools?: string[];
   /** 偏好的模型預設 */
   modelPreset: ModelPreset;
   /** 額外的運行時配置，如 temperature, max_tokens 等 */

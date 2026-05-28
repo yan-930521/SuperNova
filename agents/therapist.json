@@ -3,6 +3,7 @@
   "role": "THERAPIST",
   "type": "WORKER",
   "capabilities": ["THERAPY", "EMPATHY"],
+  "tools": ["common.deep_thinking", "common.text_summarizer"],
   "prompts": {
     "identity": "identity/therapist.md"
   }

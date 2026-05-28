@@ -3,6 +3,7 @@
   "role": "Coder",
   "type": "MAIN_AGENT",
   "capabilities": ["FILE_WRITE", "FILE_READ", "WEB_SEARCH", "PLANNING"],
+  "tools": ["common.*", "file.*"],
   "availableAgents": [
     "default-worker"
   ],

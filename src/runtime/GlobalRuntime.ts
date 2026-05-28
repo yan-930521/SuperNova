@@ -5,6 +5,7 @@ import { ConfigLoader } from '../config/ConfigLoader';
 import { EventBus } from '../infra/EventBus';
 import { LogLevel, recorder } from '../infra/LogManager';
 import { ModelRegistry } from '../infra/ModelRegistry';
+import { PulseEngine } from '../infra/PulseEngine';
 import { FileSystemAgentRepository } from '../infra/storage/FileSystemAgentRepository';
 import { FileSystemSessionRepository } from '../infra/storage/FileSystemSessionRepository';
 import { FileSystemTaskRepository } from '../infra/storage/FileSystemTaskRepository';
@@ -52,6 +53,7 @@ export class GlobalRuntime {
 	public eventBus: EventBus;
 	public modelRegistry: ModelRegistry;
 	public toolRegistry: ToolRegistry;
+	public pulseEngine: PulseEngine;
 
 	/**
 	 * 構造函數初始化基礎組件
@@ -60,6 +62,7 @@ export class GlobalRuntime {
 		this.eventBus = new EventBus();
 		this.modelRegistry = new ModelRegistry();
 		this.toolRegistry = new ToolRegistry();
+		this.pulseEngine = new PulseEngine(this.eventBus);
 		GlobalRuntime.instance = this;
 	}
 
@@ -114,6 +117,9 @@ export class GlobalRuntime {
 		recorder.info(`Loading all agents from repository: ${agentsDir}...`, { type: 'SYSTEM' });
 		await this.agentManager.loadAllAgents();
 
+		// --- 5. 啟動脈搏引擎 ---
+		this.pulseEngine.start();
+
 		this.isRunning = true;
 		recorder.info('SuperNova 2.0 Runtime is active and ready.', { type: 'SYSTEM' });
 	}
@@ -122,6 +128,7 @@ export class GlobalRuntime {
 	 * 停止系統
 	 */
 	async stop(): Promise<void> {
+		this.pulseEngine.stop();
 		this.isRunning = false;
 		recorder.info('Runtime stopped.', { type: 'SYSTEM' });
 	}

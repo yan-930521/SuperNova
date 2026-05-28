@@ -3,6 +3,7 @@
   "role": "MAIN_AGENT",
   "type": "MAIN_AGENT",
   "capabilities": ["PLANNING", "ARBITRATION"],
+  "tools": ["core.*"],
   "availableAgents": [
     "researcher-01",
     "analyst-01",
