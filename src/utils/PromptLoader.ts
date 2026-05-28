@@ -41,23 +41,6 @@ export class PromptLoader {
   }
 
   /**
-   * 渲染 Prompt 模板 (替換 {{key}} 或 {key})
-   * @param template 模板字串
-   * @param data 數據對象
-   */
-  public static render(template: string, data: Record<string, any>): string {
-    let rendered = template;
-    for (const [key, value] of Object.entries(data)) {
-      const stringValue = typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value);
-      // 支援 {{key}} 格式
-      rendered = rendered.replace(new RegExp(`{{${key}}}`, 'g'), stringValue);
-      // 支援 LangChain 風格的 {key} 格式 (僅當 key 不包含在 {{}} 中時，為簡單起見，這裡直接 replace)
-      rendered = rendered.replace(new RegExp(`{${key}}`, 'g'), stringValue);
-    }
-    return rendered;
-  }
-
-  /**
    * 遞歸解析對象中的 Prompt 連結
    * 如果字串值以 .md 結尾，則嘗試從 prompts/ 目錄加載內容。
    * @param data 待解析的配置對象

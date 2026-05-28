@@ -41,7 +41,7 @@ async function runChatDemo() {
 		throw new Error("MainAgent 'main-agent-01' not found. Please check agents/ directory.");
 	}
 
-	const EnableHistory = true;
+	const EnableHistory = false;
 
 	let session: Session;
 

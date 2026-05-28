@@ -9,31 +9,45 @@ import { BaseTool } from '../BaseTool';
  * 負責將高層次的目標提交給 TaskManager，觸發自動規劃與並行執行。
  */
 export class TaskDispatcherTool extends BaseTool {
-  constructor() {
-    super({
-      name: 'task_dispatcher',
-      description: 'Submit a high-level goal to the system for automatic planning and parallel execution.',
-      category: 'core',
-      safety_tier: 'TIER_2',
-      required_capabilities: ['planning'],
-      schema: z.object({
-        goal: z.string().describe('The overall objective to achieve.')
-      })
-    });
-  }
+	constructor() {
+		super({
+			name: 'task_dispatcher',
+			description: 'Submit a high-level goal to the system for automatic planning and parallel execution.',
+			category: 'core',
+			safety_tier: 'TIER_2',
+			required_capabilities: ['planning'],
+			schema: z.object({
+				goal: z.string().describe('The overall objective to achieve.'),
+				description: z.string().describe(`
+A complete executable task context.
 
-  async run(input: any, context: IAgentExecuteContext): Promise<any> {
-    const { goal } = input;
-    const { sessionId } = context; // 直接從系統提供的上下文獲取真實 ID
-    const runtime = GlobalRuntime.getInstance();
-    
-    // 提交任務，使用 Agent 的 ID 作為請求者
-    const result = await runtime.taskManager.submit(goal, sessionId, context.agentId);
-    
-    return {
-      message: "Goal submitted successfully. Planning initiated.",
-      chainId: result.chainId,
-      traceId: result.traceId
-    };
-  }
+MUST include:
+- concrete targets (URLs, files, APIs, repositories, services)
+- relevant background/context
+- constraints and requirements
+- expected output/result
+- important entities and identifiers
+
+The task must remain executable independently without requiring parent conversation context.
+
+NEVER over-generalize or omit execution-critical information.
+`),
+			})
+		});
+	}
+
+	async run(input: any, context: IAgentExecuteContext): Promise<any> {
+		const { goal, description } = input;
+		const { sessionId } = context; // 直接從系統提供的上下文獲取真實 ID
+		const runtime = GlobalRuntime.getInstance();
+
+		// 提交任務，使用 Agent 的 ID 作為請求者
+		const result = await runtime.taskManager.submit(goal, description, sessionId, context.agentId);
+
+		return {
+			message: "Goal submitted successfully. Planning initiated.",
+			chainId: result.chainId,
+			traceId: result.traceId
+		};
+	}
 }

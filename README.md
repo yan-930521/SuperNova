@@ -7,6 +7,14 @@
 
 SuperNova 是一個專為長期任務設計的 **AI Runtime (執行時)** 實驗。它運行於 **Bun** 高性能環境，旨在探索如何讓 AI Agent 在處理複雜、跨領域且具備長期目標的任務時，透過架構上的解耦來解決 **Context Drift (上下文漂移)** 與 **Goal Drift (目標偏移)** 問題。
 
+## ⚡ 為什麼選擇 Bun？ (Why Bun?)
+
+為了支撐 AI Agent 的高頻、長時運行需求，我們選擇 Bun 作為核心 Runtime：
+
+1.  **極致性能**：Bun 的啟動速度與執行效率遠超傳統 Node.js，這對於需要頻繁啟動 Agent 思考循環的系統至關重要。
+2.  **全能工具鏈**：內建原生 TypeScript 支持與高效的 `bun test` 運行器，大幅簡化了開發鏈路，不再需要繁瑣的 `tsc` 或 `jest` 配置。
+3.  **現代化開發體驗**：原生支持 `.env`、快速的依賴管理 (`bun install`) 以及更簡潔的異步處理機制，使 SuperNova 保持輕量且易於擴展。
+
 ## 💡 核心挑戰：Communication vs. Execution
 
 在傳統 Agent 框架中，對話紀錄 (Context) 同時承載了「人機溝通」與「工具執行細節」，這會導致：
@@ -168,6 +176,16 @@ class node_prompt_assets,node_agent_profiles toneRose
 
 ---
 
+## ⚡ 為什麼選擇 Bun？ (Why Bun?)
+
+為了支撐 AI Agent 的高頻、長時運行需求，我們選擇 Bun 作為核心 Runtime：
+
+1.  **極致性能**：Bun 的啟動速度與執行效率遠超傳統 Node.js，這對於需要頻繁啟動 Agent 思考循環的系統至關重要。
+2.  **全能工具鏈**：內建原生 TypeScript 支持與高效的 `bun test` 運行器，大幅簡化了開發鏈路，不再需要繁瑣的 `tsc` 或 `jest` 配置。
+3.  **現代化開發體驗**：原生支持 `.env`、快速的依賴管理 (`bun install`) 以及更簡潔的異步處理機制，使 SuperNova 保持輕量且易於擴展。
+
+---
+
 ## 🛠️ 目前已實現的能力 (Runtime Capabilities)
 
 -   **遞歸規劃工作流**：基於 LangGraph 實現了「規劃-評審-展開」的自我迭代流程。
@@ -188,7 +206,8 @@ class node_prompt_assets,node_agent_profiles toneRose
 - [x] **環境遷移**：全面從 Node.js 遷移至 Bun 高性能環境。
 - [x] **JIT 基礎架構**：實現按里程碑動態展開任務的執行流。
 - [x] **脈搏引擎 (Pulse Engine)**：實作核心心跳偵測與任務監控機制。
-- [ ] **JIT 自癒優化**：強化基於執行失敗的即時路徑重規劃。
+- [x] **JIT 自癒與重規劃 (Self-Healing)**：實作了 3x3 階梯式重試機制、認知重規劃 (Cognitive Re-planning) 以及任務上下文隔離與繼承 (Context Isolation)。
+- [ ] **STUCK 狀態處理**：設計當任務鏈進入 STUCK 狀態時的後續處置機制（如人類介入 HITL 或自動降級）。
 - [ ] **記憶系統 (Memory System)**：實作長短期記憶管理與 Context 壓縮。
 
 ### 📅 未來計畫

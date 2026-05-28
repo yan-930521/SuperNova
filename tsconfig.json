@@ -10,5 +10,5 @@
     "forceConsistentCasingInFileNames": true,
     "types": ["bun"]
   },
-  "exclude": ["src_bk"]
+  "exclude": ["web"]
 }

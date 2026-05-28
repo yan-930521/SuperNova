@@ -56,11 +56,8 @@ export class ToolRegistry {
     // 使用 require 避開加載時的循環引用
     const { TaskDispatcherTool } = require('./core/TaskDispatcherTool');
     const { TaskCreateTool } = require('./core/TaskCreateTool');
-    const { TaskAssignTool } = require('./core/TaskAssignTool');
     const { TaskListTool } = require('./core/TaskListTool');
-    const { TaskInfoTool } = require('./core/TaskInfoTool');
-    const { AgentListTool } = require('./core/AgentListTool');
-    const { AgentRegisterTool } = require('./core/AgentRegisterTool');
+    const { TaskInfoTool } = require('./core/TaskInfoTool')
     
     const { DeepThinkingTool } = require('./common/DeepThinkingTool');
     const { TavilySearchTool } = require('./common/TavilySearchTool');
@@ -78,9 +75,8 @@ export class ToolRegistry {
     const { DeleteFileTool } = require('./file/DeleteFileTool');
 
     this.register([
-      new DeepThinkingTool(), new TaskDispatcherTool(), new TaskCreateTool(),
-      new TaskAssignTool(), new TaskListTool(), new TaskInfoTool(),
-      new AgentListTool(), new AgentRegisterTool(),
+      new DeepThinkingTool(),
+      new TaskDispatcherTool(), new TaskCreateTool(), new TaskListTool(), new TaskInfoTool(),
       new TavilySearchTool(), new WebFetchTool(),
       new TimeTool(), new SystemInfoTool(), new MathTool(),
       new UnitConverterTool(), new CodeExecutorTool(), new TextSummarizerTool(),

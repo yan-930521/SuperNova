@@ -1,16 +1,23 @@
+import { any, config, string } from 'zod';
+import { id } from 'zod/locales';
+
 import { BaseCallbackHandler } from '@langchain/core/callbacks/base';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import {
+    BaseMessage, HumanMessage, mapStoredMessagesToChatMessages, SystemMessage
+} from '@langchain/core/messages';
 import { tool as langChainTool } from '@langchain/core/tools';
 import { createReactAgent } from '@langchain/langgraph/prebuilt';
+import { tools } from '@langchain/openai';
 
 import { RecordAction, recorder } from '../infra/LogManager';
 import { IAgentExecuteContext, IAgentExecuteResult, ModelPreset } from '../infra/types/agent';
 import { SystemEventType } from '../infra/types/events';
+import { TaskStatus } from '../infra/types/task';
 import { ITool } from '../tool/BaseTool';
 import { PromptLoader } from '../utils/PromptLoader';
 
 import type { GlobalRuntime } from '../runtime/GlobalRuntime';
-
 /**
  * BaseAgent (代理基類)
  * 2.0 版：所有代理均內建 ReAct 執行引擎，具備獨立思考與工具調用能力。
@@ -84,16 +91,56 @@ export abstract class BaseAgent {
 					}
 				}
 			});
-		} else {
-			// 否則從 ToolRegistry 獲取通用工具集 (預設行為)
-			const commonTools = this.runtime.toolRegistry.getToolsByCategories(['common', 'file']);
-			commonTools.forEach(t => this.registerTool(t));
 		}
 
-		recorder.info(`Agent [${this.id}] registered ${this.tools.size} tools.`, { 
+		recorder.info(`Agent [${this.id}] registered ${this.tools.size} tools.`, {
 			type: 'SYSTEM',
-			agent_id: this.id 
+			agent_id: this.id
 		});
+	}
+
+	/**
+	 * 建立系統提示詞 (System Prompt)
+	 * 整合身份、能力標籤、可用資源與當前執行狀態。
+	 */
+	protected async buildPrompt(context: Partial<IAgentExecuteContext>): Promise<string> {
+		let prompt = this.identity || `你是一個 AI 代理 (${this.id})。你的角色是 ${this.role}。`;
+
+		if (this.availableAgents && this.availableAgents.length > 0) {
+			prompt += `\n\n你可以調度的下屬代理列表 (透過 task_create )：\n- ${this.availableAgents.join('\n- ')}`;
+		}
+
+		// 注入當前執行環境資訊 (Working Memory)
+		if (context?.taskId) {
+			prompt += `\n\n--- 當前執行狀態 ---`;
+			prompt += `\n- 任務 ID: ${context.taskId || "None"}`;
+			if (context.sessionGoal) {
+				prompt += `\n- 會話總目標: ${context.sessionGoal}`;
+			}
+
+			// 前置任務結果注入
+			if (context.dependencyResults && Object.keys(context.dependencyResults).length > 0) {
+				prompt += `\n\n--- 前置任務執行結果 ---`;
+				for (const [depId, result] of Object.entries(context.dependencyResults)) {
+					prompt += `\n[任務 ${depId}]:\n${result}\n`;
+				}
+			}
+
+			// 重試與錯誤處理引導
+			if (context.retryCount && context.retryCount > 0) {
+				prompt += `\n- 重試次數: ${context.retryCount}`;
+				prompt += `\n- 上次失敗原因: ${context.lastError || '未知錯誤'}`;
+				prompt += `\n\n[注意]: 這是此任務的第 ${context.retryCount} 次重試。請仔細分析上次失敗原因，嘗試更換策略或修正參數，避免重複失敗。`;
+			}
+		}
+
+		// 行為準則 (原本 Meta-Memory 的核心精神，以專案風格呈現)
+		prompt += `\n\n--- 行為準則 ---`;
+		prompt += `\n1. 嚴禁在未經工具驗證的情況下假設環境狀態或檔案內容。`;
+		prompt += `\n2. 優先檢索資源索引，若需詳細資訊，必須調用 'read_file' 或相關檢索工具。`;
+		prompt += `\n3. 每一輪動作後，請評估是否達成了階段性目標或需記錄關鍵資訊。`;
+
+		return prompt;
 	}
 
 	/**
@@ -124,10 +171,10 @@ export abstract class BaseAgent {
 			));
 
 			// 建立預編譯 ReAct Agent
+			// 注意：我們不在這裡固定 messageModifier，而是在 invoke 時動態處理
 			this.reactAgent = createReactAgent({
 				llm: model,
 				tools: nativeTools,
-				messageModifier: (this.identity || `你是一個 AI 代理 (${this.id})。你的角色是 ${this.role}。`)
 			});
 
 			recorder.info(`Agent [${this.id}] ReAct Engine built successfully.`, { type: 'SYSTEM' });
@@ -139,6 +186,7 @@ export abstract class BaseAgent {
 	/**
 	 * 核心執行方法：使用 ReAct 引擎執行任務。
 	 * 適用於所有繼承自 BaseAgent 的代理。
+	 * Agent將作為子節點被呼叫。
 	 */
 	async execute(taskGoal: string, context: IAgentExecuteContext): Promise<IAgentExecuteResult> {
 		const { sessionId, traceId, taskId } = context;
@@ -152,9 +200,11 @@ export abstract class BaseAgent {
 			this.buildExecutionEngine(model);
 		}
 
-		// --- 關鍵修正：等待異步 Session 加載 ---
 		const session = await this.runtime.sessionManager.getSession(sessionId);
 		if (!session) throw new Error(`Session ${sessionId} not found.`);
+
+		// --- 關鍵變更：動態構建分層提示詞 ---
+		const dynamicSystemPrompt = await this.buildPrompt(context);
 
 		recorder.record(RecordAction.TOOL_CALL, `Agent [${this.id}] starting ReAct execution for: ${taskGoal}`, {
 			session_id: sessionId,
@@ -163,13 +213,37 @@ export abstract class BaseAgent {
 		});
 
 		try {
+			// 決定要注入的上下文 (上下文隔離)
+			let messages: BaseMessage[] = [];
+
+			if (taskId) {
+				// 情況 A：作為 Worker 執行特定 Task
+				// 透過 taskId 從 Repository 查詢任務，獲取專屬歷史
+				const taskDto = await this.runtime.taskRepo.findById(taskId);
+				if ((taskDto  && taskDto.history.length == 0) || !taskDto) {
+					messages = [
+						new SystemMessage(dynamicSystemPrompt),
+						new HumanMessage(`[DIRECTIVE]:\n- Goal: ${taskGoal}\n- Description: ${taskDto ? taskDto.description : "None"}`)
+					]
+				} else {
+					// 這邊代表經過 retry 了，因為history是完整執行之後才會存。
+					// 還原 BaseMessage
+					const taskLangChainMessages = taskDto.history.map((m) => m.message);
+					messages = [...taskLangChainMessages];
+				} 
+
+			} else {
+				// 情況 B：作為 MainAgent 處理對話 
+				// 這邊應該是作為子任務節點被呼叫，因此是特例。
+				messages = [
+					new SystemMessage(dynamicSystemPrompt),
+					...session.getLangChainMessages(), // 引入全局對話歷史
+				];
+			}
+
 			// 執行 ReAct 引擎
-			// 我們將任務目標包裝為指令輸入
 			const resultState = await this.reactAgent.invoke({
-				messages: [
-					...session.getLangChainMessages(),
-					{ role: 'user', content: `[DIRECTIVE]: 你當前的任務目標是「${taskGoal}」。請直接開始執行並回報結果。` }
-				]
+				messages: messages
 			}, {
 				recursionLimit: 50,
 				configurable: {
@@ -188,9 +262,10 @@ export abstract class BaseAgent {
 				payload: { content }
 			});
 
+			// 回傳時，將完整的內部執行軌跡傳出去，讓 TaskManager 可以存進 task.history
 			return {
 				status: 'success',
-				result: { data: content },
+				result: { content, history: resultState.messages }, // 將 messages 包進 result
 				summary: content
 			};
 
@@ -198,7 +273,10 @@ export abstract class BaseAgent {
 			recorder.error(`Agent [${this.id}] execution failed: ${error.message}`, { session_id: sessionId, trace_id: traceId });
 			return {
 				status: 'failed',
-				result: null,
+				result: {
+					content: `執行任務失敗: ${error.message}`,
+					history: [] // TODO: fix this
+				},
 				error: error.message,
 				summary: `執行任務失敗: ${error.message}`
 			};

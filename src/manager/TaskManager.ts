@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { recorder } from '../infra/LogManager';
 import { SystemEventType } from '../infra/types/events';
 import {
-    ChainStatus, IChainStatusSummary, ITaskRepository, ITaskRequest, LogType, TaskStatus
+    ChainStatus, IChainStatusSummary, ITaskRepository, ITaskRequest, LogType, TaskDTO, TaskStatus
 } from '../infra/types/task';
 import { AgentState } from '../models/AgentState';
 import { Task } from '../models/Task';
@@ -24,6 +24,7 @@ export interface ITaskChainState {
   milestones?: string[];
   currentMilestoneIdx?: number;
   projectedContext?: any;
+  replanCount?: number;
 }
 
 /**
@@ -51,17 +52,17 @@ export class TaskManager {
 	/**
 	 * 提交一個新的任務目標 (自動化規劃流程)
 	 */
-	async submit(goal: string, sessionId: string, requesterId: string): Promise<{ chainId: string; traceId: string }> {
+	async submit(goal: string, description: string, sessionId: string, requesterId: string): Promise<{ chainId: string; traceId: string }> {
 		const chainId = `chain-${Date.now()}`;
 		const traceId = `trace-${Date.now()}`;
 
-		this.inbox.push({ goal, sessionId, chainId, traceId, requesterId });
+		this.inbox.push({ goal, description, sessionId, chainId, traceId, requesterId });
 
 		recorder.info(`[TaskManager] Task submitted by ${requesterId}: ${chainId}`, {
 			type: LogType.LIFECYCLE,
 			trace_id: traceId,
 			session_id: sessionId,
-			payload: { goal, chainId, requesterId }
+			payload: { goal, description, chainId, requesterId }
 		});
 
 		this.processInbox().catch(err => {
@@ -93,7 +94,7 @@ export class TaskManager {
 	/**
 	 * 向指定鏈中新增任務並持久化
 	 */
-	async addTaskToChain(chainId: string, taskData: any): Promise<string> {
+	async addTaskToChain(chainId: string, taskData: TaskDTO): Promise<string> {
 		const chain = this.chains.get(chainId);
 		if (!chain) throw new Error(`Chain ${chainId} not found.`);
 
@@ -102,7 +103,7 @@ export class TaskManager {
 			...taskData,
 			id: taskId,
 			sessionId: chain.sessionId,
-			status: 'pending'
+			status: TaskStatus.PENDING
 		});
 
 		// 1. 存入儲存庫
@@ -185,7 +186,7 @@ export class TaskManager {
 	/**
 	 * 獲取特定任務的詳細資訊
 	 */
-	getTaskInfo(chainId: string, taskId: string): Task | null {
+	getTaskInfo(taskId: string): Task | null {
 		// 先看內存
 		if (this.activeTasks.has(taskId)) {
 			return this.activeTasks.get(taskId)!;
@@ -217,7 +218,7 @@ export class TaskManager {
 
 			const nodes = finalState.planning.taskGraph.nodes;
 			for (const n of nodes) {
-				const task = new Task({ ...n, sessionId: request.sessionId });
+				const task = new Task({ ...n, sessionId: request.sessionId, chainId: request.chainId });
 				await this.repo.save(task.toDTO());
 				graph.addTask(n.id, n);
 				this.activeTasks.set(n.id, task);
@@ -331,29 +332,58 @@ export class TaskManager {
 		const runtime = GlobalRuntime.getInstance();
 		try {
 			// 開始監控任務
-			runtime.pulseEngine.watchTask(taskId);
+			runtime.pulseEngine.watchTask(taskId, task.options?.timeout);
 
 			const agent = this.agentManager.getAgent(task.assignedAgentId || 'default-worker');
 			if (!agent) throw new Error(`Agent ${task.assignedAgentId} not found.`);
+
+			// 收集前置依賴的執行結果
+			const dependencyResults: Record<string, string> = {};
+			if (task.dependencies.length > 0) {
+				for (const depId of task.dependencies) {
+					// 從當前 Chain 中取得（假設它一定已完成）
+					const depTask = chain.graph.getTask(depId);
+					if (depTask && depTask.result) {
+						dependencyResults[depId] = depTask.result;
+					}
+				}
+			}
 
 			const executeResult = await agent.execute(task.goal, { 
 				sessionId: chain.sessionId,
 				traceId: chain.traceId,
 				agentId: agent.id,
 				taskId: taskId,
-				sessionGoal: chain.goal
+				sessionGoal: chain.goal,
+				retryCount: task.retryCount,
+				lastError: task.metadata?.error,
+				dependencyResults: dependencyResults
 			});
-			
+
+			// 任務執行完畢，不管有沒有成功都要存檔
+			task.setResult(executeResult);
 			if (executeResult.status === 'failed') throw new Error(executeResult.error);
 
-			task.setResult(executeResult.result);
 			await this.repo.save(task.toDTO());
-
+			
 			chain.graph.completeTask(taskId);
+
+			// 發布 TASK_COMPLETED 事件，讓 SessionManager 同步歷史紀錄
+			runtime.eventBus.publish({
+				type: SystemEventType.TASK_COMPLETED,
+				userId: 'system',
+				sessionId: chain.sessionId,
+				payload: { 
+					taskId: taskId,
+					agentId: agent.id,
+					summary: executeResult.summary,
+					result: executeResult.result
+				},
+				timestamp: Date.now()
+			});
+
 		} catch (err: any) {
-			task.fail(err.message);
-			await this.repo.save(task.toDTO());
-			chain.status = ChainStatus.FAILED;
+			await this.handleTaskFailure(taskId, err.message);
 		} finally {
 			// 停止監控任務
 			runtime.pulseEngine.unwatchTask(taskId);
@@ -388,17 +418,130 @@ export class TaskManager {
 		const task = this.activeTasks.get(taskId);
 		if (!task) return;
 
-		recorder.error(`[TaskManager] Task ${taskId} failed: ${error}`);
+		const maxRetries = task.options?.maxRetries ?? 3;
+		const chainId = this.findChainIdByTaskId(taskId);
+
+		if (task.retryCount < maxRetries) {
+			task.retryCount++;
+			task.updateStatus(TaskStatus.READY);
+			// 移除之前的錯誤訊息，準備重試
+			if (task.metadata) delete task.metadata.error;
+			
+			await this.repo.save(task.toDTO());
+
+			recorder.warn(`[TaskManager] Retrying task ${taskId} (${task.retryCount}/${maxRetries}) due to: ${error}`);
+			
+			if (chainId) {
+				this.driveExecution(chainId).catch(() => { });
+			}
+			return;
+		}
+
+		recorder.error(`[TaskManager] Task ${taskId} failed after ${task.retryCount} retries: ${error}`);
 
 		task.fail(error);
 		await this.repo.save(task.toDTO());
 
-		const chainId = this.findChainIdByTaskId(taskId);
 		if (chainId) {
-			const chain = this.chains.get(chainId);
-			if (chain) {
-				chain.status = ChainStatus.FAILED;
-				recorder.error(`[TaskManager] Chain ${chainId} marked as FAILED due to task failure.`);
+			await this.triggerReplan(chainId, taskId, error);
+		}
+	}
+
+	private async triggerReplan(chainId: string, failedTaskId: string, error: string) {
+		const chain = this.chains.get(chainId);
+		if (!chain) return;
+
+		const replanLimit = 3;
+		const currentReplanCount = chain.replanCount || 0;
+
+		if (currentReplanCount >= replanLimit) {
+			recorder.error(`[TaskManager] Re-planning limit reached (${replanLimit}) for chain ${chainId}. Marking as STUCK.`);
+			chain.status = ChainStatus.STUCK;
+			return;
+		}
+
+		chain.replanCount = currentReplanCount + 1;
+		chain.status = ChainStatus.PLANNING;
+
+		recorder.info(`[TaskManager] Triggering cognitive re-plan for ${chainId} (${chain.replanCount}/${replanLimit})`, { type: LogType.PLAN });
+
+		try {
+			const agents = this.agentManager.getAllAgents().map(a => ({ id: a.id, role: a.role, capabilities: a.capabilities }));
+			const currentState: AgentState = {
+				goal: chain.goal,
+				currentTask: failedTaskId,
+				messages: [], // Ideally should collect history from SessionManager
+				thoughtTree: { nodes: [], rootId: null, activeNodeId: null, iterationCount: 0 },
+				planning: { 
+					milestones: chain.milestones || [], 
+					currentMilestoneIdx: chain.currentMilestoneIdx || 0, 
+					taskGraph: chain.graph.toJSON(), 
+					projectedContext: chain.projectedContext || {} 
+				},
+				lastEvaluations: [],
+				errors: [error],
+				metadata: { available_agents: agents, sessionId: chain.sessionId, traceId: chain.traceId }
+			};
+
+			const mutation = await this.planner.replan(currentState, failedTaskId, error);
+			await this.applyGraphMutation(chainId, mutation);
+
+			chain.status = ChainStatus.RUNNING;
+			recorder.info(`[TaskManager] Re-plan applied for ${chainId}. Resuming execution.`, { type: LogType.PLAN });
+			
+			await this.driveExecution(chainId);
+		} catch (replanError: any) {
+			recorder.error(`[TaskManager] Re-planning failed for ${chainId}: ${replanError.message}`);
+			chain.status = ChainStatus.FAILED;
+		}
+	}
+
+	private async applyGraphMutation(chainId: string, mutation: any) {
+		const chain = this.chains.get(chainId);
+		if (!chain) return;
+
+		const { addedNodes, modifiedNodes, removedEdges } = mutation;
+
+		// 1. Remove edges
+		if (removedEdges) {
+			for (const edge of removedEdges) {
+				chain.graph.removeDependency(edge.source, edge.target);
+			}
+		}
+
+		// 2. Modify existing nodes
+		if (modifiedNodes) {
+			for (const mod of modifiedNodes) {
+				const existingTask = this.activeTasks.get(mod.id);
+				if (existingTask) {
+					if (mod.goal) existingTask.goal = mod.goal;
+					if (mod.assignedRole) existingTask.assignedAgentId = mod.assignedRole; // Simplified mapping
+					
+					// Reset status and retryCount for the modified task
+					existingTask.updateStatus(TaskStatus.READY);
+					existingTask.retryCount = 0;
+					if (existingTask.metadata) delete existingTask.metadata.error;
+
+					await this.repo.save(existingTask.toDTO());
+					chain.graph.updateTask(mod.id, existingTask.toDTO());
+				}
+			}
+		}
+
+		// 3. Add new nodes
+		if (addedNodes) {
+			for (const node of addedNodes) {
+				const task = new Task({ ...node, sessionId: chain.sessionId, status: TaskStatus.READY });
+				await this.repo.save(task.toDTO());
+				chain.graph.addTask(node.id, task.toDTO());
+				this.activeTasks.set(node.id, task);
+				
+				// Re-add dependencies for the new node
+				if (node.dependencies) {
+					for (const depId of node.dependencies) {
+						try { chain.graph.addDependency(depId, node.id); } catch (e) {}
+					}
+				}
 			}
 		}
 	}

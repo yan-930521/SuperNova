@@ -10,7 +10,8 @@ import { AgentState, AgentStateAnnotation } from '../models/AgentState';
 import { TaskGraph } from '../models/TaskGraph';
 import { GlobalRuntime } from '../runtime/GlobalRuntime';
 import {
-    ContextProjectionSchema, MilestonePlanSchema, PlanReviewSchema, TaskExpandResponseSchema
+    ContextProjectionSchema, MilestonePlanSchema, PlanReviewSchema, ReplanResponseSchema,
+    TaskExpandResponseSchema
 } from '../schemas/agent/AgentOutputSchemas';
 import { PromptLoader } from '../utils/PromptLoader';
 
@@ -184,35 +185,23 @@ export class TaskPlanner {
     };
   }
 
-  async replan(state: AgentState, failedNodeId: string, error: string): Promise<Partial<AgentState>> {
+  async replan(state: AgentState, failedNodeId: string, error: string): Promise<any> {
     const failedNode = state.planning.taskGraph?.nodes.find((n: any) => n.id === failedNodeId);
     
-    const result = await this.replanEngine.infer(state as any, TaskExpandResponseSchema, {
+    recorder.info(`[TaskPlanner] Re-planning due to failure of ${failedNodeId}`, { type: 'PLAN' });
+
+    const result = await this.replanEngine.infer(state as any, ReplanResponseSchema, {
       variables: {
         goal: state.goal,
         failed_task_id: failedNodeId,
         failed_task_goal: failedNode?.goal || 'Unknown',
         error: error,
-        history: JSON.stringify(state.messages),
+        history: JSON.stringify(state.messages.slice(-10)),
         current_graph: JSON.stringify(state.planning.taskGraph),
         available_agents: JSON.stringify(state.metadata?.available_agents || [])
       }
     });
 
-    const nodes: TaskDTO[] = result.nodes.map((n: any) => ({
-      ...n,
-      id: n.id || uuidv4(),
-      status: 'pending' as const
-    }));
-
-    return {
-      planning: {
-        ...state.planning,
-        taskGraph: {
-          ...state.planning.taskGraph!,
-          nodes
-        }
-      }
-    };
+    return result;
   }
 }

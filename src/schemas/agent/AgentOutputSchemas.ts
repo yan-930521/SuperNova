@@ -73,3 +73,21 @@ export const ReActResponseSchema = z.object({
 	answer: z.string().nullable().describe("最終答案，若尚未完成則為 null")
 }).describe("ReAct 代理的單步決策");
 
+/**
+ * 重規劃響應 Schema (Re-planning)
+ */
+export const ReplanResponseSchema = z.object({
+	addedNodes: z.array(TaskNodeSchema).describe("要新增的任務節點列表"),
+	modifiedNodes: z.array(z.object({
+		id: z.string().describe("要修改的任務 ID"),
+		goal: z.string().optional().describe("更新後的目標描述"),
+		assignedRole: z.string().optional().describe("更新後的角色分配"),
+		dependencies: z.array(z.string()).optional().describe("更新後的依賴列表")
+	})).describe("要修改的現有任務列表"),
+	removedEdges: z.array(z.object({
+		source: z.string().describe("依賴的來源任務 ID (被依賴者)"),
+		target: z.string().describe("依賴的目標任務 ID (依賴者)")
+	})).describe("要移除的任務依賴關係列表")
+}).describe("針對失敗任務的修復規劃方案");
+
+

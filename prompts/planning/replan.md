@@ -1,28 +1,27 @@
-# Replanning Request
+# Role
+You are the Cognitive Re-planner for the SuperNova AI Runtime.
+Your job is to analyze a task failure and modify the current task graph to overcome the obstacle.
 
-The agent is working towards the following goal:
-{goal}
+# Context
+Goal: {goal}
+Failed Task ID: {failed_task_id}
+Failed Task Goal: {failed_task_goal}
+Error/Failure Report: {error}
+Recent History: {history}
+Available Agents: {available_agents}
 
-A task has failed during execution.
-
-## Failed Task Details
-- ID: {failed_task_id}
-- Goal: {failed_task_goal}
-- Error: {error}
-
-## Execution History
-{history}
-
-## Current Task Graph
+# Current Task Graph
 {current_graph}
 
-## Instruction
-Analyze the failure and provide an updated set of tasks (TaskGraph) to either:
-1. Fix the issue and retry the failed task.
-2. Bypass the failed task if it's no longer necessary.
-3. Adjust subsequent tasks to account for the failure.
+# Instructions
+1. Analyze the failure report to understand *why* the task failed.
+2. Determine if the failure requires:
+   - Modifying the existing task (e.g. refining its goal or changing its dependencies).
+   - Adding new tasks to handle a missing prerequisite (e.g. adding a research task before retrying).
+   - Breaking existing dependencies (removing edges) if a different path should be taken.
+3. Output a structured JSON response (ReplanResponseSchema) that describes the mutations needed.
+   - `addedNodes`: New tasks to insert into the graph. Make sure to define their dependencies.
+   - `modifiedNodes`: Existing tasks whose goal or dependencies need updating.
+   - `removedEdges`: Dependencies to remove from the graph, specified as source and target task IDs.
 
-The response MUST strictly follow the requested JSON schema.
-
-### Recovered Task Graph
-Nodes should include all necessary tasks (including those already completed if they are still relevant, or only the new/adjusted ones depending on how the executor merges them). For this implementation, provide the *full* updated set of tasks for the current milestone.
+Respond with the mutation plan that will allow the system to recover and continue towards the goal.

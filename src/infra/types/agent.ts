@@ -1,3 +1,5 @@
+import { MessageDTO } from './session';
+
 /**
  * 模型用途預設
  */
@@ -69,6 +71,12 @@ export interface IAgentExecuteContext {
   taskId?: string;
   /** 會話的全域目標 */
   sessionGoal?: string;
+  /** 當前任務的重試次數 */
+  retryCount?: number;
+  /** 上一次執行的錯誤訊息 */
+  lastError?: string;
+  /** 前置任務的執行結果摘要 (TaskID -> Summary) */
+  dependencyResults?: Record<string, string>;
   /** 額外的元數據 */
   metadata?: Record<string, any>;
 }
@@ -80,7 +88,10 @@ export interface IAgentExecuteResult {
   /** 執行狀態 */
   status: 'success' | 'failed';
   /** 具體產出的數據 */
-  result: any;
+  result: {
+    content: string;
+    history: MessageDTO[];
+  };
   /** 供會話歷史使用的摘要內容 (對話式輸出) */
   summary: string;
   /** 錯誤訊息 (僅在失敗時) */

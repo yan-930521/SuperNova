@@ -1,5 +1,5 @@
-import { IEventBus, SystemEventType } from './types/events';
 import { recorder } from './LogManager';
+import { IEventBus, SystemEventType } from './types/events';
 
 export enum PulseHookType {
   INTERVAL = 'INTERVAL',
@@ -207,13 +207,13 @@ export class PulseEngine {
     recorder.debug(`[PulseEngine] tick: ${this.tickCount}`, { type: 'SYSTEM' });
     
     // 發布系統 Tick 事件
-    this.eventBus.publish({
-      type: SystemEventType.SYSTEM_TICK,
-      userId: 'SYSTEM',
-      sessionId: 'SYSTEM',
-      payload: { tickCount: this.tickCount },
-      timestamp: Date.now()
-    });
+    // this.eventBus.publish({
+    //   type: SystemEventType.SYSTEM_TICK,
+    //   userId: 'SYSTEM',
+    //   sessionId: 'SYSTEM',
+    //   payload: { tickCount: this.tickCount },
+    //   timestamp: Date.now()
+    // });
 
     // 檢查任務超時
     for (const [taskId, info] of this.watchTasks.entries()) {

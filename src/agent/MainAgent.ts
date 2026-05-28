@@ -1,3 +1,5 @@
+import { SystemMessage } from '@langchain/core/messages';
+
 import { recorder } from '../infra/LogManager';
 import { IAgentExecuteContext, IAgentExecuteResult, ModelPreset } from '../infra/types/agent';
 import { MessageRole } from '../infra/types/session';
@@ -14,23 +16,6 @@ export class MainAgent extends BaseAgent {
 	 */
 	constructor(id: string) {
 		super(id, 'MAIN_AGENT');
-	}
-
-	/**
-	 * 註冊 MainAgent 特有的編排工具
-	 */
-	public registerDefaultTools(): void {
-		super.registerDefaultTools(); // 先註冊通用工具
-		if (!this.runtime) return;
-
-		// 從 ToolRegistry 獲取核心編排工具
-		const coreTools = this.runtime.toolRegistry.getToolsByCategory('core');
-		coreTools.forEach(t => this.registerTool(t));
-
-		recorder.info(`MainAgent [${this.id}] registered ${coreTools.length} core tools.`, { 
-			type: 'SYSTEM',
-			agent_id: this.id 
-		});
 	}
 
 	/**
@@ -59,10 +44,18 @@ export class MainAgent extends BaseAgent {
 		const userMsg = session.history[session.history.length - 1];
 		await this.runtime.sessionManager.appendMessage(session.id, userMsg);
 
+		const dynamicSystemPrompt = await this.buildPrompt({ 
+				sessionId: session.id,
+				sessionGoal: session.goal
+			});
+
 		try {
 			// 2. 執行 ReAct 引擎 (直接傳遞 Session 中的 BaseMessage[] 歷史)
 			const resultState = await this.reactAgent.invoke({
-				messages: session.getLangChainMessages()
+				messages: [
+					new SystemMessage(dynamicSystemPrompt),
+					...session.getLangChainMessages()
+				]
 			}, {
 				recursionLimit: 50,
 				configurable: {
@@ -79,7 +72,7 @@ export class MainAgent extends BaseAgent {
 			const finalResponse = typeof lastMessage.content === 'string' ? lastMessage.content : JSON.stringify(lastMessage.content);
 
 			// 4. 同步 Session 歷史
-			session.addMessage(this.id, MessageRole.ASSISTANT, finalResponse);
+			// session.addMessage(this.id, MessageRole.ASSISTANT, finalResponse);
 
 			// 5. 附加助理回覆到持久層 (使用 BaseMessage 的標準字典格式)
 			const assistantMsg = session.history[session.history.length - 1];

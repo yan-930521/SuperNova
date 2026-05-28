@@ -3,6 +3,7 @@ import {
     ToolMessage
 } from '@langchain/core/messages';
 
+import { recorder } from '../infra/LogManager';
 import { SystemEventType } from '../infra/types/events';
 import { MessageDTO, MessageRole, SessionDTO } from '../infra/types/session';
 import { GlobalRuntime } from '../runtime/GlobalRuntime';
@@ -97,6 +98,12 @@ export class Session implements ISession {
 					event.payload.summary || 'Task completed',
 					{ taskId: event.payload.taskId }
 				);
+
+				// 同步寫入持久層
+				const workerMsg = this.history[this.history.length - 1];
+				runtime?.sessionManager.appendMessage(this.id, workerMsg).catch(e => {
+					recorder.error(`Failed to persist worker message: ${e}`, {});
+				});
 			}
 		});
 

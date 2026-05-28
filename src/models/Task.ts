@@ -1,3 +1,5 @@
+import { IAgentExecuteResult } from '../infra/types/agent';
+import { MessageDTO } from '../infra/types/session';
 import { TaskDTO, TaskStatus } from '../infra/types/task';
 
 /**
@@ -7,29 +9,35 @@ import { TaskDTO, TaskStatus } from '../infra/types/task';
 export class Task {
   public id: string;
   public sessionId: string;
+  public chainId: string;
   public type: string;
   public goal: string;
+  public description: string;
   public status: TaskStatus;
   public dependencies: string[] = [];
   public assignedAgentId?: string | null;
   public requiredCapabilities?: string[];
   public toolRouting?: any;
   public options?: any;
-  public result?: any;
+  public retryCount: number = 0;
+  public history: MessageDTO[] = [];
   public metadata?: Record<string, any>;
 
   constructor(dto: TaskDTO) {
     this.id = dto.id;
     this.sessionId = dto.sessionId;
+	this.chainId = dto.chainId;
     this.type = dto.type;
     this.goal = dto.goal;
+    this.description = dto.description;
     this.status = dto.status;
     this.dependencies = dto.dependencies || [];
     this.assignedAgentId = dto.assignedAgentId;
     this.requiredCapabilities = dto.requiredCapabilities;
     this.toolRouting = dto.toolRouting;
     this.options = dto.options;
-    this.result = dto.result;
+    this.retryCount = dto.retryCount || 0;
+    this.history = dto.history || [];
     this.metadata = dto.metadata || {};
   }
 
@@ -38,19 +46,22 @@ export class Task {
    */
   toDTO(): TaskDTO {
     return {
-      id: this.id,
-      sessionId: this.sessionId,
-      type: this.type,
-      goal: this.goal,
-      status: this.status,
-      dependencies: this.dependencies,
-      assignedAgentId: this.assignedAgentId,
-      requiredCapabilities: this.requiredCapabilities,
-      toolRouting: this.toolRouting,
-      options: this.options,
-      result: this.result,
-      metadata: this.metadata
-    };
+	id: this.id,
+	sessionId: this.sessionId,
+	chainId: this.chainId,
+	type: this.type,
+	goal: this.goal,
+	description: this.description,
+	status: this.status,
+	dependencies: this.dependencies,
+	assignedAgentId: this.assignedAgentId,
+	requiredCapabilities: this.requiredCapabilities,
+	toolRouting: this.toolRouting,
+	options: this.options,
+	retryCount: this.retryCount,
+	history: this.history,
+	metadata: this.metadata,
+};
   }
 
   /**
@@ -63,9 +74,14 @@ export class Task {
   /**
    * 設定執行結果
    */
-  setResult(result: any): void {
-    this.result = result;
-    this.status = TaskStatus.COMPLETED;
+  setResult(AEResult: IAgentExecuteResult): void {
+    // 注入完整訊息，包括 初始SystemMessage
+    this.history.push(...AEResult.result.history);
+    if (AEResult.status == 'success') {
+      this.status = TaskStatus.COMPLETED;
+    } else {
+      this.status = TaskStatus.FAILED;
+    }
   }
 
   /**

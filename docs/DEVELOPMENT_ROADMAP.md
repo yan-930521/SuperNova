@@ -44,9 +44,10 @@
 ### 實施重點
 - [x] **即時規劃 (Just-in-Time)**：實作按里程碑動態展開任務圖。
 - [x] **脈搏與監聽 (Pulse & Watchers)**：實作 Task 心跳機制與超時偵測。
-- [ ] **JIT 自癒與重規劃 (Self-Healing)**：當前失敗會導致 Chain 暫停，未來將實作自動局部重規劃。
+- [x] **JIT 自癒與重規劃 (Self-Healing)**：實作了 3x3 階梯式重試機制、認知重規劃 (Cognitive Re-planning) 以及任務上下文隔離與繼承 (Context Isolation)。
+- [ ] **STUCK 狀態處理**：設計當任務鏈進入 STUCK 狀態時的後續處置機制（如人類介入 HITL 或自動降級）。
 - [ ] **記憶系統 (Memory System)**：建立短、中、長期記憶層級，支援基於向量檢索與語境壓縮的 Context 管理。
-- [ ] **環境適配**：完成從 Node.js 到 Bun 的環境遷移 ✅ (2026-05-28)。
+- [x] **環境適配**：完成從 Node.js 到 Bun 的環境遷移 (2026-05-28)。
 
 ---
 
@@ -86,3 +87,6 @@
 ## 📅 維護紀錄
 - **2026-05-26**：正式確立三階段路線圖，並完成階段一與 1.5 介面對齊。
 - **2026-05-28**：遷移至 Bun 環境，並新增 Memory System 與 TailAgent 計畫。
+
+## 想法記錄
+- **2026-05-29**：https://blog.can.ac/2026/02/12/the-harness-problem/ 增強文本編輯tool

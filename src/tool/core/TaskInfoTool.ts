@@ -17,20 +17,19 @@ export class TaskInfoTool extends BaseTool {
       safety_tier: 'TIER_1',
       required_capabilities: ['orchestration'],
       schema: z.object({
-        chainId: z.string().describe('The ID of the task chain.'),
         taskId: z.string().describe('The ID of the specific task node.')
       })
     });
   }
 
   async run(input: any, context: IAgentExecuteContext): Promise<any> {
-    const { chainId, taskId } = input;
+    const { taskId } = input;
     const runtime = GlobalRuntime.getInstance();
     
-    const task = runtime.taskManager.getTaskInfo(chainId, taskId);
+    const task = runtime.taskManager.getTaskInfo(taskId);
     
     if (!task) {
-      throw new Error(`Task ${taskId} not found in chain ${chainId}.`);
+      throw new Error(`Task ${taskId} not found.`);
     }
 
     return {
@@ -38,7 +37,6 @@ export class TaskInfoTool extends BaseTool {
       goal: task.goal,
       status: task.status,
       assignedAgentId: task.assignedAgentId,
-      result: task.result,
       dependencies: task.dependencies
     };
   }

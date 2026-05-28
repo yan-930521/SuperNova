@@ -31,7 +31,7 @@ export class TaskGraph {
    */
   addTask(taskId: string, node: Partial<TaskDTO> = {}): void {
     const isNew = !this.nodes.has(taskId);
-    
+
     // 提供預設值以補齊 TaskDTO
     const fullNode: TaskDTO = {
       id: taskId,
@@ -113,6 +113,85 @@ export class TaskGraph {
   }
 
   /**
+   * 移除任務依賴關係
+   */
+  removeDependency(parentTaskId: string, childTaskId: string): void {
+    if (!this.nodes.has(parentTaskId) || !this.nodes.has(childTaskId)) return;
+    const successors = this.adjList.get(parentTaskId);
+    if (successors && successors.has(childTaskId)) {
+      successors.delete(childTaskId);
+      const currentInDegree = this.inDegreeMap.get(childTaskId) || 0;
+      this.inDegreeMap.set(childTaskId, Math.max(0, currentInDegree - 1));
+
+      // Update dependencies array in TaskDTO
+      const childNode = this.nodes.get(childTaskId);
+      if (childNode && childNode.dependencies) {
+        childNode.dependencies = childNode.dependencies.filter(id => id !== parentTaskId);
+      }
+    }
+  }
+
+  /**
+   * 更新現有任務的屬性
+   */
+  updateTask(taskId: string, updates: Partial<TaskDTO>): void {
+    const node = this.nodes.get(taskId);
+    if (!node) throw new Error(`Task ${taskId} not found`);
+
+    // Replace dependencies if provided
+    if (updates.dependencies) {
+      // Remove old dependencies not in new list
+      const currentDeps = node.dependencies || [];
+      for (const oldDep of currentDeps) {
+        if (!updates.dependencies.includes(oldDep)) {
+          this.removeDependency(oldDep, taskId);
+        }
+      }
+      // Add new dependencies
+      for (const newDep of updates.dependencies) {
+        if (!currentDeps.includes(newDep)) {
+          try { this.addDependency(newDep, taskId); } catch (e) { }
+        }
+      }
+    }
+
+    Object.assign(node, updates);
+  }
+
+  /**
+   * 從圖中移除任務，並自動解除相關的依賴關係
+   */
+  removeTask(taskId: string): void {
+    if (!this.nodes.has(taskId)) return;
+
+    // Remove outgoing edges
+    const successors = this.adjList.get(taskId);
+    if (successors) {
+      for (const successor of successors) {
+        const currentInDegree = this.inDegreeMap.get(successor) || 0;
+        this.inDegreeMap.set(successor, Math.max(0, currentInDegree - 1));
+
+        // Update child's dependencies array
+        const childNode = this.nodes.get(successor);
+        if (childNode && childNode.dependencies) {
+          childNode.dependencies = childNode.dependencies.filter(id => id !== taskId);
+        }
+      }
+    }
+
+    // Remove incoming edges
+    for (const [parentId, children] of this.adjList.entries()) {
+      if (children.has(taskId)) {
+        children.delete(taskId);
+      }
+    }
+
+    this.nodes.delete(taskId);
+    this.adjList.delete(taskId);
+    this.inDegreeMap.delete(taskId);
+  }
+
+  /**
    * 標記任務完成，並更新其後續任務的入度。
    * @param taskId 任務唯一標識
    */
@@ -132,7 +211,7 @@ export class TaskGraph {
       }
     }
 
-    // 關鍵修正：不再刪除節點，以便後續查詢 (符合 ARCH.md 執行總帳原則)
+    // 關鍵修正：不再刪除節點，以便後續查詢
     // 但必須從入度表中移除，否則 getReadyTasks 會一直抓到它
     this.inDegreeMap.delete(taskId);
   }

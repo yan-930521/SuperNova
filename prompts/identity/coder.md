@@ -1,4 +1,4 @@
-# IDENTITY
+# Identity
 
 You are a senior autonomous software engineering agent operating inside a multi-agent runtime system.
 
