@@ -7,6 +7,7 @@ import { LogLevel, recorder } from '../infra/LogManager';
 import { ModelRegistry } from '../infra/ModelRegistry';
 import { PulseEngine } from '../infra/PulseEngine';
 import { FileSystemAgentRepository } from '../infra/storage/FileSystemAgentRepository';
+import { FileSystemMemoryRepository } from '../infra/storage/FileSystemMemoryRepository';
 import { FileSystemSessionRepository } from '../infra/storage/FileSystemSessionRepository';
 import { FileSystemTaskRepository } from '../infra/storage/FileSystemTaskRepository';
 import { FileSystemUserRepository } from '../infra/storage/FileSystemUserRepository';
@@ -14,9 +15,11 @@ import { ConsoleTransport } from '../infra/transports/ConsoleTransport';
 import { FileTransport } from '../infra/transports/FileTransport';
 import { IAgentRepository } from '../infra/types/agent';
 import { IUserRepository } from '../infra/types/identity';
+import { IMemoryRepository } from '../infra/types/memory';
 import { ISessionRepository } from '../infra/types/session';
 import { ITaskRepository } from '../infra/types/task';
 import { AgentManager } from '../manager/AgentManager';
+import { MemoryManager } from '../manager/MemoryManager';
 import { SessionManager } from '../manager/SessionManager';
 import { TaskManager } from '../manager/TaskManager';
 import { UserManager } from '../manager/UserManager';
@@ -42,12 +45,14 @@ export class GlobalRuntime {
 	public sessionRepo!: ISessionRepository;
 	public taskRepo!: ITaskRepository;
 	public agentRepo!: IAgentRepository;
+	public memoryRepo!: IMemoryRepository;
 
 	// --- 2. 業務層 (Managers) ---
 	public userManager!: UserManager;
 	public sessionManager!: SessionManager;
 	public agentManager!: AgentManager;
 	public taskManager!: TaskManager;
+	public memoryManager!: MemoryManager;
 
 	// --- 3. 基礎組件 (Bus & Registries) ---
 	public eventBus: EventBus;
@@ -92,6 +97,7 @@ export class GlobalRuntime {
 		this.userRepo = new FileSystemUserRepository(path.join(root, 'workspace/users'));
 		this.sessionRepo = new FileSystemSessionRepository(path.join(root, 'workspace/sessions'));
 		this.taskRepo = new FileSystemTaskRepository(path.join(root, 'workspace/tasks'));
+		this.memoryRepo = new FileSystemMemoryRepository(path.join(root, 'workspace/memory'));
 
 		const agentsDir = this.config?.runtime.agents_dir || './agents';
 		this.agentRepo = new FileSystemAgentRepository(agentsDir);
@@ -104,6 +110,7 @@ export class GlobalRuntime {
 		this.sessionManager = new SessionManager(this.sessionRepo);
 		this.agentManager = new AgentManager(this.agentRepo);
 		this.agentManager.setRuntime(this); // 注入運行時實例
+		this.memoryManager = new MemoryManager(this.memoryRepo, this.agentManager);
 		this.taskManager = new TaskManager(this.agentManager, this.taskRepo);
 
 		// --- 3. 初始化可觀測性與日誌 ---
