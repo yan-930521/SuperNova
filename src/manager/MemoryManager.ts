@@ -100,11 +100,12 @@ export class MemoryManager {
       return messages;
     }
 
-    recorder.info(`[MemoryManager] Folding history: ${messages.length} messages -> compressing oldest 15`, { type: 'SYSTEM' });
+    recorder.info(`[MemoryManager] Folding history: ${messages.length} messages -> folding oldest 15`, { type: 'SYSTEM' });
 
-    // 保留最新的訊息，折疊舊的訊息
-    const latestMessages = messages.slice(-5);
-    const messagesToFold = messages.slice(0, messages.length - 5);
+    // 取得最舊的 15 條訊息進行折疊
+    const messagesToFold = messages.slice(0, 15);
+    // 剩餘的訊息保持原樣
+    const remainingMessages = messages.slice(15);
     
     const foldedMessages: MessageDTO[] = [];
     
@@ -114,7 +115,6 @@ export class MemoryManager {
       const count = chunk.length;
       
       // 創建折疊後的 SYSTEM 訊息
-      // 注意：這裡使用靜態摘要，因為這是一個同步方法且不應在此調用 LLM
       const foldedMsg: MessageDTO = {
         message: {
           content: `[System] (${count} turns folded): Previous conversation context is archived to save space.`,
@@ -131,6 +131,6 @@ export class MemoryManager {
       foldedMessages.push(foldedMsg);
     }
 
-    return [...foldedMessages, ...latestMessages];
+    return [...foldedMessages, ...remainingMessages];
   }
 }
