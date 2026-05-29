@@ -26,7 +26,7 @@ export class Task {
   constructor(dto: TaskDTO) {
     this.id = dto.id;
     this.sessionId = dto.sessionId;
-	this.chainId = dto.chainId;
+    this.chainId = dto.chainId;
     this.type = dto.type;
     this.goal = dto.goal;
     this.description = dto.description;
@@ -46,22 +46,22 @@ export class Task {
    */
   toDTO(): TaskDTO {
     return {
-	id: this.id,
-	sessionId: this.sessionId,
-	chainId: this.chainId,
-	type: this.type,
-	goal: this.goal,
-	description: this.description,
-	status: this.status,
-	dependencies: this.dependencies,
-	assignedAgentId: this.assignedAgentId,
-	requiredCapabilities: this.requiredCapabilities,
-	toolRouting: this.toolRouting,
-	options: this.options,
-	retryCount: this.retryCount,
-	history: this.history,
-	metadata: this.metadata,
-};
+      id: this.id,
+      sessionId: this.sessionId,
+      chainId: this.chainId,
+      type: this.type,
+      goal: this.goal,
+      description: this.description,
+      status: this.status,
+      dependencies: this.dependencies,
+      assignedAgentId: this.assignedAgentId,
+      requiredCapabilities: this.requiredCapabilities,
+      toolRouting: this.toolRouting,
+      options: this.options,
+      retryCount: this.retryCount,
+      history: this.history,
+      metadata: this.metadata,
+    };
   }
 
   /**

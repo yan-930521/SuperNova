@@ -1,7 +1,12 @@
 import { v4 as uuidv4 } from 'uuid';
 
+import { MainAgent } from '../agent/MainAgent';
 import { recorder } from '../infra/LogManager';
-import { SystemEventType } from '../infra/types/events';
+import {
+    IChainCreatedPayload, IChainStatusUpdatedPayload, ISystemEvent, ITaskCompletedPayload,
+    ITaskFailedPayload, ITaskHeartbeatPayload, ITaskStatusUpdatedPayload, SystemEventType
+} from '../infra/types/events';
+import { MessageRole } from '../infra/types/session';
 import {
     ChainStatus, IChainStatusSummary, ITaskRepository, ITaskRequest, LogType, TaskDTO, TaskStatus
 } from '../infra/types/task';
@@ -21,6 +26,7 @@ export interface ITaskChainState {
 	sessionId: string;
 	traceId: string;
 	goal: string;
+	requesterId: string;
 	milestones?: string[];
 	currentMilestoneIdx?: number;
 	projectedContext?: any;
@@ -45,6 +51,7 @@ export class TaskManager {
 		this.planner = new TaskPlanner();
 		this.setupHeartbeatListener();
 		this.setupTaskFailureListener();
+		this.setupChainListener();
 	}
 
 	// --- 公開管理介面 (API) ---
@@ -84,7 +91,8 @@ export class TaskManager {
 			graph,
 			sessionId,
 			traceId: `trace-man-${Date.now()}`,
-			goal
+			goal,
+			requesterId
 		});
 
 		// 發布初始狀態事件
@@ -213,7 +221,8 @@ export class TaskManager {
 			graph,
 			sessionId: request.sessionId,
 			traceId: request.traceId,
-			goal: request.goal
+			goal: request.goal,
+			requesterId: request.requesterId
 		});
 
 		this.updateChainStatus(request.chainId, ChainStatus.PLANNING);
@@ -241,8 +250,8 @@ export class TaskManager {
 			chain.currentMilestoneIdx = finalState.planning?.currentMilestoneIdx;
 			chain.projectedContext = finalState.planning?.projectedContext;
 
-			GlobalRuntime.getInstance().eventBus.publish({
-				type: SystemEventType.SESSION_CREATED,
+			GlobalRuntime.getInstance().eventBus.publish<IChainCreatedPayload>({
+				type: SystemEventType.CHAIN_CREATED,
 				userId: 'system',
 				sessionId: request.sessionId,
 				payload: { goal: request.goal, nodes: graph.getAllTasks() },
@@ -378,12 +387,13 @@ export class TaskManager {
 			await this.updateTaskStatus(taskId, TaskStatus.COMPLETED);
 
 			// 發布 TASK_COMPLETED 事件，讓 SessionManager 同步歷史紀錄
-			runtime.eventBus.publish({
+			runtime.eventBus.publish<ITaskCompletedPayload>({
 				type: SystemEventType.TASK_COMPLETED,
 				userId: 'system',
 				sessionId: chain.sessionId,
 				payload: {
 					taskId: taskId,
+					sessionId: chain.sessionId,
 					agentId: agent.id,
 					summary: executeResult.summary,
 					result: executeResult.result
@@ -402,7 +412,7 @@ export class TaskManager {
 	private setupHeartbeatListener() {
 		const runtime = GlobalRuntime.getInstance();
 		if (runtime && runtime.eventBus) {
-			runtime.eventBus.subscribe(SystemEventType.TASK_HEARTBEAT, (event) => {
+			runtime.eventBus.subscribe<ITaskHeartbeatPayload>(SystemEventType.TASK_HEARTBEAT, (event) => {
 				const { taskId } = event.payload;
 				if (taskId) {
 					runtime.pulseEngine.updateHeartbeat(taskId);
@@ -411,10 +421,48 @@ export class TaskManager {
 		}
 	}
 
+	/**
+	 * 設置任務鏈與任務狀態監聽器
+	 */
+	private setupChainListener() {
+		const runtime = GlobalRuntime.getInstance();
+
+		const bus = runtime.eventBus;
+
+		// 1. 監聽任務完成 (逐條足跡)
+		bus.subscribe<ITaskCompletedPayload>(SystemEventType.TASK_COMPLETED, async (event) => {
+			const { taskId, agentId, summary, sessionId } = event.payload;
+
+			const session = await runtime?.sessionManager.getSession(sessionId);
+			if (session) {
+				session.addMessage(
+					agentId || 'system-worker',
+					MessageRole.WORKER,
+					summary || 'Task completed',
+					{ taskId }
+				);
+				
+				recorder.debug(`[MainAgent] Logged worker trace for task: ${taskId}`, { session_id: sessionId });
+			}
+		});
+
+		// 2. 監聽任務鏈完成 (最終結報)
+		bus.subscribe<IChainStatusUpdatedPayload>(SystemEventType.CHAIN_STATUS_UPDATED, async (event) => {
+			const { chainId, status, sessionId, requesterId } = event.payload;
+
+			// 僅處理歸屬於此 Agent 且已完成的 Chain
+			if (status === ChainStatus.COMPLETED && requesterId) {
+				recorder.info(`[MainAgent] Chain ${chainId} completed. Starting distillation...`, { session_id: sessionId });
+				const mainAgent = runtime.agentManager.getAgent(requesterId) as MainAgent;
+				await mainAgent.handleChainCompletion(sessionId, chainId);
+			}
+		});
+	}
+
 	private setupTaskFailureListener() {
 		const runtime = GlobalRuntime.getInstance();
 		if (runtime && runtime.eventBus) {
-			runtime.eventBus.subscribe(SystemEventType.TASK_FAILED, (event) => {
+			runtime.eventBus.subscribe<ITaskFailedPayload>(SystemEventType.TASK_FAILED, (event) => {
 				const { taskId, error } = event.payload;
 				if (error?.includes('timeout')) {
 					this.handleTaskFailure(taskId, error);
@@ -569,11 +617,11 @@ export class TaskManager {
 
 		recorder.info(`[TaskManager] Chain ${chainId} status: ${oldStatus} -> ${status}`, { type: LogType.LIFECYCLE, session_id: chain.sessionId });
 
-		GlobalRuntime.getInstance().eventBus.publish({
+		GlobalRuntime.getInstance().eventBus.publish<IChainStatusUpdatedPayload>({
 			type: SystemEventType.CHAIN_STATUS_UPDATED,
 			userId: 'system',
 			sessionId: chain.sessionId,
-			payload: { chainId, status, oldStatus, goal: chain.goal },
+			payload: { chainId, sessionId: chain.sessionId, status, oldStatus, goal: chain.goal, requesterId: chain.requesterId },
 			timestamp: Date.now()
 		});
 	}
@@ -595,7 +643,7 @@ export class TaskManager {
 			if (chain) {
 				chain.graph.updateTask(taskId, task.toDTO());
 
-				GlobalRuntime.getInstance().eventBus.publish({
+				GlobalRuntime.getInstance().eventBus.publish<ITaskStatusUpdatedPayload>({
 					type: SystemEventType.TASK_STATUS_UPDATED,
 					userId: 'system',
 					sessionId: chain.sessionId,

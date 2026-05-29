@@ -1,5 +1,6 @@
 import { recorder } from '../infra/LogManager';
-import { ISessionRepository, MessageDTO } from '../infra/types/session';
+import { IAgentMessagePayload, IEventBus, SystemEventType } from '../infra/types/events';
+import { ISessionRepository, MessageDTO, MessageRole } from '../infra/types/session';
 import { Session } from '../models/Session';
 
 /**
@@ -13,7 +14,29 @@ export class SessionManager {
   /**
    * @param repo 注入會話儲存庫，負責底層 IO
    */
-  constructor(private repo: ISessionRepository) {}
+  constructor(
+    private repo: ISessionRepository,
+    private eventBus: IEventBus
+  ) {
+    this.setupMessageListener();
+  }
+
+  /**
+   * 設置訊息監聽器
+   * 負責接收 AGENT_MESSAGE 事件並寫入帳本。
+   */
+  private setupMessageListener() {
+    this.eventBus.subscribe<IAgentMessagePayload>(SystemEventType.AGENT_MESSAGE, async (event) => {
+      const { sessionId, agentId, role, content, metadata } = event.payload;
+      
+      const session = await this.getSession(sessionId);
+      if (session) {
+        // 這裡會觸發 session.addMessage 並自動進行持久化
+        session.addMessage(agentId, role as MessageRole, content, metadata);
+        recorder.debug(`[SessionManager] Persisted agent message to session: ${sessionId}`);
+      }
+    });
+  }
 
   /**
    * 創建一個新的會話

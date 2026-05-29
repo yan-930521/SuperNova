@@ -122,13 +122,14 @@
 
 ---
 
-### Task 5: Mental Consolidation Loop
+### Task 5: Mental Consolidation Loop (Done)
 
 **Files:**
 - Modify: `src/manager/MemoryManager.ts`
 - Modify: `src/manager/TaskManager.ts`
+- Modify: `src/agent/MainAgent.ts`
 
-- [ ] **Step 1: Implement `distillExperience` method in MemoryManager**
-- [ ] **Step 2: Trigger consolidation in TaskManager when Chain completes**
-- [ ] **Step 3: Final verification with a multi-task scenario**
+- [x] **Step 1: Implement `setupChainListener` and `handleChainCompletion` in MainAgent**
+- [x] **Step 2: Trigger consolidation logic and notify user on Chain completion**
+- [x] **Step 3: Final verification with a multi-task scenario**
 

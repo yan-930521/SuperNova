@@ -11,8 +11,5 @@ export class WorkerAgent extends BaseAgent {
    */
   constructor(id: string) {
     super(id, 'WORKER');
-    this.registerDefaultTools();
   }
-  
-  // 使用 BaseAgent 提供的通用的 execute 實作
 }

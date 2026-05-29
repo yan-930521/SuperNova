@@ -10,15 +10,15 @@ export class EventBus implements IEventBus {
   /** 處理函數映射表：使用 Map 與 Set 進行高效的事件分發 */
   private handlers: Map<SystemEventType, Set<(event: ISystemEvent) => void>> = new Map();
 
-  constructor() {}
+  constructor() { }
 
   /**
    * 發布事件
    * 將事件分發給所有對該類型感興趣的訂閱者。
    * @param event 符合 ISystemEvent 結構的事件對象
    */
-  publish(event: ISystemEvent): void {
-    recorder.info(`[EventBus] Publishing event: ${event.type}`, { 
+  publish<T = any>(event: ISystemEvent<T>): void {
+    recorder.info(`[EventBus] Publishing event: ${event.type}`, {
       type: 'SYSTEM',
       session_id: event.sessionId,
       payload: { eventType: event.type }
@@ -30,9 +30,9 @@ export class EventBus implements IEventBus {
         try {
           handler(event);
         } catch (error) {
-          recorder.error(`[EventBus] Error in handler for ${event.type}:`, { 
-            type: 'SYSTEM', 
-            payload: { error, event } 
+          recorder.error(`[EventBus] Error in handler for ${event.type}:`, {
+            type: 'SYSTEM',
+            payload: { error, event }
           });
         }
       });
@@ -45,7 +45,7 @@ export class EventBus implements IEventBus {
    * @param type 系統事件類型 (Enum)
    * @param handler 處理函數 (接收 ISystemEvent 作為參數)
    */
-  subscribe(type: SystemEventType, handler: (event: ISystemEvent) => void): void {
+  subscribe<T = any>(type: SystemEventType, handler: (event: ISystemEvent<T>) => void): void {
     if (!this.handlers.has(type)) {
       this.handlers.set(type, new Set());
     }
@@ -58,7 +58,7 @@ export class EventBus implements IEventBus {
    * @param type 系統事件類型
    * @param handler 原註冊的處理函數引用
    */
-  unsubscribe(type: SystemEventType, handler: (event: ISystemEvent) => void): void {
+  unsubscribe<T = any>(type: SystemEventType, handler: (event: ISystemEvent<T>) => void): void {
     const typeHandlers = this.handlers.get(type);
     if (typeHandlers) {
       typeHandlers.delete(handler);

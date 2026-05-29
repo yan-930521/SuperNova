@@ -4,7 +4,7 @@ import {
 } from '@langchain/core/messages';
 
 import { recorder } from '../infra/LogManager';
-import { SystemEventType } from '../infra/types/events';
+import { IChainCreatedPayload, SystemEventType } from '../infra/types/events';
 import { MessageDTO, MessageRole, SessionDTO } from '../infra/types/session';
 import { GlobalRuntime } from '../runtime/GlobalRuntime';
 
@@ -86,20 +86,8 @@ export class Session implements ISession {
 
 		const bus = runtime.eventBus;
 
-		// 訂閱 Worker 摘要事件
-		bus.subscribe(SystemEventType.TASK_COMPLETED, (event) => {
-			if (event.sessionId === this.id) {
-				this.addMessage(
-					event.payload.agentId || 'system-worker',
-					MessageRole.WORKER,
-					event.payload.summary || 'Task completed',
-					{ taskId: event.payload.taskId }
-				);
-			}
-		});
-
 		// 訂閱生命週期事件
-		bus.subscribe(SystemEventType.SESSION_CREATED, (event) => {
+		bus.subscribe<IChainCreatedPayload>(SystemEventType.CHAIN_CREATED, (event) => {
 			if (event.sessionId === this.id) this.status = SessionStatus.RUNNING;
 		});
 	}

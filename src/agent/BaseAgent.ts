@@ -7,6 +7,9 @@ import { createReactAgent } from '@langchain/langgraph/prebuilt';
 
 import { RecordAction, recorder } from '../infra/LogManager';
 import { IAgentExecuteContext, IAgentExecuteResult, ModelPreset } from '../infra/types/agent';
+import { ITaskCompletedPayload, SystemEventType } from '../infra/types/events';
+import { MessageRole } from '../infra/types/session';
+import { ChainStatus } from '../infra/types/task';
 import { ITool } from '../tool/BaseTool';
 import { PromptLoader } from '../utils/PromptLoader';
 
@@ -203,7 +206,7 @@ export abstract class BaseAgent {
 	 * 適用於所有繼承自 BaseAgent 的代理。
 	 */
 	async execute(taskGoal: string, context: IAgentExecuteContext): Promise<IAgentExecuteResult> {
-		const { sessionId, traceId, taskId, chainId } = context;
+		const { sessionId, traceId, taskId } = context;
 
 		if (!this.runtime) {
 			throw new Error(`Agent [${this.id}] runtime not injected.`);
@@ -286,7 +289,6 @@ export abstract class BaseAgent {
 				payload: { content }
 			});
 
-			// 回傳時，將完整的內部執行軌跡傳出去，讓 TaskManager 可以存進 task.history
 			return {
 				status: 'success',
 				result: { content, history: resultState.messages }, // 將 messages 包進 result

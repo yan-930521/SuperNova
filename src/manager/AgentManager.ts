@@ -19,7 +19,7 @@ export class AgentManager {
   /**
    * @param repo 注入代理儲存庫，負責底層配置 IO
    */
-  constructor(private repo: IAgentRepository) {}
+  constructor(private repo: IAgentRepository) { }
 
   /**
    * 注入運行時實例
@@ -105,7 +105,7 @@ export class AgentManager {
   async loadAllAgents(): Promise<void> {
     recorder.info('[AgentManager] Loading all agents from repository...', { type: 'SYSTEM' });
     const dtos = await this.repo.findAll();
-    
+
     for (const dto of dtos) {
       try {
         await this.instantiateAgent(dto);

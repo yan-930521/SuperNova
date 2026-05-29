@@ -107,7 +107,7 @@ export class GlobalRuntime {
 
 		// --- 3. 初始化業務層 (Managers) ---
 		this.userManager = new UserManager(this.userRepo);
-		this.sessionManager = new SessionManager(this.sessionRepo);
+		this.sessionManager = new SessionManager(this.sessionRepo, this.eventBus);
 		this.agentManager = new AgentManager(this.agentRepo);
 		this.agentManager.setRuntime(this); // 注入運行時實例
 		this.memoryManager = new MemoryManager(this.memoryRepo, this.agentManager);
