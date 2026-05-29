@@ -16,15 +16,15 @@ import { AgentManager } from './AgentManager';
  * 任務鏈運行時狀態介面 (用於 TaskManager 追蹤)
  */
 export interface ITaskChainState {
-  status: ChainStatus;
-  graph: TaskGraph; 
-  sessionId: string;
-  traceId: string;
-  goal: string;
-  milestones?: string[];
-  currentMilestoneIdx?: number;
-  projectedContext?: any;
-  replanCount?: number;
+	status: ChainStatus;
+	graph: TaskGraph;
+	sessionId: string;
+	traceId: string;
+	goal: string;
+	milestones?: string[];
+	currentMilestoneIdx?: number;
+	projectedContext?: any;
+	replanCount?: number;
 }
 
 /**
@@ -112,7 +112,7 @@ export class TaskManager {
 
 		// 1. 存入儲存庫
 		await this.repo.save(task.toDTO());
-		
+
 		// 2. 更新任務圖 (保持舊有圖邏輯)
 		chain.graph.addTask(taskId, task.toDTO() as any);
 		this.activeTasks.set(taskId, task);
@@ -128,7 +128,7 @@ export class TaskManager {
 		}
 
 		recorder.info(`[TaskManager] Task ${taskId} added and persisted.`, { type: LogType.LIFECYCLE });
-		
+
 		this.driveExecution(chainId).catch(() => { });
 		return taskId;
 	}
@@ -145,7 +145,7 @@ export class TaskManager {
 
 		task.assignedAgentId = agentId;
 		await this.repo.save(task.toDTO());
-		
+
 		// 同步更新圖中的節點資料
 		const graphTask = chain.graph.getTask(taskId);
 		if (graphTask) graphTask.assignedAgentId = agentId;
@@ -234,7 +234,7 @@ export class TaskManager {
 			}
 
 			this.updateChainStatus(request.chainId, ChainStatus.RUNNING);
-			
+
 			// 存儲 JIT 需要的狀態
 			const chain = this.chains.get(request.chainId)!;
 			chain.milestones = finalState.planning?.milestones;
@@ -268,7 +268,7 @@ export class TaskManager {
 
 			if (isInitialAndEmpty || isMilestoneCompleted) {
 				const nextIdx = isInitialAndEmpty ? (chain.currentMilestoneIdx ?? 0) : (chain.currentMilestoneIdx ?? 0) + 1;
-				
+
 				if (chain.milestones && nextIdx < chain.milestones.length) {
 					await this.expandMilestone(chainId, nextIdx);
 				} else {
@@ -285,9 +285,9 @@ export class TaskManager {
 	private async expandMilestone(chainId: string, milestoneIdx: number) {
 		const chain = this.chains.get(chainId)!;
 		const agents = this.agentManager.getAllAgents().map(a => ({ id: a.id, role: a.role, capabilities: a.capabilities }));
-		
+
 		chain.currentMilestoneIdx = milestoneIdx;
-		
+
 		recorder.info(`[TaskManager] Expanding milestone ${chain.currentMilestoneIdx + 1}/${chain.milestones?.length}`, { type: LogType.PLAN });
 
 		const currentState: AgentState = {
@@ -295,11 +295,11 @@ export class TaskManager {
 			currentTask: "",
 			messages: [],
 			thoughtTree: { nodes: [], rootId: null, activeNodeId: null, iterationCount: 0 },
-			planning: { 
-				milestones: chain.milestones || [], 
-				currentMilestoneIdx: chain.currentMilestoneIdx, 
-				taskGraph: (chain.graph as any).toJSON ? (chain.graph as any).toJSON() : { nodes: chain.graph.getAllTasks(), edges: [] }, 
-				projectedContext: chain.projectedContext || {} 
+			planning: {
+				milestones: chain.milestones || [],
+				currentMilestoneIdx: chain.currentMilestoneIdx,
+				taskGraph: (chain.graph as any).toJSON ? (chain.graph as any).toJSON() : { nodes: chain.graph.getAllTasks(), edges: [] },
+				projectedContext: chain.projectedContext || {}
 			},
 			lastEvaluations: [],
 			errors: [],
@@ -307,7 +307,7 @@ export class TaskManager {
 		};
 
 		const finalState = await this.planner.expandMilestone(currentState as any);
-		
+
 		if (!finalState.planning?.taskGraph) throw new Error("Milestone expansion produced no graph.");
 
 		const newNodes = finalState.planning.taskGraph.nodes.filter(n => !chain.graph.getTask(n.id));
@@ -355,11 +355,12 @@ export class TaskManager {
 				}
 			}
 
-			const executeResult = await agent.execute(task.goal, { 
+			const executeResult = await agent.execute(task.goal, {
 				sessionId: chain.sessionId,
 				traceId: chain.traceId,
 				agentId: agent.id,
 				taskId: taskId,
+				chainId: chainId,
 				retryCount: task.retryCount,
 				lastError: task.metadata?.error,
 				dependencyResults: dependencyResults
@@ -370,9 +371,9 @@ export class TaskManager {
 			if (executeResult.status === 'failed') throw new Error(executeResult.error);
 
 			await this.repo.save(task.toDTO());
-			
+
 			chain.graph.completeTask(taskId);
-			
+
 			// 更新狀態為 COMPLETED
 			await this.updateTaskStatus(taskId, TaskStatus.COMPLETED);
 
@@ -381,7 +382,7 @@ export class TaskManager {
 				type: SystemEventType.TASK_COMPLETED,
 				userId: 'system',
 				sessionId: chain.sessionId,
-				payload: { 
+				payload: {
 					taskId: taskId,
 					agentId: agent.id,
 					summary: executeResult.summary,
@@ -433,11 +434,11 @@ export class TaskManager {
 			task.retryCount++;
 			// 移除之前的錯誤訊息，準備重試
 			if (task.metadata) delete task.metadata.error;
-			
+
 			await this.updateTaskStatus(taskId, TaskStatus.READY);
 
 			recorder.warn(`[TaskManager] Retrying task ${taskId} (${task.retryCount}/${maxRetries}) due to: ${error}`);
-			
+
 			if (chainId) {
 				this.driveExecution(chainId).catch(() => { });
 			}
@@ -478,11 +479,11 @@ export class TaskManager {
 				currentTask: failedTaskId,
 				messages: [], // Ideally should collect history from SessionManager
 				thoughtTree: { nodes: [], rootId: null, activeNodeId: null, iterationCount: 0 },
-				planning: { 
-					milestones: chain.milestones || [], 
-					currentMilestoneIdx: chain.currentMilestoneIdx || 0, 
-					taskGraph: chain.graph.toJSON(), 
-					projectedContext: chain.projectedContext || {} 
+				planning: {
+					milestones: chain.milestones || [],
+					currentMilestoneIdx: chain.currentMilestoneIdx || 0,
+					taskGraph: chain.graph.toJSON(),
+					projectedContext: chain.projectedContext || {}
 				},
 				lastEvaluations: [],
 				errors: [error],
@@ -494,7 +495,7 @@ export class TaskManager {
 
 			this.updateChainStatus(chainId, ChainStatus.RUNNING);
 			recorder.info(`[TaskManager] Re-plan applied for ${chainId}. Resuming execution.`, { type: LogType.PLAN });
-			
+
 			await this.driveExecution(chainId);
 		} catch (replanError: any) {
 			recorder.error(`[TaskManager] Re-planning failed for ${chainId}: ${replanError.message}`);
@@ -522,7 +523,7 @@ export class TaskManager {
 				if (existingTask) {
 					if (mod.goal) existingTask.goal = mod.goal;
 					if (mod.assignedRole) existingTask.assignedAgentId = mod.assignedRole; // Simplified mapping
-					
+
 					// Reset status and retryCount for the modified task
 					existingTask.retryCount = 0;
 					if (existingTask.metadata) delete existingTask.metadata.error;
@@ -539,11 +540,11 @@ export class TaskManager {
 				await this.repo.save(task.toDTO());
 				chain.graph.addTask(node.id, task.toDTO());
 				this.activeTasks.set(node.id, task);
-				
+
 				// Re-add dependencies for the new node
 				if (node.dependencies) {
 					for (const depId of node.dependencies) {
-						try { chain.graph.addDependency(depId, node.id); } catch (e) {}
+						try { chain.graph.addDependency(depId, node.id); } catch (e) { }
 					}
 				}
 			}
@@ -561,11 +562,11 @@ export class TaskManager {
 
 	public updateChainStatus(chainId: string, status: ChainStatus) {
 		const chain = this.chains.get(chainId);
-		if (!chain) return;
-		
+		if (!chain || (chain.status == status)) return;
+
 		const oldStatus = chain.status;
 		chain.status = status;
-		
+
 		recorder.info(`[TaskManager] Chain ${chainId} status: ${oldStatus} -> ${status}`, { type: LogType.LIFECYCLE, session_id: chain.sessionId });
 
 		GlobalRuntime.getInstance().eventBus.publish({
@@ -584,16 +585,16 @@ export class TaskManager {
 		const oldStatus = task.status;
 		task.updateStatus(status);
 		if (error) task.metadata = { ...task.metadata, error };
-		
+
 		await this.repo.save(task.toDTO());
-		
+
 		// 同步更新圖中的節點資料
 		const chainId = this.findChainIdByTaskId(taskId);
 		if (chainId) {
 			const chain = this.chains.get(chainId);
 			if (chain) {
 				chain.graph.updateTask(taskId, task.toDTO());
-				
+
 				GlobalRuntime.getInstance().eventBus.publish({
 					type: SystemEventType.TASK_STATUS_UPDATED,
 					userId: 'system',

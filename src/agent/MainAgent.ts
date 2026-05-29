@@ -40,21 +40,19 @@ export class MainAgent extends BaseAgent {
 		// 1. 記錄使用者訊息到 Session
 		session.addMessage(session.userId, MessageRole.USER, message);
 
-		// 立即附加使用者訊息到持久層 (使用 BaseMessage 的標準字典格式)
-		const userMsg = session.history[session.history.length - 1];
-		await this.runtime.sessionManager.appendMessage(session.id, userMsg);
-
-		const dynamicSystemPrompt = await this.buildPrompt({ 
-				sessionId: session.id,
-				sessionGoal: session.goal
-			});
+		const dynamicSystemPrompt = await this.buildPrompt({
+			sessionId: session.id
+		});
 
 		try {
-			// 2. 執行 ReAct 引擎 (直接傳遞 Session 中的 BaseMessage[] 歷史)
+			// 將 Session 歷史進行摺疊以節省 Token
+			const foldedSessionHistory = this.runtime.memoryManager.foldHistory(session.history);
+
+			// 2. 執行 ReAct 引擎
 			const resultState = await this.reactAgent.invoke({
 				messages: [
 					new SystemMessage(dynamicSystemPrompt),
-					...session.getLangChainMessages()
+					...foldedSessionHistory.map(mDTO => mDTO.message)
 				]
 			}, {
 				recursionLimit: 50,
@@ -72,11 +70,7 @@ export class MainAgent extends BaseAgent {
 			const finalResponse = typeof lastMessage.content === 'string' ? lastMessage.content : JSON.stringify(lastMessage.content);
 
 			// 4. 同步 Session 歷史
-			// session.addMessage(this.id, MessageRole.ASSISTANT, finalResponse);
-
-			// 5. 附加助理回覆到持久層 (使用 BaseMessage 的標準字典格式)
-			const assistantMsg = session.history[session.history.length - 1];
-			await this.runtime.sessionManager.appendMessage(session.id, assistantMsg);
+			session.addMessage(this.id, MessageRole.ASSISTANT, finalResponse);
 
 			return finalResponse;
 

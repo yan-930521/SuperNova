@@ -1,3 +1,5 @@
+import { SystemMessage } from '@langchain/core/messages';
+
 import { recorder } from '../infra/LogManager';
 import { IMemoryRepository, MemoryDTO, MemoryLayer, MemoryType } from '../infra/types/memory';
 import { MessageDTO, MessageRole } from '../infra/types/session';
@@ -16,7 +18,7 @@ export class MemoryManager {
   constructor(
     private repo: IMemoryRepository,
     private agentManager?: AgentManager
-  ) {}
+  ) { }
 
   /**
    * 獲取工作記憶 (Working Memory)
@@ -26,12 +28,12 @@ export class MemoryManager {
    */
   async getWorkingMemory(chainId: string, sessionId: string): Promise<MemoryDTO[]> {
     recorder.debug(`[MemoryManager] Getting working memory for chain: ${chainId}, session: ${sessionId}`, { type: 'SYSTEM' });
-    
+
     // 從儲存庫中獲取 WORKING 層級的所有記憶
     // 注意：目前的 findByNamespace 可能需要過濾 chainId
     // 這裡我們假設 WORKING 記憶會存放在特定的命名空間，或者我們需要擴展 repo 接口
     // 根據 Unified Memory System 規範，WORKING 記憶關聯到特定 Chain
-    
+
     // 暫時使用 findByNamespace('working', sessionId) 並在內存中過濾 chainId
     const allWorking = await this.repo.findByNamespace('working', sessionId);
     return allWorking.filter(m => m.layer === MemoryLayer.WORKING && m.chainId === chainId);
@@ -47,7 +49,7 @@ export class MemoryManager {
    */
   async setWorkingVar(chainId: string, sessionId: string, key: string, value: string): Promise<void> {
     recorder.debug(`[MemoryManager] Setting working var: ${key} for chain: ${chainId}`, { type: 'SYSTEM' });
-    
+
     const memory: MemoryDTO = {
       id: key,
       layer: MemoryLayer.WORKING,
@@ -71,7 +73,7 @@ export class MemoryManager {
    */
   async getL1Index(sessionId: string, chainId?: string): Promise<string> {
     recorder.debug(`[MemoryManager] Compiling L1 Index for session: ${sessionId}`, { type: 'SYSTEM' });
-    
+
     // 1. 從儲存庫獲取基礎索引 (通常包含 IDs 和 Tags)
     const baseIndex = await this.repo.getL1Index(sessionId);
     const indexSet = new Set<string>(baseIndex);
@@ -102,32 +104,29 @@ export class MemoryManager {
 
     recorder.info(`[MemoryManager] Folding history: ${messages.length} messages -> folding oldest 15`, { type: 'SYSTEM' });
 
+    // TODO: 去除硬編碼
     // 取得最舊的 15 條訊息進行折疊
     const messagesToFold = messages.slice(0, 15);
     // 剩餘的訊息保持原樣
     const remainingMessages = messages.slice(15);
-    
+
     const foldedMessages: MessageDTO[] = [];
-    
+
     // 每 5 條訊息折疊成一個摘要點
     for (let i = 0; i < messagesToFold.length; i += 5) {
       const chunk = messagesToFold.slice(i, i + 5);
       const count = chunk.length;
-      
+
       // 創建折疊後的 SYSTEM 訊息
       const foldedMsg: MessageDTO = {
-        message: {
-          content: `[System] (${count} turns folded): Previous conversation context is archived to save space.`,
-          getType: () => 'system',
-          additional_kwargs: {}
-        } as any,
+        message: new SystemMessage(`[System] (${count} turns folded): Previous conversation context is archived to save space.`),
         identity: {
           authorId: 'system',
           role: MessageRole.SYSTEM,
           name: 'ContextFolder'
         }
       };
-      
+
       foldedMessages.push(foldedMsg);
     }
 

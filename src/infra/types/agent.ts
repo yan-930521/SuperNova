@@ -69,6 +69,8 @@ export interface IAgentExecuteContext {
   agentId: string;
   /** 當前執行的任務 ID (如果有) */
   taskId?: string;
+  /** 當前執行的任務鏈 ID (如果有) */
+  chainId?: string;
   /** 當前任務的重試次數 */
   retryCount?: number;
   /** 上一次執行的錯誤訊息 */

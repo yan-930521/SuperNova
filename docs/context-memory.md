@@ -72,66 +72,27 @@
 
 ---
 
-### Task 1: Data Protocols & Basic Repository
+### Task 1: Data Protocols & Basic Repository (Done)
 
 **Files:**
 - Create: `src/infra/types/memory.ts`
 - Create: `src/infra/storage/FileSystemMemoryRepository.ts`
 
-- [ ] **Step 1: Define Memory DTOs and Interfaces**
-
-```typescript
-export enum MemoryLayer {
-  WORKING = 'WORKING',
-  PERSISTENT = 'PERSISTENT'
-}
-
-export enum MemoryType {
-  VARIABLE = 'variable',
-  BUFFER = 'buffer',
-  FACT = 'fact',
-  SOP = 'sop'
-}
-
-export interface MemoryDTO {
-  id: string;
-  layer: MemoryLayer;
-  namespace: string;
-  type: MemoryType;
-  content: string;
-  summary?: string;
-  tags: string[];
-  sessionId: string;
-  chainId?: string;
-  timestamp: number;
-  metadata?: Record<string, any>;
-}
-
-export interface IMemoryRepository {
-  save(memory: MemoryDTO): Promise<void>;
-  findById(id: string, sessionId: string): Promise<MemoryDTO | null>;
-  findByNamespace(namespace: string, sessionId: string): Promise<MemoryDTO[]>;
-  delete(id: string, sessionId: string): Promise<void>;
-}
-```
-
-- [ ] **Step 2: Implement FileSystemMemoryRepository**
-- [ ] **Step 3: Commit changes**
+- [x] **Step 1: Define Memory DTOs and Interfaces**
+- [x] **Step 2: Implement FileSystemMemoryRepository**
+- [x] **Step 3: Commit changes**
 
 ---
 
-### Task 2: MemoryManager & Lifecycle Management
+### Task 2: MemoryManager & Lifecycle Management (Done)
 
 **Files:**
 - Create: `src/manager/MemoryManager.ts`
 - Modify: `src/runtime/GlobalRuntime.ts`
 
-- [ ] **Step 1: Implement MemoryManager class**
-  - Add `createWorkingMemory(chainId, sessionId)`
-  - Add `getL1Index(sessionId, chainId)`
-  - Add `foldHistory(messages: MessageDTO[])` logic
-- [ ] **Step 2: Inject MemoryManager into GlobalRuntime**
-- [ ] **Step 3: Commit changes**
+- [x] **Step 1: Implement MemoryManager class**
+- [x] **Step 2: Inject MemoryManager into GlobalRuntime**
+- [x] **Step 3: Commit changes**
 
 ---
 

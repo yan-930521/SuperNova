@@ -75,16 +75,16 @@ export class LogManager {
       case RecordAction.THOUGHT:
         // 思考過程在控制台顯示簡短版，完整版保留在 payload
         const shortThought = message.length > 100 ? message.substring(0, 100) + '...' : message;
-        this.log('INFO', `🧠 [Thought] ${shortThought}`, { ...context, type: 'THOUGHT', payload: { fullThought: message, ...context.payload } });
+        this.log('DEBUG', `🧠 [Thought] ${shortThought}`, { ...context, type: 'THOUGHT', payload: { fullThought: message, ...context.payload } });
         break;
       case RecordAction.TOOL_CALL:
-        this.log('INFO', `🛠️  [Action] ${message}`, { ...context, type: 'ACTION' });
+        this.log('DEBUG', `🛠️  [Action] ${message}`, { ...context, type: 'ACTION' });
         break;
       case RecordAction.STATE_MUTATION:
-        this.log('INFO', `✅ [Result] ${message}`, { ...context, type: 'RESULT' });
+        this.log('DEBUG', `✅ [Result] ${message}`, { ...context, type: 'RESULT' });
         break;
       case RecordAction.PLAN_UPDATE:
-        this.log('INFO', `📅 [Plan] ${message}`, { ...context, type: 'PLAN' });
+        this.log('DEBUG', `📅 [Plan] ${message}`, { ...context, type: 'PLAN' });
         break;
     }
   }

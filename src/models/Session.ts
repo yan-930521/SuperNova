@@ -42,7 +42,7 @@ export interface ISession {
 	getLangChainMessages(): BaseMessage[];
 
 	/** 新增訊息到對話歷史 */
-	addMessage(authorId: string, role: MessageRole, content: string, metadata?: Record<string, any>): void;
+	addMessage(authorId: string, role: MessageRole, content: string, metadata?: Record<string, any>): MessageDTO;
 	/** 轉換為 DTO 用於持久化 */
 	toDTO(): SessionDTO;
 	/** 從 DTO 加載狀態 */
@@ -95,12 +95,6 @@ export class Session implements ISession {
 					event.payload.summary || 'Task completed',
 					{ taskId: event.payload.taskId }
 				);
-
-				// 同步寫入持久層
-				const workerMsg = this.history[this.history.length - 1];
-				runtime?.sessionManager.appendMessage(this.id, workerMsg).catch(e => {
-					recorder.error(`Failed to persist worker message: ${e}`, {});
-				});
 			}
 		});
 
@@ -118,13 +112,13 @@ export class Session implements ISession {
 	}
 
 	/**
-	 * 新增訊息到對話歷史
+	 * 新增訊息到對話歷史，並且同步到持久層
 	 * @param authorId 發送者 ID (User ID 或 Agent ID)
 	 * @param role 角色 (Enum)
 	 * @param content 訊息內容
 	 * @param metadata 額外元數據
 	 */
-	addMessage(authorId: string, role: MessageRole, content: string, metadata: Record<string, any> = {}) {
+	addMessage(authorId: string, role: MessageRole, content: string, metadata: Record<string, any> = {}): MessageDTO {
 		let message: BaseMessage;
 
 		switch (role) {
@@ -165,6 +159,10 @@ export class Session implements ISession {
 		};
 
 		this.history.push(dto);
+
+		// 同步寫入持久層
+		GlobalRuntime.getInstance()?.sessionManager.appendMessage(this.id, dto);
+		return dto;
 	}
 
 	/**

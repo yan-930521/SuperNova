@@ -1,5 +1,7 @@
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import { BaseMessage, HumanMessage, SystemMessage } from '@langchain/core/messages';
+import {
+    BaseMessage, HumanMessage, mapStoredMessagesToChatMessages, SystemMessage
+} from '@langchain/core/messages';
 import { tool as langChainTool } from '@langchain/core/tools';
 import { createReactAgent } from '@langchain/langgraph/prebuilt';
 
@@ -92,19 +94,45 @@ export abstract class BaseAgent {
 
 	/**
 	 * 建立系統提示詞 (System Prompt)
-	 * 整合身份、能力標籤、可用資源與當前執行狀態。
+	 * 整合身份、能力標籤、可用資源、持久化記憶索引與當前工作記憶。
 	 */
 	protected async buildPrompt(context: Partial<IAgentExecuteContext>): Promise<string> {
+		const { sessionId, chainId, taskId } = context;
+		const memoryManager = this.runtime?.memoryManager;
+
 		let prompt = this.identity || `你是一個 AI 代理 (${this.id})。你的角色是 ${this.role}。`;
 
 		if (this.availableAgents && this.availableAgents.length > 0) {
-			prompt += `\n\n你可以調度的下屬代理列表 (透過 task_create )：\n- ${this.availableAgents.join('\n- ')}`;
+			prompt += `\n\n你可以調度的下屬代理列表 (透過 task_create)：\n- ${this.availableAgents.join('\n- ')}`;
 		}
 
-		// 注入當前執行環境資訊 (Working Memory)
-		if (context?.taskId) {
-			prompt += `\n\n--- 當前執行狀態 ---`;
-			prompt += `\n- 任務 ID: ${context.taskId || "None"}`;
+		// --- 持久化記憶索引 (L1 Index) ---
+		if (memoryManager && sessionId) {
+			const l1Index = await memoryManager.getL1Index(sessionId, chainId);
+			prompt += `\n\n--- 持久化記憶索引 (L1 Index) ---`;
+			prompt += `\n可用標籤/知識：${l1Index || '無'}`;
+			prompt += `\n[指令]：若需詳細資訊，請調用 'memory_read' 工具，嚴禁在未經工具驗證的情況下假設內容。`;
+		}
+
+		// --- 工作記憶 (Working Memory) ---
+		if (taskId) {
+			prompt += `\n\n--- 當前執行狀態 (Working Memory) ---`;
+			prompt += `\n- 任務 ID: ${taskId}`;
+
+			// 注入 Working Memory 中的變數與 Buffer 摘要
+			if (memoryManager && chainId && sessionId) {
+				const workingMem = await memoryManager.getWorkingMemory(chainId, sessionId);
+				if (workingMem.length > 0) {
+					prompt += `\n- 工作變數與緩衝：`;
+					workingMem.forEach(m => {
+						if (m.type === 'variable') {
+							prompt += `\n  * ${m.id}: ${m.content}`;
+						} else if (m.type === 'buffer') {
+							prompt += `\n  * [Buffer] ${m.id} (摘要: ${m.summary || '無內容摘要'})`;
+						}
+					});
+				}
+			}
 
 			// 前置任務結果注入
 			if (context.dependencyResults && Object.keys(context.dependencyResults).length > 0) {
@@ -122,11 +150,11 @@ export abstract class BaseAgent {
 			}
 		}
 
-		// 行為準則 (原本 Meta-Memory 的核心精神，以專案風格呈現)
+		// 行為準則 (原本 Meta-Memory 的核心精神)
 		prompt += `\n\n--- 行為準則 ---`;
 		prompt += `\n1. 嚴禁在未經工具驗證的情況下假設環境狀態或檔案內容。`;
 		prompt += `\n2. 優先檢索資源索引，若需詳細資訊，必須調用 'read_file' 或相關檢索工具。`;
-		prompt += `\n3. 每一輪動作後，請評估是否達成了階段性目標或需記錄關鍵資訊。`;
+		prompt += `\n3. 每一輪動作後，請評估是否達成了階段性目標或需記錄關鍵資訊到 Working Memory。`;
 
 		return prompt;
 	}
@@ -159,7 +187,6 @@ export abstract class BaseAgent {
 			));
 
 			// 建立預編譯 ReAct Agent
-			// 注意：我們不在這裡固定 messageModifier，而是在 invoke 時動態處理
 			this.reactAgent = createReactAgent({
 				llm: model,
 				tools: nativeTools
@@ -174,10 +201,9 @@ export abstract class BaseAgent {
 	/**
 	 * 核心執行方法：使用 ReAct 引擎執行任務。
 	 * 適用於所有繼承自 BaseAgent 的代理。
-	 * Agent將作為子節點被呼叫。
 	 */
 	async execute(taskGoal: string, context: IAgentExecuteContext): Promise<IAgentExecuteResult> {
-		const { sessionId, traceId, taskId } = context;
+		const { sessionId, traceId, taskId, chainId } = context;
 
 		if (!this.runtime) {
 			throw new Error(`Agent [${this.id}] runtime not injected.`);
@@ -191,7 +217,7 @@ export abstract class BaseAgent {
 		const session = await this.runtime.sessionManager.getSession(sessionId);
 		if (!session) throw new Error(`Session ${sessionId} not found.`);
 
-		// --- 關鍵變更：動態構建分層提示詞 ---
+		// --- 動態構建分層提示詞 ---
 		const dynamicSystemPrompt = await this.buildPrompt(context);
 
 		recorder.record(RecordAction.TOOL_CALL, `Agent [${this.id}] starting ReAct execution for: ${taskGoal}`, {
@@ -208,24 +234,34 @@ export abstract class BaseAgent {
 				// 情況 A：作為 Worker 執行特定 Task
 				// 透過 taskId 從 Repository 查詢任務，獲取專屬歷史
 				const taskDto = await this.runtime.taskRepo.findById(taskId);
-				if ((taskDto  && taskDto.history.length == 0) || !taskDto) {
+
+				if (taskDto && taskDto.history && taskDto.history.length > 0) {
+					// 載入任務專屬歷史軌跡 (包含先前的思考與失敗)
+
+					// 將 Task 歷史進行摺疊以節省 Token
+					const foldedTaskHistory = this.runtime.memoryManager.foldHistory(taskDto.history);
+
+					messages = [
+						new SystemMessage(dynamicSystemPrompt),
+						...foldedTaskHistory.map(mDTO => mDTO.message),
+						new HumanMessage(`[DIRECTIVE]:\n- Goal: ${taskGoal}\n- Description: ${taskDto ? taskDto.description : "None"}`)
+					];
+				} else {
+					// 第一次執行新任務
 					messages = [
 						new SystemMessage(dynamicSystemPrompt),
 						new HumanMessage(`[DIRECTIVE]:\n- Goal: ${taskGoal}\n- Description: ${taskDto ? taskDto.description : "None"}`)
-					]
-				} else {
-					// 這邊代表經過 retry 了，因為history是完整執行之後才會存。
-					// 還原 BaseMessage
-					const taskLangChainMessages = taskDto.history.map((m) => m.message);
-					messages = [...taskLangChainMessages];
-				} 
+					];
+				}
 
 			} else {
-				// 情況 B：作為 MainAgent 處理對話 
-				// 這邊應該是作為子任務節點被呼叫，因此是特例。
+				// 情況 B：作為 MainAgent 處理對話，通常不會被調用到
+				// 將 Session 歷史進行摺疊以節省 Token
+				const foldedSessionHistory = this.runtime.memoryManager.foldHistory(session.history);
 				messages = [
 					new SystemMessage(dynamicSystemPrompt),
-					...session.getLangChainMessages(), // 引入全局對話歷史
+					...foldedSessionHistory.map(mDTO => mDTO.message), // 引入摺疊後的全局對話歷史
+					new HumanMessage(`[DIRECTIVE]: 你當前的任務目標是「${taskGoal}」。請直接開始執行並回報結果。`)
 				];
 			}
 

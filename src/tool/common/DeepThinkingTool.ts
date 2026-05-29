@@ -25,7 +25,7 @@ export class DeepThinkingTool extends BaseTool {
 
   async run(input: any, context: IAgentExecuteContext): Promise<any> {
     const { problem, steps } = input;
-    // 這裡目前為模擬邏輯，未來可對接思維鏈模型
+    // TODO: 這裡目前為模擬邏輯，未來可對接思維鏈模型
     const thoughts = [
       `[Step 1] Analyzing the core constraints of: ${problem}`,
       `[Step 2] Evaluating potential strategies and trade-offs...`,
