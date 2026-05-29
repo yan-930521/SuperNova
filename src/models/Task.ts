@@ -76,11 +76,8 @@ export class Task {
    */
   setResult(AEResult: IAgentExecuteResult): void {
     // 注入完整訊息，包括 初始SystemMessage
-    this.history.push(...AEResult.result.history);
-    if (AEResult.status == 'success') {
-      this.status = TaskStatus.COMPLETED;
-    } else {
-      this.status = TaskStatus.FAILED;
+    if (AEResult.result && AEResult.result.history) {
+      this.history.push(...AEResult.result.history);
     }
   }
 
@@ -88,7 +85,6 @@ export class Task {
    * 標記為失敗
    */
   fail(error?: string): void {
-    this.status = TaskStatus.FAILED;
     this.metadata = { ...this.metadata, error };
   }
 }

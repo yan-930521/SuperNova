@@ -69,8 +69,6 @@ export interface IAgentExecuteContext {
   agentId: string;
   /** 當前執行的任務 ID (如果有) */
   taskId?: string;
-  /** 會話的全域目標 */
-  sessionGoal?: string;
   /** 當前任務的重試次數 */
   retryCount?: number;
   /** 上一次執行的錯誤訊息 */

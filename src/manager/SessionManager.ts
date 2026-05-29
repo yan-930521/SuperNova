@@ -22,11 +22,11 @@ export class SessionManager {
    * @param userId 所屬用戶 ID (預設為 default-user)
    * @param id 指定會話 ID (選擇性)
    */
-  async createSession(goal: string, responsibleAgentId: string, userId: string = 'default-user', id?: string): Promise<Session> {
+  async createSession(responsibleAgentId: string, userId: string = 'default-user', id?: string): Promise<Session> {
     const sessionId = id || `session-${Date.now()}`;
     recorder.info(`[SessionManager] Creating new session: ${sessionId}`, { type: 'LIFECYCLE' });
     
-    const session = new Session(sessionId, goal, responsibleAgentId, userId);
+    const session = new Session(sessionId, responsibleAgentId, userId);
     
     // 1. 存入內存緩存
     this.sessions.set(sessionId, session);
@@ -51,7 +51,7 @@ export class SessionManager {
     recorder.debug(`[SessionManager] Cache miss for session ${id}, attempting load from repo...`);
     const dto = await this.repo.findById(id);
     if (dto) {
-      const session = new Session(dto.id, dto.goal, dto.responsibleAgentId, dto.userId);
+      const session = new Session(dto.id, dto.responsibleAgentId, dto.userId);
       await session.initFromDTO(dto);
       this.sessions.set(id, session); // 補回緩存
       return session;

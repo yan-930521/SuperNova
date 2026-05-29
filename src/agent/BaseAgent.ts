@@ -1,19 +1,10 @@
-import { any, config, string } from 'zod';
-import { id } from 'zod/locales';
-
-import { BaseCallbackHandler } from '@langchain/core/callbacks/base';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import {
-    BaseMessage, HumanMessage, mapStoredMessagesToChatMessages, SystemMessage
-} from '@langchain/core/messages';
+import { BaseMessage, HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { tool as langChainTool } from '@langchain/core/tools';
 import { createReactAgent } from '@langchain/langgraph/prebuilt';
-import { tools } from '@langchain/openai';
 
 import { RecordAction, recorder } from '../infra/LogManager';
 import { IAgentExecuteContext, IAgentExecuteResult, ModelPreset } from '../infra/types/agent';
-import { SystemEventType } from '../infra/types/events';
-import { TaskStatus } from '../infra/types/task';
 import { ITool } from '../tool/BaseTool';
 import { PromptLoader } from '../utils/PromptLoader';
 
@@ -114,9 +105,6 @@ export abstract class BaseAgent {
 		if (context?.taskId) {
 			prompt += `\n\n--- 當前執行狀態 ---`;
 			prompt += `\n- 任務 ID: ${context.taskId || "None"}`;
-			if (context.sessionGoal) {
-				prompt += `\n- 會話總目標: ${context.sessionGoal}`;
-			}
 
 			// 前置任務結果注入
 			if (context.dependencyResults && Object.keys(context.dependencyResults).length > 0) {
@@ -174,7 +162,7 @@ export abstract class BaseAgent {
 			// 注意：我們不在這裡固定 messageModifier，而是在 invoke 時動態處理
 			this.reactAgent = createReactAgent({
 				llm: model,
-				tools: nativeTools,
+				tools: nativeTools
 			});
 
 			recorder.info(`Agent [${this.id}] ReAct Engine built successfully.`, { type: 'SYSTEM' });

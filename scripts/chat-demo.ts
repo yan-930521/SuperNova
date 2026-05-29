@@ -49,18 +49,16 @@ async function runChatDemo() {
 		session = await runtime.sessionManager.getSession("demo-session") as any as Session;
 	} else {
 		session = await runtime.sessionManager.createSession(
-			"進行多輪對話互動，協助使用者解決問題。", // goal
-			mainAgent.id,                         // responsibleAgentId
-			"ADMIN",                             // userId
-			`demo-session-${Date.now()}`        // id
+			mainAgent.id,         // responsibleAgentId
+			"ADMIN",              // userId
+			`demo-session`        // id
 		);
 	}
 
 	// 4. 建立 Readline 介面
 	const rl = readline.createInterface({
 		input: process.stdin,
-		output: process.stdout,
-		prompt: '【User】> '
+		output: process.stdout
 	});
 
 	rl.prompt();
@@ -81,8 +79,9 @@ async function runChatDemo() {
 		try {
 			// 呼叫 MainAgent 處理訊息 (ReAct 模式)
 			// 要改成動態呼叫agent
-			const response = await mainAgent.handleUserMessage(session, input);
-			console.log(`\n【Assistant】> ${response}\n`);
+			mainAgent.handleUserMessage(session, input).then((response) => {
+				console.log(`\n【Assistant】> ${response}\n`);
+			});
 		} catch (err: any) {
 			console.error(`\n❌ 發生錯誤: ${err.message}\n`);
 		}

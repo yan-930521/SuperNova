@@ -49,8 +49,6 @@ export interface SessionDTO {
   userId: string;
   /** 負責此會話的主代理 (Main Agent) ID */
   responsibleAgentId: string;
-  /** 使用者發起的初始目標或問題 */
-  goal: string;
   /** 會話狀態：IDLE | RUNNING | COMPLETED | INTERRUPTED | CRASHED */
   status: string;
   /** 對話歷史序列：存儲封裝後的 MessageDTO 對象 */

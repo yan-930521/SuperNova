@@ -32,8 +32,6 @@ export interface ISession {
 	responsibleAgentId: string;
 	/** 當前狀態 */
 	status: SessionStatus;
-	/** 初始目標 */
-	goal: string;
 	/** 完整對話歷史 (包含身分數據) */
 	history: MessageDTO[];
 
@@ -73,7 +71,6 @@ export class Session implements ISession {
 	 */
 	constructor(
 		public id: string,
-		public goal: string,
 		public responsibleAgentId: string,
 		public userId: string = 'default-user'
 	) {
@@ -178,7 +175,6 @@ export class Session implements ISession {
 			id: this.id,
 			userId: this.userId,
 			responsibleAgentId: this.responsibleAgentId,
-			goal: this.goal,
 			status: this.status.toString(),
 			history: this.history, // MessageDTO[]
 			metadata: this._metadata
@@ -192,7 +188,6 @@ export class Session implements ISession {
 		this.id = dto.id;
 		this.userId = dto.userId;
 		this.responsibleAgentId = dto.responsibleAgentId;
-		this.goal = dto.goal;
 		this.status = dto.status as SessionStatus;
 
 		if (dto.history && Array.isArray(dto.history)) {
