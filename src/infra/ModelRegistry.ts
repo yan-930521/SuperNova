@@ -82,7 +82,7 @@ export class InferenceEngine {
 
 			return result;
 		} catch (error: any) {
-			recorder.error(`[InferenceEngine] Inference failed: ${error.message}`, { type: 'SYSTEM' });
+			recorder.error(`[InferenceEngine] Inference failed: ${String(error)}`, { type: 'SYSTEM' });
 			throw error;
 		}
 	}

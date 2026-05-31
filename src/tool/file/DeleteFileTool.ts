@@ -23,8 +23,15 @@ export class DeleteFileTool extends BaseFileTool<{ path: string }, string> {
   }
 
   async run(input: { path: string }, context: IAgentExecuteContext): Promise<string> {
-    const absolutePath = this.validatePath(input.path, 'delete');
-    await fs.unlink(absolutePath);
-    return `SUCCESS: File ${input.path} deleted.`;
+    try {
+      const absolutePath = this.validatePath(input.path, 'delete');
+      await fs.unlink(absolutePath);
+      return `SUCCESS: File ${input.path} deleted.`;
+    } catch (err: any) {
+      if (err.code === 'ENOENT') {
+        return `ERROR: Cannot delete file "${input.path}" because it does not exist.`;
+      }
+      return `ERROR: Failed to delete file "${input.path}": ${err.message}`;
+    }
   }
 }

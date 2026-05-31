@@ -135,7 +135,7 @@ export type ToolSafetyTier = 'TIER_1' | 'TIER_2' | 'TIER_3';
       return result;
     } catch (error: any) {
       // 記錄失敗
-      recorder.error(`Tool [${this.name}] failed: ${error.message}`, {
+      recorder.error(`Tool [${this.name}] failed: ${String(error)}`, {
         session_id: context.sessionId,
         trace_id: context.traceId,
         payload: { error }

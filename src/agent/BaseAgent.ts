@@ -157,7 +157,18 @@ export abstract class BaseAgent {
 		prompt += `\n\n--- 行為準則 ---`;
 		prompt += `\n1. 嚴禁在未經工具驗證的情況下假設環境狀態或檔案內容。`;
 		prompt += `\n2. 優先檢索資源索引，若需詳細資訊，必須調用 'read_file' 或相關檢索工具。`;
-		prompt += `\n3. 每一輪動作後，請評估是否達成了階段性目標或需記錄關鍵資訊到 Working Memory。`;
+
+		if (!taskId) {
+			// 對話模式 (MainAgent)
+			prompt += `\n3. 優先分配任務給更適合的下屬代理，而不是自行解決。`;
+			prompt += `\n4. 對於 複雜推理 / 複合任務，優先使用 'task_dispatcher' 啟動自動化任務鏈。`;
+		} else {
+			// 執行模式 (Worker)
+			prompt += `\n3. 你現在正處於「執行模式」，請專注於達成指定的 Task Goal。`;
+			prompt += `\n4. 嚴禁再次調用 'task_dispatcher'。如果你需要協助，請優先使用你具備的工具自行解決。`;
+		}
+		
+		prompt += `\n5. 每一輪動作後，請評估是否達成了階段性目標或需記錄關鍵資訊到 Working Memory。`;
 
 		return prompt;
 	}
@@ -246,11 +257,12 @@ export abstract class BaseAgent {
 
 					messages = [
 						new SystemMessage(dynamicSystemPrompt),
-						...foldedTaskHistory.map(mDTO => mDTO.message),
-						new HumanMessage(`[DIRECTIVE]:\n- Goal: ${taskGoal}\n- Description: ${taskDto ? taskDto.description : "None"}`)
+						...foldedTaskHistory.filter(m => !!m?.message).map(mDTO => mDTO.message),
+						new HumanMessage(`[DIRECTIVE]:\n- Goal: ${taskGoal}\n- Description: ${taskDto.description}`)
 					];
 				} else {
 					// 第一次執行新任務
+					console.log(taskDto)
 					messages = [
 						new SystemMessage(dynamicSystemPrompt),
 						new HumanMessage(`[DIRECTIVE]:\n- Goal: ${taskGoal}\n- Description: ${taskDto ? taskDto.description : "None"}`)
@@ -263,7 +275,7 @@ export abstract class BaseAgent {
 				const foldedSessionHistory = this.runtime.memoryManager.foldHistory(session.history);
 				messages = [
 					new SystemMessage(dynamicSystemPrompt),
-					...foldedSessionHistory.map(mDTO => mDTO.message), // 引入摺疊後的全局對話歷史
+					...foldedSessionHistory.filter(m => !!m?.message).map(mDTO => mDTO.message), // 引入摺疊後的全局對話歷史
 					new HumanMessage(`[DIRECTIVE]: 你當前的任務目標是「${taskGoal}」。請直接開始執行並回報結果。`)
 				];
 			}
@@ -296,15 +308,15 @@ export abstract class BaseAgent {
 			};
 
 		} catch (error: any) {
-			recorder.error(`Agent [${this.id}] execution failed: ${error.message}`, { session_id: sessionId, trace_id: traceId });
+			recorder.error(`Agent [${this.id}] execution failed: ${String(error)}`, { session_id: sessionId, trace_id: traceId });
 			return {
 				status: 'failed',
 				result: {
-					content: `執行任務失敗: ${error.message}`,
+					content: `執行任務失敗: ${String(error)}`,
 					history: [] // TODO: fix this
 				},
-				error: error.message,
-				summary: `執行任務失敗: ${error.message}`
+				error: String(error),
+				summary: `執行任務失敗: ${new String(error)}`
 			};
 		}
 	}

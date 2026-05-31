@@ -1,24 +1,20 @@
 import { SystemMessage } from '@langchain/core/messages';
 
 import { recorder } from '../infra/LogManager';
-import { IMemoryRepository, MemoryDTO, MemoryLayer, MemoryType } from '../infra/types/memory';
+import { MemoryDTO, MemoryLayer, MemoryType } from '../infra/types/memory';
 import { MessageDTO, MessageRole } from '../infra/types/session';
-import { AgentManager } from './AgentManager';
+import { BaseManager } from './BaseManager';
 
 /**
  * 記憶管理器 (MemoryManager)
  * 負責處理記憶的生命週期、層級檢索與上下文壓縮 (Folding)。
  * 作為 Agent 認知上下文與底層儲存之間的橋樑。
  */
-export class MemoryManager {
-  /**
-   * @param repo 記憶儲存庫實例
-   * @param agentManager 代理管理器實例 (可選，用於獲取 Agent 上下文)
-   */
-  constructor(
-    private repo: IMemoryRepository,
-    private agentManager?: AgentManager
-  ) { }
+export class MemoryManager extends BaseManager {
+
+  constructor() {
+    super();
+  }
 
   /**
    * 獲取工作記憶 (Working Memory)
@@ -30,12 +26,7 @@ export class MemoryManager {
     recorder.debug(`[MemoryManager] Getting working memory for chain: ${chainId}, session: ${sessionId}`, { type: 'SYSTEM' });
 
     // 從儲存庫中獲取 WORKING 層級的所有記憶
-    // 注意：目前的 findByNamespace 可能需要過濾 chainId
-    // 這裡我們假設 WORKING 記憶會存放在特定的命名空間，或者我們需要擴展 repo 接口
-    // 根據 Unified Memory System 規範，WORKING 記憶關聯到特定 Chain
-
-    // 暫時使用 findByNamespace('working', sessionId) 並在內存中過濾 chainId
-    const allWorking = await this.repo.findByNamespace('working', sessionId);
+    const allWorking = await this.runtime.memoryRepo.findByNamespace('working', sessionId);
     return allWorking.filter(m => m.layer === MemoryLayer.WORKING && m.chainId === chainId);
   }
 
@@ -62,7 +53,7 @@ export class MemoryManager {
       timestamp: Date.now()
     };
 
-    await this.repo.save(memory);
+    await this.runtime.memoryRepo.save(memory);
   }
 
   /**
@@ -75,7 +66,7 @@ export class MemoryManager {
     recorder.debug(`[MemoryManager] Compiling L1 Index for session: ${sessionId}`, { type: 'SYSTEM' });
 
     // 1. 從儲存庫獲取基礎索引 (通常包含 IDs 和 Tags)
-    const baseIndex = await this.repo.getL1Index(sessionId);
+    const baseIndex = await this.runtime.memoryRepo.getL1Index(sessionId);
     const indexSet = new Set<string>(baseIndex);
 
     // 2. 如果提供了 chainId，額外過濾/獲取該 Chain 的 WORKING 標籤

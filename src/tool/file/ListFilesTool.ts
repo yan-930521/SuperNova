@@ -23,8 +23,15 @@ export class ListFilesTool extends BaseFileTool<{ path?: string }, string[]> {
   }
 
   async run(input: { path?: string }, context: IAgentExecuteContext): Promise<string[]> {
-    const targetPath = input.path || 'workspace';
-    const absolutePath = this.validatePath(targetPath, 'read');
-    return await fs.readdir(absolutePath);
+    const targetPath = input.path || '.';
+    try {
+      const absolutePath = this.validatePath(targetPath, 'read');
+      return await fs.readdir(absolutePath);
+    } catch (err: any) {
+      if (err.code === 'ENOENT') {
+        return [`ERROR: Directory not found at path "${targetPath}".` ];
+      }
+      return [`ERROR: Failed to list files in "${targetPath}": ${err.message}`];
+    }
   }
 }

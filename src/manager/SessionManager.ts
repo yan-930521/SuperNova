@@ -1,32 +1,26 @@
 import { recorder } from '../infra/LogManager';
-import { IAgentMessagePayload, IEventBus, SystemEventType } from '../infra/types/events';
-import { ISessionRepository, MessageDTO, MessageRole } from '../infra/types/session';
+import { IAgentMessagePayload, SystemEventType } from '../infra/types/events';
+import { MessageDTO, MessageRole } from '../infra/types/session';
 import { Session } from '../models/Session';
+import { BaseManager } from './BaseManager';
 
 /**
  * 會話生命週期管理器 (SessionManager)
  * 負責管理活躍中 (In-memory) 的會話實體，並協調 Repository 進行持久化。
  */
-export class SessionManager {
+export class SessionManager extends BaseManager {
   /** 內存緩存：儲存當前活動中的會話對象 */
   private sessions: Map<string, Session> = new Map();
 
-  /**
-   * @param repo 注入會話儲存庫，負責底層 IO
-   */
-  constructor(
-    private repo: ISessionRepository,
-    private eventBus: IEventBus
-  ) {
-    this.setupMessageListener();
+  constructor() {
+    super();
   }
 
   /**
    * 設置訊息監聽器
-   * 負責接收 AGENT_MESSAGE 事件並寫入帳本。
    */
-  private setupMessageListener() {
-    this.eventBus.subscribe<IAgentMessagePayload>(SystemEventType.AGENT_MESSAGE, async (event) => {
+  protected onRuntimeInjected() {
+    this.runtime.eventBus.subscribe<IAgentMessagePayload>(SystemEventType.AGENT_MESSAGE, async (event) => {
       const { sessionId, agentId, role, content, metadata } = event.payload;
       
       const session = await this.getSession(sessionId);
@@ -54,8 +48,7 @@ export class SessionManager {
     // 1. 存入內存緩存
     this.sessions.set(sessionId, session);
     
-    // 2. 初始持久化
-    await this.repo.save(session.toDTO());
+    await this.runtime.sessionRepo.save(session.toDTO());
     
     return session;
   }
@@ -72,7 +65,7 @@ export class SessionManager {
 
     // 2. 嘗試從 Repository 加載 (持久層)
     recorder.debug(`[SessionManager] Cache miss for session ${id}, attempting load from repo...`);
-    const dto = await this.repo.findById(id);
+    const dto = await this.runtime.sessionRepo.findById(id);
     if (dto) {
       const session = new Session(dto.id, dto.responsibleAgentId, dto.userId);
       await session.initFromDTO(dto);
@@ -89,7 +82,7 @@ export class SessionManager {
   async saveSession(id: string): Promise<void> {
     const session = this.sessions.get(id);
     if (session) {
-      await this.repo.save(session.toDTO());
+      await this.runtime.sessionRepo.save(session.toDTO());
       recorder.debug(`[SessionManager] Session ${id} persisted to storage.`);
     }
   }
@@ -98,7 +91,7 @@ export class SessionManager {
    * 僅附加一條訊息到會話歷史 (效能優化)
    */
   async appendMessage(id: string, message: MessageDTO): Promise<void> {
-    await this.repo.appendMessage(id, message);
+    await this.runtime.sessionRepo.appendMessage(id, message);
     recorder.debug(`[SessionManager] Message appended to session ${id}.`);
   }
 

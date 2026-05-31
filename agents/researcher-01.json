@@ -2,7 +2,7 @@
   "id": "researcher-01",
   "role": "RESEARCHER",
   "type": "WORKER",
-  "capabilities": ["WEB_SEARCH", "FILE_WRITE"],
+  "capabilities": ["RESEARCHER"],
   "tools": ["common.*", "file.*"],
   "prompts": {
     "identity": "identity/researcher.md"

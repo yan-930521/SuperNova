@@ -18,6 +18,7 @@ export interface EvaluationRecord {
  */
 export interface AgentState {
   goal: string;
+  description?: string;
   currentTask: string;
   messages: BaseMessage[];
   thoughtTree: {
@@ -44,6 +45,12 @@ export interface AgentState {
 export const AgentStateAnnotation = Annotation.Root({
   /** 全局目標 */
   goal: Annotation<string>({
+    reducer: (_, action) => action,
+    default: () => "",
+  }),
+
+  /** 詳細描述 */
+  description: Annotation<string>({
     reducer: (_, action) => action,
     default: () => "",
   }),

@@ -55,9 +55,8 @@ export class ToolRegistry {
   public registerStandardTools(): void {
     // 使用 require 避開加載時的循環引用
     const { TaskDispatcherTool } = require('./core/TaskDispatcherTool');
-    const { TaskCreateTool } = require('./core/TaskCreateTool');
-    const { TaskListTool } = require('./core/TaskListTool');
-    const { TaskInfoTool } = require('./core/TaskInfoTool')
+    const { TaskInfoTool } = require('./core/TaskInfoTool');
+    const { ChainInfoTool } = require('./core/ChainInfoTool');
     
     const { DeepThinkingTool } = require('./common/DeepThinkingTool');
     const { TavilySearchTool } = require('./common/TavilySearchTool');
@@ -76,7 +75,7 @@ export class ToolRegistry {
 
     this.register([
       new DeepThinkingTool(),
-      new TaskDispatcherTool(), new TaskCreateTool(), new TaskListTool(), new TaskInfoTool(),
+      new TaskDispatcherTool(), new TaskInfoTool(), new ChainInfoTool(),
       new TavilySearchTool(), new WebFetchTool(),
       new TimeTool(), new SystemInfoTool(), new MathTool(),
       new UnitConverterTool(), new CodeExecutorTool(), new TextSummarizerTool(),

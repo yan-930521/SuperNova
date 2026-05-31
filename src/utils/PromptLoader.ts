@@ -45,14 +45,14 @@ export class PromptLoader {
    * 如果字串值以 .md 結尾，則嘗試從 prompts/ 目錄加載內容。
    * @param data 待解析的配置對象
    */
-  public static async resolvePrompts(data: any): Promise<any> {
+  public static resolvePrompts(data: any): any {
     if (typeof data !== 'object' || data === null) {
       return data;
     }
 
     if (Array.isArray(data)) {
       for (let i = 0; i < data.length; i++) {
-        data[i] = await this.resolvePrompts(data[i]);
+        data[i] = this.resolvePrompts(data[i]);
       }
       return data;
     }
@@ -64,7 +64,7 @@ export class PromptLoader {
         const promptPath = `prompts/${value}`;
         resolved[key] = this.load(promptPath, `[Prompt file not found: ${value}]`);
       } else if (typeof value === 'object') {
-        resolved[key] = await this.resolvePrompts(value);
+        resolved[key] = this.resolvePrompts(value);
       } else {
         resolved[key] = value;
       }

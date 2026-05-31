@@ -1,1 +1,2 @@
-import './../scripts/chat-demo';
+import '../scripts/task-demo';
+

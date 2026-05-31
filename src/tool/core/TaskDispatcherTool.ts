@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { IAgentExecuteContext } from '../../infra/types/agent';
 import { GlobalRuntime } from '../../runtime/GlobalRuntime';
+import { PromptLoader } from '../../utils/PromptLoader';
 import { BaseTool } from '../BaseTool';
 
 /**
@@ -12,7 +13,7 @@ export class TaskDispatcherTool extends BaseTool {
 	constructor() {
 		super({
 			name: 'task_dispatcher',
-			description: 'Submit a high-level goal to the system for automatic planning and parallel execution.',
+			description: PromptLoader.resolvePrompts("task/dispatcher.md"),
 			category: 'core',
 			safety_tier: 'TIER_2',
 			required_capabilities: ['planning'],
@@ -38,8 +39,23 @@ NEVER over-generalize or omit execution-critical information.
 
 	async run(input: any, context: IAgentExecuteContext): Promise<any> {
 		const { goal, description } = input;
-		const { sessionId } = context; // 直接從系統提供的上下文獲取真實 ID
+		const { sessionId } = context;
 		const runtime = GlobalRuntime.getInstance();
+
+		// 增加防禦性檢查：防止重複提交相同目標的活躍任務鏈
+		const existingChains = runtime.taskManager.listChains().filter(c =>
+			c.sessionId === sessionId &&
+			c.goal === goal &&
+			(c.status === 'planning' || c.status === 'running')
+		);
+
+		if (existingChains.length > 0) {
+			return {
+				message: "A task chain with the same goal is already in progress.",
+				chainId: existingChains[0].chainId,
+				status: existingChains[0].status
+			};
+		}
 
 		// 提交任務，使用 Agent 的 ID 作為請求者
 		const result = await runtime.taskManager.submit(goal, description, sessionId, context.agentId);

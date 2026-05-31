@@ -116,6 +116,7 @@ export interface IChainStatusSummary {
   nodes: TaskDTO[];
   sessionId?: string;
   goal?: string;
+  planningDocument?: string;
 }
 
 /**

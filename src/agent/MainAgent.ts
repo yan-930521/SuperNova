@@ -72,12 +72,13 @@ export class MainAgent extends BaseAgent {
 			const finalResponse = typeof lastMessage.content === 'string' ? lastMessage.content : JSON.stringify(lastMessage.content);
 
 			// 4. 發布發言事件 (取代原本的 session.addMessage)
-			this.runtime.eventBus.publish({
+			this.runtime.eventBus.publish<IAgentMessagePayload>({
 				type: SystemEventType.AGENT_MESSAGE,
 				userId: session.userId,
 				sessionId: session.id,
 				payload: {
 					agentId: this.id,
+					sessionId: session.id,
 					role: MessageRole.ASSISTANT,
 					content: finalResponse,
 					messageType: 'reply'
@@ -88,8 +89,8 @@ export class MainAgent extends BaseAgent {
 			return finalResponse;
 
 		} catch (error: any) {
-			recorder.error(`MainAgent ReAct execution failed: ${error.message}`, { session_id: session.id });
-			return `抱歉，我在處理您的請求時遇到錯誤：${error.message}`;
+			recorder.error(`MainAgent ReAct execution failed: ${String(error)}`, { session_id: session.id });
+			return `抱歉，我在處理您的請求時遇到錯誤：${String(error)}`;
 		}
 	}
 
@@ -108,10 +109,10 @@ export class MainAgent extends BaseAgent {
 
 			// 1. 從 TaskManager 獲取該 Chain 的所有任務結果摘要
 			const tasks = this.runtime?.taskManager.getChainTasks(chainId) || [];
-			const chainSummary = tasks.map(t => `- [${t.goal}]: ${t.result?.content || '無產出'}`).join('\n');
+			const chainSummary = tasks.map(t => `- [${t.goal}]: ${t.result || '無產出'}`).join('\n');
 
 			// 2. 構建深度總結指令
-			const summaryDirective = `[SYSTEM NOTIFICATION]: 任務鏈 [${chainId}] 執行完畢。\n執行軌跡與產出摘要如下：\n${chainSummary}\n\n請根據以上執行結果，以你的身份對用戶進行一次正式的結案匯報，並總結關鍵產出。`;
+			const summaryDirective = `[SYSTEM NOTIFICATION]: 任務鏈 [${chainId}] 執行完畢。`;
 
 			const dynamicSystemPrompt = await this.buildPrompt({ sessionId });
 

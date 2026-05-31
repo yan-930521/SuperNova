@@ -26,15 +26,19 @@ export class WriteFileTool extends BaseFileTool<{ path: string, content: string 
   }
 
   async run(input: { path: string, content: string }, context: IAgentExecuteContext): Promise<string> {
-    const fullPath = this.validatePath(input.path, 'write');
+    try {
+      const fullPath = this.validatePath(input.path, 'write');
 
-    // Create directories if missing
-    const dir = path.dirname(fullPath);
-    await fs.mkdir(dir, { recursive: true });
+      // Create directories if missing
+      const dir = path.dirname(fullPath);
+      await fs.mkdir(dir, { recursive: true });
 
-    await fs.writeFile(fullPath, input.content, 'utf-8');
+      await fs.writeFile(fullPath, input.content, 'utf-8');
 
-    recorder.info(`[WriteFileTool] Successfully wrote to ${input.path}`, { type: 'TOOL', session_id: context.sessionId });
-    return `SUCCESS: File written to ${input.path}`;
+      recorder.info(`[WriteFileTool] Successfully wrote to ${input.path}`, { type: 'TOOL', session_id: context.sessionId });
+      return `SUCCESS: File written to ${input.path}`;
+    } catch (err: any) {
+      return `ERROR: Failed to write to file "${input.path}": ${err.message}`;
+    }
   }
 }

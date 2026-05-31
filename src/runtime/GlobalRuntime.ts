@@ -106,12 +106,18 @@ export class GlobalRuntime {
 		this.toolRegistry.registerStandardTools();
 
 		// --- 3. 初始化業務層 (Managers) ---
-		this.userManager = new UserManager(this.userRepo);
-		this.sessionManager = new SessionManager(this.sessionRepo, this.eventBus);
-		this.agentManager = new AgentManager(this.agentRepo);
-		this.agentManager.setRuntime(this); // 注入運行時實例
-		this.memoryManager = new MemoryManager(this.memoryRepo, this.agentManager);
-		this.taskManager = new TaskManager(this.agentManager, this.taskRepo);
+		this.userManager = new UserManager();
+		this.sessionManager = new SessionManager();
+		this.agentManager = new AgentManager();
+		this.memoryManager = new MemoryManager();
+		this.taskManager = new TaskManager();
+
+		// 統一注入 Runtime 實例 (BaseManager 模式)
+		this.userManager.setRuntime(this);
+		this.sessionManager.setRuntime(this);
+		this.agentManager.setRuntime(this);
+		this.memoryManager.setRuntime(this);
+		this.taskManager.setRuntime(this);
 
 		// --- 3. 初始化可觀測性與日誌 ---
 		const consoleLevel = (process.env.CONSOLE_LOG_LEVEL as LogLevel) || 'INFO';

@@ -23,7 +23,14 @@ export class ReadFileTool extends BaseFileTool<{ path: string }, string> {
   }
 
   async run(input: { path: string }, context: IAgentExecuteContext): Promise<string> {
-    const absolutePath = this.validatePath(input.path, 'read');
-    return await fs.readFile(absolutePath, 'utf-8');
+    try {
+      const absolutePath = this.validatePath(input.path, 'read');
+      return await fs.readFile(absolutePath, 'utf-8');
+    } catch (err: any) {
+      if (err.code === 'ENOENT') {
+        return `ERROR: File not found at path "${input.path}". Please verify the file exists using 'list_files'.`;
+      }
+      return `ERROR: Failed to read file "${input.path}": ${err.message}`;
+    }
   }
 }
