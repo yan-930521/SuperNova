@@ -1,60 +1,69 @@
-# SuperNova 2.0 架構設計 (Architecture Design)
+# SuperNova 0.3.0 架構設計 (Architecture Design)
 
 ## 1. 核心哲學 (Core Philosophy)
-SuperNova 2.0 採用 **「狀態分離與職責解耦」**。系統明確區分 **對話上下文 (Conversation State)** 與 **執行上下文 (Execution State)**，實現 Main Agent 與 任務引擎的深度分離，徹底解決長期運行中的 Context Drift (上下文漂移) 與 Goal Drift (目標偏移) 問題。
+SuperNova 0.3.0 延續並深化了 **「狀態分離與職責解耦」** 的原則。系統採用 **分層領域架構 (Layered Domain Architecture)**，將技術實現（基礎設施）與業務編排（應用層）及核心邏輯（領域層）徹底隔離。
 
-## 2. 雙層總帳架構 (Dual-Ledger Architecture)
+## 2. 四層架構模型 (Four-Layer Model)
 
-### 2.1 會話層 (Session - Conversation Ledger)
-- **定位:** 輕量級、面向對話的記錄器。
-- **內容:** 儲存用戶原始目標、對話歷史及任務引擎回傳的高階狀態摘要 (`[Worker Observation]`)。
-- **指派機制:** 當一個 Session 被建立時，系統會從 `AgentRegistry` 中選取一個 **MainAgent** 並與之綁定。該 MainAgent 成為該會話的首席負責人與用戶交互唯一窗口。
-- **職責:** 負責維護與用戶的「溝通連貫性」，過濾掉不必要的底層執行細節。
+### 2.1 介面層 (Interface Layer)
+- **職責**: 處理外部輸入（如 CLI、API），將其轉化為系統內部的 `Command`。
+- **組件**: Demo 腳本、控制台進入點。
 
-### 2.2 任務層 (Task System - Execution Ledger)
-- **定位:** 重量級、面向執行的詳細記錄器。
-- **內容:** 
-    - **內部思考軌跡 (Task History):** 紀錄單一任務中 Agent 的完整 ReAct 軌跡 (Thought -> Action -> Observation)，實現任務級別的記憶持久化。
-    - **任務圖 (TaskGraph):** 節點狀態與依賴關係 (DAG)。任務完成後保留在圖中，狀態標記為 `COMPLETED`。
-- **職責:** 負責維護「執行的可靠性與可溯源性」，驅動並行計算與自癒重規劃。
+### 2.2 應用層 (Application Services)
+- **職責**: 負責 **跨模組編排 (Orchestration)**，是系統的業務大腦。
+- **SessionService (客戶經理)**: 管理人機對話生命週期，維護溝通總帳。
+- **TaskService (專案主管)**: 管理任務生命週期，處理 3x3 自癒決策與狀態變遷。
+- **TaskScheduler (排程器)**: **(新)** 獨立的執行節拍器，負責根據 `TaskGraph` 狀態與資源分配執行任務。
 
-## 3. 核心技術協議 (Technical Protocols)
+### 2.3 領域層 (Domain Layer)
+- **職責**: 純粹的業務邏輯與狀態變遷，無外部依賴。
+- **BaseSession 體系**: 引入「全域會話協議」，確立 **「任務即會話 (Task is a Session)」** 的繼承結構。
+- **TaskGraph**: 純粹的 DAG 演算與依賴檢核邏輯。
 
-### 3.1 統一執行上下文 (IAgentExecuteContext)
-為了確保全鏈路追蹤與「上下文隔離 (Context Isolation)」，所有代理執行與工具調用必須攜帶此上下文：
-- `sessionId`: 關聯的會話 ID。
-- `traceId`: 全鏈路追蹤 ID。
-- `agentId`: 發起操作的代理 ID。
-- `taskId`: 當前任務節點 ID (用於精準載入任務專屬歷史)。
-- `retryCount` & `lastError`: 用於重試感知的錯誤歷史。
-- `dependencyResults`: 自動注入前置任務的產出，解決任務間的資訊斷層。
+### 2.4 基礎設施層 (Infrastructure Adapters)
+- **職責**: 技術支撐，通過 `IRepository` 與 `Provider` 介面對外提供服務。
+- **Persistence**: 統一的 `BaseFileSystemRepository` 支援 JSON 與增量 JSONL 存儲。
+- **Messaging**: 強型別的 `CommandBus` (同步) 與 `EventBus` (非同步) 通訊基座。
+- **Observability**: `PulseEngine` 負責心跳偵測與超時自癒。
 
-### 3.2 遞歸編排模型 (Recursive Orchestration)
-所有代理類（MainAgent, WorkerAgent）均繼承自 `BaseAgent` 並共用 `execute` 接口，且統一透過 **分層記憶提示詞 (Hierarchical Memory Prompt)** 動態注入規則。這允許：
-- **同行/層級指派**: MainAgent 之間可以互相指派任務。
-- **統一調用**: 任務管理器 (TaskManager) 以多態方式調用所有代理，不需區分角色類型。
+## 3. 雙層總帳與統一會話 (Unified Session Protocol)
 
-## 4. 雙環執行模式 (Dual-Loop)
+系統將所有的訊息流動視為不同層級的「會話鏈」：
 
-- **控制環 (Main Agent):** 
-    - 通過工具調用 (`task_dispatcher`, `task_create`) 啟動任務。任務進行時，Main Agent 保持異步，不阻塞對話。
-    - **權限控制**: 透過 `availableAgents` 白名單限制可調度的下屬代理。
-- **執行環 (Autonomous Engine - JIT System):** 
-    - 獨立運作於後台，由 `TaskManager` 驅動。
-    - **JIT 展開**: 採按里程碑動態展開 (Just-In-Time) 模式，根據上一個里程碑的執行結果決定下一步。
-    - **3x3 階梯式自癒 (Self-Healing)**: 
-        1. **本地重試**: 單一任務失敗時由 `TaskManager` 自動重置狀態並重試 (上限 3 次)。
-        2. **認知重規劃 (Cognitive Re-plan)**: 重試耗盡後，呼叫 `TaskPlanner` 進行任務圖的局部修改與依賴重組。
-        3. **終極停機**: 重規劃 3 次仍失敗，標記為 `STUCK`。
+### 3.1 一級總帳 (Communication Ledger)
+- **實體**: `UserSession` (繼承自 `BaseSession`)。
+- **內容**: 用戶與 AI 的對話、任務執行的高階摘要。
+- **管理**: 由 `SessionService` 維護連貫性。
 
-## 5. 系統觀測層 (Observation Layer - Pulse Engine)
-- **定位**: 系統的生命體徵監控器與自動化觸發器。
-- **職責**:
-    - **心跳監測 (Heartbeat)**: 監控任務執行狀態，超時自動拋出 `TASK_FAILED`，觸發自癒機制。
-    - **狀態掛鉤 (Hooks)**: 監聽數據池 (State Pool) 變動，達到閾值時觸發預定義動作。
-    - **系統脈搏 (System Tick)**: 提供統一的時間驅動源。
+### 3.2 二級總帳 (Execution Ledger)
+- **實體**: `Task` (繼承自 `BaseSession`)。
+- **內容**: Agent 執行的完整思考軌跡 (Thought -> Action -> Observation)。每個任務都是一個具備目標的獨立會話。
+- **管理**: 由 `TaskService` 監控執行狀態。
+
+## 4. 通訊協議：Command-Event 混合模式
+
+為了確保結構明確與通訊統一，系統嚴格遵循以下模式：
+
+- **Commands (指令)**: 
+    - **方向**: 點對點 (一對一)。
+    - **特性**: 同步呼叫、期待回傳結果、用於請求「主動動作」。
+    - **範例**: `Events.Session.Start`。
+- **Events (事件)**: 
+    - **方向**: 廣播 (一對多)。
+    - **特性**: 非同步發布、不等待回傳、用於通知「狀態變遷」。
+    - **範例**: `Events.Task.Finished`。
+
+## 5. 系統自癒與觀測 (Self-Healing & Observability)
+
+### 5.1 3x3 自癒階梯
+1. **Node Retry**: 單體任務失敗自動原地重試。
+2. **Cognitive Re-plan**: 偵測到邏輯錯誤或重試耗盡，觸發 `PlanningCoordinator` 修正任務圖。
+3. **STUCK 標記**: 終極失敗，等待人類介入 (HITL)。
+
+### 5.2 脈搏監控 (Pulse Engine)
+- **Heartbeat**: 實作 `ILifecycle`，在背景定時掃描超時任務。
+- **Hooks**: 支援 `INTERVAL`、`THRESHOLD` 與 `EVENT` 三種自動化觸發機制。
 
 ## 6. 執行安全與隔離 (Execution Sandbox)
-- **路徑重定向**: 所有檔案工具自動將相對路徑映射至 `workspace/` 目錄。
-- **逃逸偵測**: 嚴禁透過 `..` 跳轉訪問沙盒外的敏感檔案（如 `.env`）。
-- **無狀態 Worker**: 所有的執行上下文、依賴結果與操作權限由「任務層」在派發時注入，確保 Worker 本身無狀態且可隨時拋棄重啟。
+- **路徑重定向**: Infrastructure 層統一處理路徑映射，確保領域層與 Worker 僅能操作 `workspace/` 內的受控資源。
+- **無狀態執行**: Worker 由應用層在派發時注入上下文與依賴結果，確保可隨時拋棄與重啟。
