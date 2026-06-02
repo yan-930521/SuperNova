@@ -3,6 +3,8 @@
  * 所有屬性均為 readonly，確保運行時配置不可變。
  */
 export interface Config {
+  /** 版本號碼 */
+  readonly version: string;
   /** 運行時相關配置 */
   readonly runtime: RuntimeConfig;
   /** 可觀測性相關配置 (日誌、追蹤等) */

@@ -1,7 +1,7 @@
 import * as fs from 'fs/promises';
 import { z } from 'zod';
 
-import { IAgentExecuteContext } from '../../infra/types/agent';
+import { IAgentExecuteContext } from '../../core/messaging/IBus';
 import { BaseFileTool } from './BaseFileTool';
 
 /**

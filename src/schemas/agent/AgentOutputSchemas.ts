@@ -30,8 +30,7 @@ export const TaskNodeSchema = z.object({
 	type: z.enum(["analysis", "code", "search", "test", "work", "implementation", "fix", "documentation"]).describe("任務執行類型"),
 	goal: z.string().describe("該任務具體要達成的目標"),
 	description: z.string().describe("詳細的執行要求、上下文與驗證標準"),
-	assignedAgentId: z.string().describe("指定執行的具體 Agent ID"),
-	dependencies: z.array(z.string()).describe("此任務所依賴的前置任務 ID 列表")
+	assignedAgentId: z.string().describe("指定執行的具體 Agent ID")
 }).describe("TodoList 中的單個任務節點");
 
 /**
@@ -40,7 +39,7 @@ export const TaskNodeSchema = z.object({
  */
 export const TodoListResponseSchema = z.object({
 	planning_document: z.string().describe("詳細的規劃分析與思路 (Markdown 格式)，將會儲存並提供給協調官閱讀"),
-	tasks: z.array(TaskNodeSchema).describe("扁平的任務清單。若可並行執行，dependencies 為空；若需依序，填入前置任務的 ID。")
+	phases: z.array(z.array(TaskNodeSchema)).describe("分階段執行的任務組。外層陣列代表先後順序，內層陣列代表該階段內可並行執行的任務。")
 }).describe("最終的 TodoList 產出");
 
 /**

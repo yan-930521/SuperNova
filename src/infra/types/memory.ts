@@ -5,7 +5,10 @@ import { MessageDTO } from './session';
  * 定義記憶存儲的生命週期與用途。
  */
 export enum MemoryLayer {
-  /** 工作記憶 (短暫，關聯到特定 Chain 或 Session) */
+  /** 
+   * 工作記憶 (短暫，關聯到特定 Chain 或 Session)
+   * @deprecated 0.3.0 版起由 OrchestratedContext (Blackboard) 接管
+   */
   WORKING = 'WORKING',
   /** 持久記憶 (長期存儲，跨 Session 可用) */
   PERSISTENT = 'PERSISTENT'
@@ -52,45 +55,5 @@ export interface MemoryDTO {
   timestamp: number;
   /** 額外的業務元數據 */
   metadata?: Record<string, any>;
-}
+  }
 
-/**
- * 記憶儲存庫接口
- * 負責 MemoryDTO 的持久化操作。
- */
-export interface IMemoryRepository {
-  /**
-   * 保存或更新記憶
-   * @param memory 記憶數據對象
-   */
-  save(memory: MemoryDTO): Promise<void>;
-
-  /**
-   * 根據 ID 查找記憶
-   * @param id 記憶識別碼
-   * @param sessionId 會話識別碼
-   */
-  findById(id: string, sessionId: string): Promise<MemoryDTO | null>;
-
-  /**
-   * 根據命名空間查找特定會話的所有記憶
-   * @param namespace 命名空間
-   * @param sessionId 會話識別碼
-   */
-  findByNamespace(namespace: string, sessionId: string): Promise<MemoryDTO[]>;
-
-  /**
-   * 刪除特定記憶
-   * @param id 記憶識別碼
-   * @param sessionId 會話識別碼
-   */
-  delete(id: string, sessionId: string): Promise<void>;
-
-  /**
-   * 獲取一級索引 (L1 Index)
-   * 掃描會話下的可用標籤或 ID 列表。
-   * @param sessionId 會話識別碼
-   * @returns 可用的標籤或 ID 列表
-   */
-  getL1Index(sessionId: string): Promise<string[]>;
-}

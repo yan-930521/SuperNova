@@ -54,7 +54,7 @@ export class ToolRegistry {
    */
   public registerStandardTools(): void {
     // 使用 require 避開加載時的循環引用
-    const { TaskDispatcherTool } = require('./core/TaskDispatcherTool');
+    const { GoalDispatcherTool } = require('./core/GoalDispatcherTool');
     const { TaskInfoTool } = require('./core/TaskInfoTool');
     const { ChainInfoTool } = require('./core/ChainInfoTool');
     
@@ -73,13 +73,21 @@ export class ToolRegistry {
     const { ListFilesTool } = require('./file/ListFilesTool');
     const { DeleteFileTool } = require('./file/DeleteFileTool');
 
+    // Context Tools (Blackboard)
+    const { PostFactTool } = require('./context/PostFactTool');
+    const { PostHypothesisTool } = require('./context/PostHypothesisTool');
+    const { PostDecisionTool } = require('./context/PostDecisionTool');
+    const { PostOpenQuestionTool } = require('./context/PostOpenQuestionTool');
+    const { ContextVariableTool } = require('./context/ContextVariableTool');
+
     this.register([
       new DeepThinkingTool(),
-      new TaskDispatcherTool(), new TaskInfoTool(), new ChainInfoTool(),
+      new GoalDispatcherTool(), new TaskInfoTool(), new ChainInfoTool(),
       new TavilySearchTool(), new WebFetchTool(),
       new TimeTool(), new SystemInfoTool(), new MathTool(),
       new UnitConverterTool(), new CodeExecutorTool(), new TextSummarizerTool(),
-      new WriteFileTool(), new ReadFileTool(), new ListFilesTool(), new DeleteFileTool()
+      new WriteFileTool(), new ReadFileTool(), new ListFilesTool(), new DeleteFileTool(),
+      new PostFactTool(), new PostHypothesisTool(), new PostDecisionTool(), new PostOpenQuestionTool(), new ContextVariableTool()
     ]);
   }
 }

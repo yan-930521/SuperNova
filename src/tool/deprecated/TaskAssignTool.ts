@@ -1,13 +1,14 @@
 import { z } from 'zod';
 
-import { IAgentExecuteContext } from '../../infra/types/agent';
+import { IAgentExecuteContext } from '../../core/messaging/IBus';
 import { GlobalRuntime } from '../../runtime/GlobalRuntime';
 import { BaseTool } from '../BaseTool';
+import { TaskService } from '../../application/task/TaskService';
+import { AgentService } from '../../application/agent/AgentService';
 
 /**
- * TaskAssignTool
+ * TaskAssignTool (已廢棄，僅供過渡期參考)
  * 職責：手動指派特定的任務節點給指定的代理。
- * 2.0 增強：驗證指派的 Agent 是否在呼叫者的可用名單內。
  */
 export class TaskAssignTool extends BaseTool {
   constructor() {
@@ -26,22 +27,25 @@ export class TaskAssignTool extends BaseTool {
   }
 
   async run(input: any, context: IAgentExecuteContext): Promise<any> {
-    const { chainId, taskId, agentId: targetAgentId } = input;
+    const { taskId, agentId: targetAgentId } = input;
     const runtime = GlobalRuntime.getInstance();
     
-    // 1. 權限驗證：檢查指派的 Agent 是否在呼叫者的可用名單內
-    const callingAgent = runtime.agentManager.getAgent(context.agentId);
+    const agentService = runtime.container.resolve<AgentService>('AgentService');
+    const taskService = runtime.container.resolve<TaskService>('TaskService');
+
+    // 1. 權限驗證
+    const callingAgent = agentService.getAgent(context.agentId);
     if (callingAgent && callingAgent.availableAgents && callingAgent.availableAgents.length > 0) {
       if (!callingAgent.availableAgents.includes(targetAgentId)) {
-        throw new Error(`Access denied: You are not authorized to coordinate Agent "${targetAgentId}". Available agents: ${callingAgent.availableAgents.join(', ')}`);
+        throw new Error(`Access denied: You are not authorized to coordinate Agent "${targetAgentId}".`);
       }
     }
 
     // 2. 執行指派
-    await runtime.taskManager.assignTask(chainId, taskId, targetAgentId);
+    await taskService.assignTask(taskId, targetAgentId);
     
     return {
-      message: `Task ${taskId} in chain ${chainId} has been assigned to Agent ${targetAgentId}.`,
+      message: `Task ${taskId} has been assigned to Agent ${targetAgentId}.`,
       status: "success"
     };
   }

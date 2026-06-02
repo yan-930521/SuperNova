@@ -1,68 +1,78 @@
-Use this tool to create, maintain, and update a structured task list for the current coding or execution session.
+# Goal Dispatch Tool Specification
 
-This system is designed to:
-- Track execution progress across multi-step workflows
-- Improve clarity of ongoing work
-- Provide transparent progress visibility to the user
-- Prevent task loss in complex or long-running operations
+This tool is the entry point for submitting a high-level goal into the SuperNova execution system.
+
+It accepts a goal and a self-contained description, then forwards them to a backend orchestration system that handles planning, decomposition, and execution.
 
 ---
 
-# 1. Core Principle
+# Input Schema
 
-This tool is ONLY for:
-> managing execution-level work decomposition
+The tool accepts only:
 
-It is NOT for:
-- high-level brainstorming
-- pure conversation
-- single-step responses
-- abstract discussion without execution
+- goal: a high-level objective to achieve
+- description: a self-contained, execution-ready context
 
 ---
 
-# 2. When to Use This Tool
+# Description Requirement (CRITICAL)
 
-Use proactively in the following situations:
+The `description` field MUST be fully self-contained.
 
-## 2.1 Required Usage Conditions
+It must include all information required for execution without access to the original conversation.
 
-1. **Multi-step tasks (≥ 3 steps)**
-   - Any task requiring decomposition into multiple executable operations
+It MUST include:
 
-2. **Complex or non-trivial workflows**
-   - Requires planning, sequencing, or dependency handling
+- original user request
+- objective and expected outcome
+- relevant context and background
+- constraints and limitations
+- required resources (files, APIs, systems, datasets)
+- important entities and identifiers
+- known assumptions (if any)
+- success criteria
 
-3. **User explicitly requests task tracking**
-   - e.g. "use todo list", "track steps", "break down tasks"
-
-4. **Multiple user requests in one prompt**
-   - Bullet lists, comma-separated tasks, or multi-goal instructions
-
-5. **After receiving new actionable instructions**
-   - Immediately convert requirements into structured tasks
-
-6. **Before starting execution**
-   - MUST create or update task list before performing work
-   - MUST set exactly ONE task to `in_progress`
-
-7. **During execution progress updates**
-   - Update task states in real-time
-
-8. **After task completion**
-   - Mark task as `completed`
-   - Append newly discovered tasks if needed
+The description is the single source of truth for downstream systems.
 
 ---
 
-# 3. When NOT to Use This Tool
+# System Behavior (Backend)
 
-Do NOT use when:
+After submission, the backend system will automatically:
 
-1. Single-step simple task (e.g. direct answer, small fix)
-2. Purely informational queries
-3. Tasks that can be completed in < 3 trivial actions
-4. Conversational exchanges without execution intent
-5. No meaningful tracking value exists
+- interpret the goal
+- construct internal task structure
+- assign workers
+- manage execution lifecycle
+
+This behavior is NOT part of the tool interface.
 
 ---
+
+# When to Use
+
+Use this tool when:
+
+- a high-level goal needs to be executed
+- multi-step reasoning or execution is required
+- the task requires backend orchestration
+- long-horizon or complex objectives are involved
+
+---
+
+# When NOT to Use
+
+Do NOT use this tool when:
+
+- the request is single-step and directly answerable
+- no execution is required
+- the task is purely informational or explanatory
+- user explicitly requests no execution or automation
+
+---
+
+# Key Principle
+
+This tool is a submission interface only.
+
+All planning, scheduling, and execution are handled by the backend system.

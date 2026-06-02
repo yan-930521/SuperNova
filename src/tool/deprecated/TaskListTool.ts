@@ -1,11 +1,12 @@
 import { z } from 'zod';
 
-import { IAgentExecuteContext } from '../../infra/types/agent';
+import { IAgentExecuteContext } from '../../core/messaging/IBus';
 import { GlobalRuntime } from '../../runtime/GlobalRuntime';
 import { BaseTool } from '../BaseTool';
+import { TaskService } from '../../application/task/TaskService';
 
 /**
- * TaskListTool
+ * TaskListTool (已廢棄，僅供過渡期參考)
  * 職責：僅負責獲取系統中當前的任務鏈及其所有任務的狀態清單。
  */
 export class TaskListTool extends BaseTool {
@@ -26,10 +27,11 @@ export class TaskListTool extends BaseTool {
 		const { chainId } = input;
 		const { sessionId } = context;
 		const runtime = GlobalRuntime.getInstance();
+    const taskService = runtime.container.resolve<TaskService>('TaskService');
 
 		if (chainId) {
-			const chain = runtime.taskManager.getChainStatus(chainId);
-			const tasks = runtime.taskManager.getChainTasks(chainId);
+			const chain = taskService.getChainStatus(chainId);
+			const tasks = await taskService.getChainTasks(chainId);
 
 			return {
 				chainId,
@@ -46,8 +48,7 @@ export class TaskListTool extends BaseTool {
 				}))
 			};
 		} else {
-			const allChains = runtime.taskManager.listChains();
-			// 優先過濾當前 Session 的任務鏈，避免看到無關資訊
+			const allChains = taskService.listChains();
 			const sessionChains = allChains.filter(c => c.sessionId === sessionId);
 
 			return {
@@ -55,9 +56,7 @@ export class TaskListTool extends BaseTool {
 				sessionChains: sessionChains.map(c => ({
 					chainId: c.chainId,
 					status: c.status,
-					goal: c.goal,
-					taskCount: c.nodes.length,
-					completedCount: c.nodes.filter((n: any) => n.status === 'completed').length
+					goal: c.goal
 				}))
 			};
 		}

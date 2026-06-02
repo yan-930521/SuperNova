@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { TavilySearch } from '@langchain/tavily';
 
-import { IAgentExecuteContext } from '../../infra/types/agent';
+import { IAgentExecuteContext } from '../../core/messaging/IBus';
 import { BaseTool } from '../BaseTool';
 
 const TavilySearchSchema = z.object({

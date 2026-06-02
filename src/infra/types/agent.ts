@@ -13,72 +13,36 @@ export enum ModelPreset {
 }
 
 /**
- * 代理數據傳輸對象 (Agent Data Transfer Object)
+ * 代理類型 Enum
+ */
+export enum AgentType {
+  WORKER = 'WORKER',
+  MAIN_AGENT = 'MAIN_AGENT'
+}
+
+/**
+ * 代理數據傳輸對象 (Agent DTO)
  * 定義代理的靜態屬性、角色、能力以及與 LLM 對接的配置。
  */
 export interface AgentDTO {
   /** 代理唯一識別碼 (例如 'researcher-01', 'coder-01') */
   id: string;
+  /** 代理類型 (Worker/MainAgent) */
+  type: AgentType;
   /** 代理的角色名稱，用於任務指派邏輯 */
   role: string;
-  /** 代理的身份提示詞 (System Prompt Fragment)，定義其性格與專業領域 */
+  /** 代理的身份提示詞 (System Prompt Fragment) */
   identity: string;
-  /** 代理具備的能力標籤清單，對齊工具調用權限 */
+  /** 代理具備的能力標籤清單 */
   capabilities: string[];
   /** 代理可使用的具體工具 ID 列表 */
-  tools?: string[];
+  tools: string[];
   /** 偏好的模型預設 */
   modelPreset: ModelPreset;
-  /** 額外的運行時配置，如 temperature, max_tokens 等 */
-  config: Record<string, any>;
-}
-
-/**
- * 代理儲存庫接口
- * 負責 Agent 配置的載入與持久化。
- */
-export interface IAgentRepository {
-  /**
-   * 根據 ID 查找代理配置
-   * @param id 代理識別碼
-   */
-  findById(id: string): Promise<AgentDTO | null>;
-
-  /**
-   * 獲取系統中所有已註冊的代理配置
-   */
-  findAll(): Promise<AgentDTO[]>;
-
-  /**
-   * 保存或更新代理配置
-   * @param agent 代理數據對象
-   */
-  save(agent: AgentDTO): Promise<void>;
-}
-
-/**
- * Agent 執行上下文介面 (Execution Context)
- * 傳遞給 Agent 的運行時環境資訊。
- */
-export interface IAgentExecuteContext {
-  /** 會話 ID */
-  sessionId: string;
-  /** 全鏈路追蹤 ID */
-  traceId: string;
-  /** 發起執行或工具調用的 Agent ID */
-  agentId: string;
-  /** 當前執行的任務 ID (如果有) */
-  taskId?: string;
-  /** 當前執行的任務鏈 ID (如果有) */
-  chainId?: string;
-  /** 當前任務的重試次數 */
-  retryCount?: number;
-  /** 上一次執行的錯誤訊息 */
-  lastError?: string;
-  /** 前置任務的執行結果摘要 (TaskID -> Summary) */
-  dependencyResults?: Record<string, string>;
-  /** 額外的元數據 */
-  metadata?: Record<string, any>;
+  /** 可調用的代理白名單 */
+  availableAgents: string[];
+  /** 額外的運行時配置 */
+  config: Record<string, unknown>;
 }
 
 /**

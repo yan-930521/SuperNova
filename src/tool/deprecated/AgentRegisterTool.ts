@@ -1,11 +1,12 @@
 import { z } from 'zod';
 
 import { GlobalRuntime } from '../../runtime/GlobalRuntime';
-import { IAgentExecuteContext } from '../../infra/types/agent';
+import { IAgentExecuteContext } from '../../core/messaging/IBus';
 import { BaseTool } from '../BaseTool';
+import { AgentService } from '../../application/agent/AgentService';
 
 /**
- * AgentRegisterTool
+ * AgentRegisterTool (已廢棄，僅供過渡期參考)
  * 職責：負責動態註冊一個新的 Agent 實例或載入配置。
  */
 export class AgentRegisterTool extends BaseTool {
@@ -24,10 +25,11 @@ export class AgentRegisterTool extends BaseTool {
   }
 
   async run(input: any, context: IAgentExecuteContext): Promise<any> {
-    const { agentId, agentsDir } = input;
+    const { agentId } = input;
     const runtime = GlobalRuntime.getInstance();
     
-    const agent = await runtime.agentManager.loadAgentById(agentId);
+    const agentService = runtime.container.resolve<AgentService>('AgentService');
+    const agent = await agentService.reloadAgent(agentId);
     
     return {
       message: `Agent ${agentId} registered successfully.`,

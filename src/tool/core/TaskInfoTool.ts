@@ -1,8 +1,9 @@
 import { z } from 'zod';
 
-import { IAgentExecuteContext } from '../../infra/types/agent';
+import { IAgentExecuteContext } from '../../core/messaging/IBus';
 import { GlobalRuntime } from '../../runtime/GlobalRuntime';
 import { BaseTool } from '../BaseTool';
+import { TaskService } from '../../application/task/TaskService';
 
 /**
  * TaskInfoTool
@@ -26,7 +27,8 @@ export class TaskInfoTool extends BaseTool {
 		const { taskId } = input;
 		const runtime = GlobalRuntime.getInstance();
 
-		const task = runtime.taskManager.getTaskInfo(taskId);
+    const taskService = runtime.container.resolve<TaskService>('TaskService');
+		const task = await taskService.getTaskInfo(taskId);
 
 		if (!task) {
 			return `Task ${taskId} not found.`

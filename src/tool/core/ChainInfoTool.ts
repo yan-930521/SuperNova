@@ -1,8 +1,9 @@
 import { z } from 'zod';
 
-import { IAgentExecuteContext } from '../../infra/types/agent';
+import { IAgentExecuteContext } from '../../core/messaging/IBus';
 import { GlobalRuntime } from '../../runtime/GlobalRuntime';
 import { BaseTool } from '../BaseTool';
+import { TaskService } from '../../application/task/TaskService';
 
 /**
  * ChainInfoTool
@@ -26,9 +27,9 @@ export class ChainInfoTool extends BaseTool {
     const { chainId } = input;
     const runtime = GlobalRuntime.getInstance();
     
-    // 從 TaskManager 獲取原始狀態
-    // 注意：TaskManager.ts 中儲存鏈狀態的是私有成員 chains，我們需要透過公開方法存取
-    const chainSummary = runtime.taskManager.getChainStatus(chainId);
+    // 從 TaskService 獲取狀態
+    const taskService = runtime.container.resolve<TaskService>('TaskService');
+    const chainSummary = taskService.getChainStatus(chainId);
     
     if (!chainSummary) {
       return {
@@ -37,11 +38,7 @@ export class ChainInfoTool extends BaseTool {
       };
     }
 
-    // 獲取更深層的進度資訊 (需要從 runtime.taskManager 獲取內部的 ITaskChainState)
-    // 這裡我們暫時擴充 getChainStatus 沒提供但必要的欄位 (如果 TaskManager 有暴露的話)
-    // 根據 TaskManager.ts，getChainStatus 回傳 IChainStatusSummary
-    
-    const tasks = runtime.taskManager.getChainTasks(chainId);
+    const tasks = await taskService.getChainTasks(chainId);
     const completedCount = tasks.filter(t => t.status === 'completed').length;
     
     let systemInstruction = "";

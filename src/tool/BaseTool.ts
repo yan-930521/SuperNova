@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { RecordAction, recorder } from '../infra/LogManager';
-import { IAgentExecuteContext } from '../infra/types/agent';
+import { IAgentExecuteContext } from '../core/messaging/IBus';
 
 /**
  * 工具安全等級 (Safety Tier)

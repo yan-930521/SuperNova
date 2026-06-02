@@ -1,12 +1,9 @@
 {
   "id": "coder-01",
   "role": "Coder",
-  "type": "MAIN_AGENT",
+  "type": "WORKER",
   "capabilities": ["FILE_WRITE", "FILE_READ", "WEB_SEARCH", "PLANNING"],
-  "tools": ["common.*", "file.*"],
-  "availableAgents": [
-    "default-worker"
-  ],
+  "tools": ["common.*", "file.*", "context.*"],
   "prompts": {
     "identity": "identity/coder.md"
   }

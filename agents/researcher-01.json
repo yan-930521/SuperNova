@@ -3,7 +3,7 @@
   "role": "RESEARCHER",
   "type": "WORKER",
   "capabilities": ["RESEARCHER"],
-  "tools": ["common.*", "file.*"],
+  "tools": ["common.*", "file.*", "context.*"],
   "prompts": {
     "identity": "identity/researcher.md"
   }

@@ -1,63 +1,60 @@
 import * as dotenv from 'dotenv';
-import * as readline from 'readline';
 
 import { ChatOpenAI } from '@langchain/openai';
 
-import { MainAgent } from '../src/agent/MainAgent';
-import { InferenceEngine, ModelRegistry } from '../src/infra/ModelRegistry';
+import { SendMessageCommand, StartSessionCommand } from '../src/application/session/SessionService';
+import { Commands, Events, IEvent } from '../src/core/messaging/IBus';
+import { InferenceEngine } from '../src/infra/ModelRegistry';
 import { ModelPreset } from '../src/infra/types/agent';
-import { IAgentMessagePayload, SystemEventType } from '../src/infra/types/events';
-import { Session } from '../src/models/Session';
 import { GlobalRuntime } from '../src/runtime/GlobalRuntime';
 
 dotenv.config();
 
 /**
- * 多輪對話互動演示 (Multi-turn Chat Demo)
+ * 任務執行演示 (Task Execution Demo)
  */
 async function runTaskDemo() {
-	console.log("💬 [SuperNova 2.0] 啟動任務模式...");
-	// 初始化運行時
-	const runtime = new GlobalRuntime();
+	console.log("💬 [SuperNova 0.3.0] 啟動任務模式...");
 
-	// 2. 配置真實模型 (ReAct 模式強烈建議使用 GPT-4o 或同等級模型)
-	const realModel = new ChatOpenAI({
-		modelName: "gpt-4o-mini",
-		temperature: 0,
-		apiKey: process.env.OPENAI_API_KEY
-	});
-	const inference = new InferenceEngine(realModel as any);
-	runtime.modelRegistry.registerModel(ModelPreset.SMART, inference);
-	runtime.modelRegistry.registerModel(ModelPreset.FAST, inference);
-	runtime.modelRegistry.registerModel(ModelPreset.EVAL, inference);
+	const runtime = GlobalRuntime.getInstance();
 
+	if (!process.env.OPENAI_API_KEY) {
+		console.error("❌ 錯誤：未偵測到 OPENAI_API_KEY，請檢查 .env 檔案。");
+		process.exit(1);
+	}
+
+	// 先啟動系統基礎設施
 	await runtime.start();
 
-	// 3. 獲取 MainAgent 並建立 Session
-	const mainAgent = runtime.agentManager.getAgent('main-agent-01') as MainAgent;
-	if (!mainAgent) {
-		throw new Error("MainAgent 'main-agent-01' not found. Please check agents/ directory.");
-	}
+	const sessionId = `demo-task-${Date.now()}`;
 
-	const EnableHistory = false;
-
-	let session: Session;
-
-	if (EnableHistory) {
-		session = await runtime.sessionManager.getSession("demo-task") as any as Session;
-	} else {
-		session = await runtime.sessionManager.createSession(
-			mainAgent.id,         // responsibleAgentId
-			"ADMIN",              // userId
-			`demo-task-${Date.now()}`        // id
-		);
-	}
-
-	runtime.eventBus.subscribe<IAgentMessagePayload>(SystemEventType.AGENT_MESSAGE, (event) => {
-		console.log("==========\n" + event.payload.content);
+	// 監聽進度
+	runtime.eventBus.subscribe(Events.Session.Updated, (event: IEvent<Events.Session.Updated, any>) => {
+		console.log("\n🔄 [Progress Sync]:\n" + event.payload.lastSummary);
 	});
 
-	mainAgent.handleUserMessage(session, "閱讀 ./TEST/TEST_01.md，推理出最佳解答。")
+	runtime.eventBus.subscribe(Events.Session.Started, (event: IEvent<Events.Session.Started, any>) => {
+		console.log(`\n📢 [Event] Session Started: ${event.payload.sessionId}`);
+	});
+
+	runtime.eventBus.subscribe(Events.Task.Created, (event: IEvent<Events.Task.Created, any>) => {
+		console.log(`\n📋 [Event] Task Graph Created. Processing: ${event.payload.goal}`);
+	});
+
+	await runtime.commandBus.send(new StartSessionCommand({
+		sessionId,
+		userId: "ADMIN",
+		agentId: "main-agent-01"
+	}));
+
+	await runtime.commandBus.send(new SendMessageCommand({
+		sessionId,
+		userId: "ADMIN",
+		content: "閱讀 ./TEST/TEST_01.md，謹慎推理出該任務之最佳解法。"
+	}));
+
+	// 等待執行完成 (簡單模擬，實際應由事件驅動)
+	console.log("\n(任務已提交，請觀察日誌輸出...)");
 }
 
 runTaskDemo().catch(err => {

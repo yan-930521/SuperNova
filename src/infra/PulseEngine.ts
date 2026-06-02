@@ -1,16 +1,29 @@
+import { ILifecycle } from '../core/lifecycle/ILifecycle';
+import { AllEventTypes, Events, IEvent, IEventBus } from '../core/messaging/IBus';
 import { recorder } from './LogManager';
-import { IEventBus, SystemEventType } from './types/events';
 
+/**
+ * 脈搏掛鉤類型
+ */
 export enum PulseHookType {
+  /** 定期觸發 */
   INTERVAL = 'INTERVAL',
+  /** 數值閾值觸發 */
   THRESHOLD = 'THRESHOLD',
+  /** 監聽特定事件觸發 */
   EVENT = 'EVENT'
 }
 
+/**
+ * 脈搏掛鉤動作類型
+ */
 export enum PulseActionType {
+  /** 發布一個新事件 */
   EMIT_EVENT = 'EMIT_EVENT',
+  /** 記錄日誌 */
+  LOG = 'LOG',
+  /** (預留) 啟動新任務 */
   START_TASK = 'START_TASK',
-  LOG = 'LOG'
 }
 
 /**
@@ -20,32 +33,60 @@ export interface IPulseHook {
   id: string;
   type: PulseHookType;
   config: {
-    interval?: number; // For INTERVAL
-    path?: string;     // For THRESHOLD (e.g., 'env.temp')
-    operator?: '>' | '<' | '==' | '>=' | '<=' | '!='; // For THRESHOLD
-    threshold?: any;   // For THRESHOLD
-    eventName?: string; // For EVENT
-    logic?: (payload: any) => boolean; // For EVENT/THRESHOLD custom logic
+    interval?: number; // 適用於 INTERVAL
+    path?: string;     // 適用於 THRESHOLD (例如: 'env.temp')
+    operator?: '>' | '<' | '==' | '>=' | '<=' | '!='; // 適用於 THRESHOLD
+    threshold?: number | string | boolean;   // 適用於 THRESHOLD
+    eventType?: AllEventTypes; // 適用於 EVENT
+    logic?: (payload: unknown) => boolean; // 自定義邏輯
   };
   action: {
     type: PulseActionType;
-    payload: any;
+    payload: unknown;
   };
 }
 
 /**
  * 核心脈搏引擎 (Pulse Engine)
- * 負責驅動系統周期性任務與心跳。
+ * 負責驅動系統周期性任務、心跳偵測與自動化掛鉤執行。
  */
-export class PulseEngine {
+export class PulseEngine implements ILifecycle {
   private timer: NodeJS.Timeout | null = null;
   private tickCount: number = 0;
-  private hooks: Map<string, IPulseHook> = new Map();
-  private statePool: Record<string, any> = {};
-  private eventHandlers: Map<string, (event: any) => void> = new Map();
-  private watchTasks: Map<string, { lastActive: number, timeout: number }> = new Map();
+  private hooks = new Map<string, IPulseHook>();
+  private statePool: Record<string, unknown> = {};
+  private eventHandlers = new Map<string, (event: IEvent<any, any>) => void>();
+  private watchTasks = new Map<string, { lastActive: number, timeout: number }>();
 
   constructor(private eventBus: IEventBus) {}
+
+  /**
+   * 生命週期：初始化
+   */
+  async initialize(): Promise<void> {
+    recorder.info('[PulseEngine] Initializing pulse engine...', { type: 'SYSTEM' });
+  }
+
+  /**
+   * 生命週期：啟動引擎
+   */
+  async start(): Promise<void> {
+    if (this.timer) return;
+    
+    recorder.info('[PulseEngine] Pulse Engine starting...', { type: 'SYSTEM' });
+    this.timer = setInterval(() => this.tick(), 1000);
+  }
+
+  /**
+   * 生命週期：停止引擎
+   */
+  async stop(): Promise<void> {
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = null;
+      recorder.info('[PulseEngine] Pulse Engine stopped.', { type: 'SYSTEM' });
+    }
+  }
 
   /**
    * 將任務加入監控清單
@@ -77,12 +118,12 @@ export class PulseEngine {
   }
 
   /**
-   * 設定狀態值
+   * 設定狀態池數值
    * 支援巢狀路徑，例如 'env.temp'
    */
-  public setState(path: string, value: any): void {
+  public setState(path: string, value: unknown): void {
     const keys = path.split('.');
-    let current = this.statePool;
+    let current = this.statePool as any;
     for (let i = 0; i < keys.length - 1; i++) {
       if (!current[keys[i]] || typeof current[keys[i]] !== 'object') {
         current[keys[i]] = {};
@@ -93,33 +134,10 @@ export class PulseEngine {
   }
 
   /**
-   * 取得狀態值
-   * 支援巢狀路徑，例如 'env.temp'
+   * 取得狀態池數值
    */
-  public getState(path: string): any {
-    return path.split('.').reduce((obj, key) => obj?.[key], this.statePool);
-  }
-
-  /**
-   * 啟動引擎
-   * @param intervalMs 脈搏間隔（毫秒），預設 1000ms
-   */
-  start(intervalMs: number = 1000): void {
-    if (this.timer) return;
-    
-    recorder.info('Pulse Engine starting...', { type: 'SYSTEM' });
-    this.timer = setInterval(() => this.tick(), intervalMs);
-  }
-
-  /**
-   * 停止引擎
-   */
-  stop(): void {
-    if (this.timer) {
-      clearInterval(this.timer);
-      this.timer = null;
-      recorder.info('Pulse Engine stopped.', { type: 'SYSTEM' });
-    }
+  public getState(path: string): unknown {
+    return path.split('.').reduce((obj, key) => (obj as any)?.[key], this.statePool);
   }
 
   /**
@@ -131,51 +149,15 @@ export class PulseEngine {
     }
 
     this.hooks.set(hook.id, hook);
-    recorder.info(`Registered pulse hook: ${hook.id} (type: ${hook.type})`, { type: 'SYSTEM' });
+    recorder.info(`[PulseEngine] Registered hook: ${hook.id} (type: ${hook.type})`, { type: 'SYSTEM' });
 
-    // 如果是 EVENT 類型，需向 EventBus 訂閱
-    if (hook.type === PulseHookType.EVENT && hook.config.eventName) {
-      const handler = (event: any) => {
+    // 如果是 EVENT 類型，需訂閱新總線
+    if (hook.type === PulseHookType.EVENT && hook.config.eventType) {
+      const handler = (event: IEvent<any, any>) => {
         this.handleEventHook(hook, event);
       };
       this.eventHandlers.set(hook.id, handler);
-      this.eventBus.subscribe(hook.config.eventName as SystemEventType, handler);
-    }
-  }
-
-  /**
-   * 處理事件掛鉤
-   */
-  private handleEventHook(hook: IPulseHook, event: any): void {
-    try {
-      let triggered = true;
-      if (hook.config.logic) {
-        triggered = hook.config.logic(event.payload);
-      }
-      
-      if (triggered) {
-        this.executeAction(hook);
-      }
-    } catch (error) {
-      recorder.error(`Error in event hook ${hook.id}:`, { type: 'SYSTEM', payload: { error } });
-    }
-  }
-
-  /**
-   * 執行掛鉤動作
-   */
-  private executeAction(hook: IPulseHook): void {
-    const { action } = hook;
-    switch (action.type) {
-      case PulseActionType.EMIT_EVENT:
-        this.eventBus.publish(action.payload);
-        break;
-      case PulseActionType.LOG:
-        recorder.info(`PulseHook ${hook.id} log:`, { type: 'SYSTEM', payload: action.payload });
-        break;
-      case PulseActionType.START_TASK:
-        recorder.warn(`PulseHook ${hook.id}: START_TASK is not yet integrated with TaskManager.`, { type: 'SYSTEM' });
-        break;
+      this.eventBus.subscribe(hook.config.eventType, handler);
     }
   }
 
@@ -186,17 +168,16 @@ export class PulseEngine {
     const hook = this.hooks.get(id);
     if (!hook) return;
 
-    // 如果是 EVENT 類型且有儲存的 handler，則取消訂閱
-    if (hook.type === PulseHookType.EVENT && hook.config.eventName) {
+    if (hook.type === PulseHookType.EVENT && hook.config.eventType) {
       const handler = this.eventHandlers.get(id);
       if (handler) {
-        this.eventBus.unsubscribe(hook.config.eventName as SystemEventType, handler);
+        this.eventBus.unsubscribe(hook.config.eventType, handler);
         this.eventHandlers.delete(id);
       }
     }
 
     this.hooks.delete(id);
-    recorder.info(`Unregistered pulse hook: ${id}`, { type: 'SYSTEM' });
+    recorder.info(`[PulseEngine] Unregistered pulse hook: ${id}`, { type: 'SYSTEM' });
   }
 
   /**
@@ -204,41 +185,85 @@ export class PulseEngine {
    */
   private tick(): void {
     this.tickCount++;
-    recorder.debug(`[PulseEngine] tick: ${this.tickCount}`, { type: 'SYSTEM' });
-    
-    // 發布系統 Tick 事件
-    // this.eventBus.publish({
-    //   type: SystemEventType.SYSTEM_TICK,
-    //   userId: 'SYSTEM',
-    //   sessionId: 'SYSTEM',
-    //   payload: { tickCount: this.tickCount },
-    //   timestamp: Date.now()
-    // });
+    // recorder.debug(`[PulseEngine] tick: ${this.tickCount}`, { type: 'SYSTEM' });
 
-    // 檢查任務超時
+    // 0. 發布系統脈搏事件 (驅動排程器)
+    this.eventBus.publish({
+      type: Events.System.Tick,
+      timestamp: Date.now(),
+      payload: { tickCount: this.tickCount }
+    });
+    
+    // 1. 檢查任務超時
     for (const [taskId, info] of this.watchTasks.entries()) {
       if (Date.now() - info.lastActive > info.timeout) {
-        recorder.warn(`Task ${taskId} timed out in PulseEngine.`, { type: 'SYSTEM' });
+        recorder.warn(`[PulseEngine] Task ${taskId} timed out.`, { type: 'SYSTEM' });
+        
+        // 發布新的強型別任務失敗事件
         this.eventBus.publish({
-          type: SystemEventType.TASK_FAILED,
-          userId: 'SYSTEM',
-          sessionId: 'SYSTEM',
-          payload: { taskId, error: `Execution timeout: No heartbeat received for ${info.timeout / 1000}s` },
-          timestamp: Date.now()
+          type: Events.Task.Failed,
+          timestamp: Date.now(),
+          payload: { 
+            taskId, 
+            error: `Execution timeout: No heartbeat received for ${info.timeout / 1000}s` 
+          }
         });
+        
         this.watchTasks.delete(taskId);
       }
     }
 
-    // 執行過期的掛鉤
+    // 2. 檢查掛鉤觸發
     for (const hook of this.hooks.values()) {
       try {
         if (this.isTriggered(hook)) {
           this.executeAction(hook);
         }
       } catch (error) {
-        recorder.error(`Error in pulse hook ${hook.id}:`, { type: 'SYSTEM', payload: { error } });
+        recorder.error(`[PulseEngine] Hook execution failed: ${hook.id}`, { 
+          type: 'SYSTEM', 
+          payload: { error: error instanceof Error ? error.message : String(error) } 
+        });
       }
+    }
+  }
+
+  /**
+   * 處理事件掛鉤
+   */
+  private handleEventHook(hook: IPulseHook, event: IEvent<any, any>): void {
+    try {
+      let triggered = true;
+      if (hook.config.logic) {
+        triggered = hook.config.logic(event.payload);
+      }
+      
+      if (triggered) {
+        this.executeAction(hook);
+      }
+    } catch (error) {
+      recorder.error(`[PulseEngine] Event hook handling failed: ${hook.id}`, { 
+        type: 'SYSTEM', 
+        payload: { error: error instanceof Error ? error.message : String(error) } 
+      });
+    }
+  }
+
+  /**
+   * 執行掛鉤動作
+   */
+  private executeAction(hook: IPulseHook): void {
+    const { action } = hook;
+    switch (action.type) {
+      case PulseActionType.EMIT_EVENT:
+        this.eventBus.publish(action.payload as IEvent<any, any>);
+        break;
+      case PulseActionType.LOG:
+        recorder.info(`[PulseEngine] Hook ${hook.id} action: ${JSON.stringify(action.payload)}`, { type: 'SYSTEM' });
+        break;
+      case PulseActionType.START_TASK:
+        recorder.warn(`[PulseEngine] Hook ${hook.id}: START_TASK is not yet implemented for the new TaskService.`, { type: 'SYSTEM' });
+        break;
     }
   }
 
@@ -256,12 +281,12 @@ export class PulseEngine {
       let triggered = false;
 
       switch (hook.config.operator) {
-        case '>': triggered = value > threshold; break;
-        case '<': triggered = value < threshold; break;
-        case '==': triggered = value == threshold; break;
-        case '>=': triggered = value >= threshold; break;
-        case '<=': triggered = value <= threshold; break;
-        case '!=': triggered = value != threshold; break;
+        case '>': triggered = (value as any) > (threshold as any); break;
+        case '<': triggered = (value as any) < (threshold as any); break;
+        case '==': triggered = (value as any) == (threshold as any); break;
+        case '>=': triggered = (value as any) >= (threshold as any); break;
+        case '<=': triggered = (value as any) <= (threshold as any); break;
+        case '!=': triggered = (value as any) != (threshold as any); break;
       }
 
       if (!triggered && hook.config.logic) {

@@ -1,9 +1,13 @@
 import { z } from 'zod';
 
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts';
+import {
+    ChatPromptTemplate, MessagesPlaceholder, SystemMessagePromptTemplate
+} from '@langchain/core/prompts';
+import { ChatOpenAI } from '@langchain/openai';
 
-import { AgentState } from '../models/AgentState';
+import { AgentState } from '../domain/agent/AgentState';
+import { GlobalRuntime } from '../runtime/GlobalRuntime';
 import { recorder } from './LogManager';
 import { ModelPreset } from './types/agent';
 
@@ -20,69 +24,83 @@ export interface InferenceOptions {
 
 /**
  * 推理引擎實例
- * 採用 Stateless 設計，內部維護 ChatPromptTemplate。
+ * 採用 Stateless 設計，負責協調模型調用與結構化輸出。
  */
 export class InferenceEngine {
-	private _promptTemplate: ChatPromptTemplate | null = null;
-
 	/**
 	 * @param modelInstance 支援 withStructuredOutput 的 LangChain 聊天模型
+	 * @param systemPrompt 選擇性的系統提示詞模板
 	 */
-	constructor(public readonly modelInstance: BaseChatModel) { }
-
-	get promptTemplate(): ChatPromptTemplate | null {
-		return this._promptTemplate;
-	}
+	constructor(
+		public readonly modelInstance: BaseChatModel,
+		private readonly systemPrompt?: string
+	) { }
 
 	/**
 	 * 綁定系統提示詞，回傳一個新的引擎實例。
-	 * 建立並快取 ChatPromptTemplate。
+	 * 此操作為純粹的屬性賦值，延遲到執行時才構建模板。
 	 */
 	withSystemPrompt(prompt: string): InferenceEngine {
-		const newEngine = new InferenceEngine(this.modelInstance);
-		// 建立標準的 LangGraph 風格模板：System Prompt + Messages 佔位符
-		newEngine._promptTemplate = ChatPromptTemplate.fromMessages([
-			["system", prompt],
-			new MessagesPlaceholder("messages"),
-		]);
-		return newEngine;
+		return new InferenceEngine(this.modelInstance, prompt);
 	}
 
 	/**
 	 * 執行感知狀態的結構化推理。
-	 * 此方法為純粹的呼叫，不維護或修改外部狀態 (如 state.messages)。
+	 * 此方法會構建提示詞模板，並結合執行選項與推理鏈。
 	 */
 	async infer<T>(state: AgentState, schema: z.ZodSchema<T>, options?: InferenceOptions): Promise<T> {
 		try {
-			// 1. 確定使用的模板
-			let template = this._promptTemplate;
-			if (!template) {
-				// 如果沒有綁定模板，則建立臨時的預設模板
-				const defaultSystem = state.metadata?.identity || "You are a helpful AI assistant. Global goal: {goal}";
-				template = ChatPromptTemplate.fromMessages([
-					["system", defaultSystem],
-					new MessagesPlaceholder("messages"),
-				]);
-			}
+			// 1. 構建提示詞模板
+			// 優先級：實例綁定的 systemPrompt > 狀態元數據中的 identity > 預設提示詞
+			const system = this.systemPrompt ||
+				(state.metadata?.identity as string) ||
+				"You are a helpful AI assistant. Goal: {goal}";
 
-			// 2. 準備輸入數據
-			const inputVariables = {
-				...state,
-				...options?.variables,
-				goal: state.goal,
-				messages: state.messages || []
-			};
+			// 使用 SystemMessagePromptTemplate.fromTemplate 確保完整的模板替換能力
+			const template = ChatPromptTemplate.fromMessages([
+				SystemMessagePromptTemplate.fromTemplate(system),
+				new MessagesPlaceholder("messages"),
+			]);
 
-			// 3. 執行結構化輸出鏈
-			const chain = template.pipe(
+			// 2. 構建具備結構化輸出的基礎鏈
+			const baseChain = template.pipe(
 				this.modelInstance.withStructuredOutput(schema as any) as any
 			);
 
-			const result = await chain.invoke(inputVariables) as T;
+			// 3. 配置執行選項 (使用顯式的 .withConfig 鏈式呼叫)
+			const config = {
+				runName: options?.variables?.runName || `Inference_${state.currentTask || 'Chat'}`,
+				tags: options?.variables?.tags || ['supernova', GlobalRuntime.getInstance().config.version],
+				configurable: {
+					...options?.variables?.configurable
+				}
+			};
 
-			return result;
+			const finalChain = baseChain.withConfig(config);
+
+			// 4. 準備輸入變量
+			const inputVariables = {
+				goal: state.goal || "No specific goal",
+				description: state.description || "",
+				currentTask: state.currentTask || "General conversation",
+				...state,
+				...options?.variables,
+				messages: state.messages || []
+			};
+			
+			recorder.debug(`[InferenceEngine] Invoking configured inference chain`, { type: 'SYSTEM' });
+
+			// 5. 執行並回傳結果
+			return await finalChain.invoke(inputVariables) as T;
+
 		} catch (error: any) {
-			recorder.error(`[InferenceEngine] Inference failed: ${String(error)}`, { type: 'SYSTEM' });
+			recorder.error(`[InferenceEngine] Inference execution failed`, {
+				type: 'SYSTEM',
+				payload: {
+					error: error.message,
+					task: state.currentTask
+				}
+			});
 			throw error;
 		}
 	}
@@ -122,5 +140,21 @@ export class ModelRegistry {
 	 */
 	registerModel(preset: ModelPreset, engine: InferenceEngine): void {
 		this.engines.set(preset, engine);
+	}
+
+	/**
+	 * 註冊一個新的模型引擎
+	 */
+	registerDefaultModels(): void {
+		const realModel = new ChatOpenAI({
+			modelName: "gpt-4o-mini",
+			temperature: 0,
+			apiKey: process.env.OPENAI_API_KEY
+		});
+
+		const inference = new InferenceEngine(realModel as any);
+		this.registerModel(ModelPreset.SMART, inference);
+		this.registerModel(ModelPreset.FAST, inference);
+		this.registerModel(ModelPreset.EVAL, inference);
 	}
 }

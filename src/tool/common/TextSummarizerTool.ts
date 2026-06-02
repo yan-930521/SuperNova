@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { ModelPreset } from '../../infra/types/agent';
-import { IAgentExecuteContext } from '../../infra/types/agent';
+import { IAgentExecuteContext } from '../../core/messaging/IBus';
 import { GlobalRuntime } from '../../runtime/GlobalRuntime';
 import { BaseTool } from '../BaseTool';
 

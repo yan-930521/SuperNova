@@ -85,17 +85,6 @@ export interface TaskDTO {
 }
 
 /**
- * 任務儲存庫接口
- * 負責 TaskDTO 的持久化。
- */
-export interface ITaskRepository {
-  /** 保存或更新任務 */
-  save(task: TaskDTO): Promise<void>;
-  /** 根據 ID 查找單一任務 */
-  findById(id: string): Promise<TaskDTO | null>;
-}
-
-/**
  * 任務請求介面 (用於 TaskManager Inbox)
  */
 export interface ITaskRequest {

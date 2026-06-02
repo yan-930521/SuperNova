@@ -1,148 +1,176 @@
-import * as path from 'path';
+import * as path from 'node:path';
 
+import { AgentExecutorService } from '../application/agent/AgentExecutorService';
+import { AgentService } from '../application/agent/AgentService';
+import { UserService } from '../application/identity/UserService';
+import { MemoryService } from '../application/memory/MemoryService';
+import { OrchestratedContextService } from '../application/memory/OrchestratedContextService';
+// 新版應用服務
+import { SessionService } from '../application/session/SessionService';
+import { PlanningCoordinator } from '../application/task/PlanningCoordinator';
+import { TaskScheduler } from '../application/task/TaskScheduler';
+import { TaskService } from '../application/task/TaskService';
 import { Config } from '../config/Config';
 import { ConfigLoader } from '../config/ConfigLoader';
-import { EventBus } from '../infra/EventBus';
+import { ComponentContainer } from '../core/container/ComponentContainer';
+import { CommandBus, EventBus } from '../core/messaging/MessageBus';
 import { LogLevel, recorder } from '../infra/LogManager';
 import { ModelRegistry } from '../infra/ModelRegistry';
+import {
+    FileSystemAgentRepository
+} from '../infra/persistence/filesystem/FileSystemAgentRepository';
+import {
+    FileSystemContextRepository
+} from '../infra/persistence/filesystem/FileSystemContextRepository';
+import {
+    FileSystemMemoryRepository
+} from '../infra/persistence/filesystem/FileSystemMemoryRepository';
+import {
+    FileSystemSessionRepository
+} from '../infra/persistence/filesystem/FileSystemSessionRepository';
+import { FileSystemTaskRepository } from '../infra/persistence/filesystem/FileSystemTaskRepository';
+// 新版持久層
+import { FileSystemUserRepository } from '../infra/persistence/filesystem/FileSystemUserRepository';
 import { PulseEngine } from '../infra/PulseEngine';
-import { FileSystemAgentRepository } from '../infra/storage/FileSystemAgentRepository';
-import { FileSystemMemoryRepository } from '../infra/storage/FileSystemMemoryRepository';
-import { FileSystemSessionRepository } from '../infra/storage/FileSystemSessionRepository';
-import { FileSystemTaskRepository } from '../infra/storage/FileSystemTaskRepository';
-import { FileSystemUserRepository } from '../infra/storage/FileSystemUserRepository';
 import { ConsoleTransport } from '../infra/transports/ConsoleTransport';
 import { FileTransport } from '../infra/transports/FileTransport';
-import { IAgentRepository } from '../infra/types/agent';
-import { IUserRepository } from '../infra/types/identity';
-import { IMemoryRepository } from '../infra/types/memory';
-import { ISessionRepository } from '../infra/types/session';
-import { ITaskRepository } from '../infra/types/task';
-import { AgentManager } from '../manager/AgentManager';
-import { MemoryManager } from '../manager/MemoryManager';
-import { SessionManager } from '../manager/SessionManager';
-import { TaskManager } from '../manager/TaskManager';
-import { UserManager } from '../manager/UserManager';
 import { ToolRegistry } from '../tool/ToolRegistry';
 
 /**
- * 全局運行時類 (Global Runtime) - SuperNova 2.0
- * 系統的核心入口，負責初始化基礎設施、Manager 層並管理生命週期。
- * 同時作為全域實例的「真理來源 (Single Source of Truth)」。
+ * 全局運行時類 (Global Runtime) - SuperNova 0.3.0
+ * 系統組合根 (Composition Root)，負責初始化組件容器、註冊服務並管理生命週期。
  */
 export class GlobalRuntime {
-	/** 儲存 Runtime 實例，供靜態方法 getInstance 獲取 (實現單例存取) */
-	private static instance: GlobalRuntime;
+  private static instance: GlobalRuntime;
+  private isRunning: boolean = false;
 
-	/** 系統運行狀態 */
-	private isRunning: boolean = false;
+  public readonly container: ComponentContainer;
 
-	/** 全局配置對象 */
-	public config?: Config;
+  // --- 暴露核心組件供外部快速訪問 (Service Location Pattern) ---
+  public commandBus!: CommandBus;
+  public eventBus!: EventBus;
+  public modelRegistry!: ModelRegistry;
+  public toolRegistry!: ToolRegistry;
 
-	// --- 1. 持久層 (Repositories) ---
-	public userRepo!: IUserRepository;
-	public sessionRepo!: ISessionRepository;
-	public taskRepo!: ITaskRepository;
-	public agentRepo!: IAgentRepository;
-	public memoryRepo!: IMemoryRepository;
+  public config!: Config;
 
-	// --- 2. 業務層 (Managers) ---
-	public userManager!: UserManager;
-	public sessionManager!: SessionManager;
-	public agentManager!: AgentManager;
-	public taskManager!: TaskManager;
-	public memoryManager!: MemoryManager;
+  /**
+   * 構造函數：初始化容器
+   */
+  private constructor() {
+    this.container = new ComponentContainer();
+    GlobalRuntime.instance = this;
+  }
 
-	// --- 3. 基礎組件 (Bus & Registries) ---
-	public eventBus: EventBus;
-	public modelRegistry: ModelRegistry;
-	public toolRegistry: ToolRegistry;
-	public pulseEngine: PulseEngine;
+  /**
+   * 獲取全域 Runtime 實例
+   */
+  public static getInstance(): GlobalRuntime {
+    if (!GlobalRuntime.instance) {
+      GlobalRuntime.instance = new GlobalRuntime();
+    }
+    return GlobalRuntime.instance;
+  }
 
-	/**
-	 * 構造函數初始化基礎組件
-	 */
-	constructor() {
-		this.eventBus = new EventBus();
-		this.modelRegistry = new ModelRegistry();
-		this.toolRegistry = new ToolRegistry();
-		this.pulseEngine = new PulseEngine(this.eventBus);
-		GlobalRuntime.instance = this;
-	}
+  /**
+   * 啟動系統全局環境
+   */
+  async start(): Promise<void> {
+    if (this.isRunning) return;
 
-	/**
-	 * 獲獲全域 Runtime 實例
-	 */
-	public static getInstance(): GlobalRuntime {
-		if (!GlobalRuntime.instance) {
-			GlobalRuntime.instance = new GlobalRuntime();
-		}
-		return GlobalRuntime.instance;
-	}
+    // 1. 初始化日誌系統
+    this.setupLogging();
+    recorder.info('[GlobalRuntime] SuperNova 0.3.0 is initializing...', { type: 'SYSTEM' });
 
-	/**
-	 * 啟動系統全局環境
-	 */
-	async start(): Promise<void> {
-		if (this.isRunning) return;
+    // 2. 載入配置
+    if (!this.config) {
+      const loader = new ConfigLoader();
+      this.config = await loader.bootstrap('./supernova.json');
+    }
 
-		if (!this.config) {
-			const loader = new ConfigLoader();
-			this.config = await loader.bootstrap('./supernova.json');
-		}
+    // 3. 註冊核心基礎設施
+    this.commandBus = new CommandBus();
+    this.eventBus = new EventBus();
+    this.modelRegistry = new ModelRegistry();
+    this.modelRegistry.registerDefaultModels();
+    this.toolRegistry = new ToolRegistry();
+    this.toolRegistry.registerStandardTools();
 
-		// --- 1. 初始化持久層 (Repositories) ---
-		const root = process.cwd();
-		this.userRepo = new FileSystemUserRepository(path.join(root, 'workspace/users'));
-		this.sessionRepo = new FileSystemSessionRepository(path.join(root, 'workspace/sessions'));
-		this.taskRepo = new FileSystemTaskRepository(path.join(root, 'workspace/tasks'));
-		this.memoryRepo = new FileSystemMemoryRepository(path.join(root, 'workspace/memory'));
+    const pulseEngine = new PulseEngine(this.eventBus);
 
-		const agentsDir = this.config?.runtime.agents_dir || './agents';
-		this.agentRepo = new FileSystemAgentRepository(agentsDir);
+    this.container.register('CommandBus', this.commandBus);
+    this.container.register('EventBus', this.eventBus);
+    this.container.register('ModelRegistry', this.modelRegistry);
+    this.container.register('ToolRegistry', this.toolRegistry);
+    this.container.register('PulseEngine', pulseEngine);
 
-		// --- 2. 註冊標準工具 ---
-		this.toolRegistry.registerStandardTools();
+    // 4. 註冊持久層 (Repositories)
+    const root = process.cwd();
+    const userRepo = new FileSystemUserRepository(path.join(root, 'workspace/users'));
+    const agentRepo = new FileSystemAgentRepository(this.config?.runtime.agents_dir || './agents');
+    const sessionRepo = new FileSystemSessionRepository(path.join(root, 'workspace/sessions'));
+    const taskRepo = new FileSystemTaskRepository(path.join(root, 'workspace/tasks'));
+    const memoryRepo = new FileSystemMemoryRepository(path.join(root, 'workspace/memory'));
+    const contextRepo = new FileSystemContextRepository(path.join(root, 'workspace/memory/contexts'));
 
-		// --- 3. 初始化業務層 (Managers) ---
-		this.userManager = new UserManager();
-		this.sessionManager = new SessionManager();
-		this.agentManager = new AgentManager();
-		this.memoryManager = new MemoryManager();
-		this.taskManager = new TaskManager();
+    this.container.register('UserRepo', userRepo);
+    this.container.register('AgentRepo', agentRepo);
+    this.container.register('SessionRepo', sessionRepo);
+    this.container.register('TaskRepo', taskRepo);
+    this.container.register('MemoryRepo', memoryRepo);
+    this.container.register('ContextRepo', contextRepo);
 
-		// 統一注入 Runtime 實例 (BaseManager 模式)
-		this.userManager.setRuntime(this);
-		this.sessionManager.setRuntime(this);
-		this.agentManager.setRuntime(this);
-		this.memoryManager.setRuntime(this);
-		this.taskManager.setRuntime(this);
+    // 5. 註冊應用層服務 (Services)
+    const sessionService = new SessionService(this.commandBus, this.eventBus, sessionRepo);
+    this.container.register('SessionService', sessionService);
 
-		// --- 3. 初始化可觀測性與日誌 ---
-		const consoleLevel = (process.env.CONSOLE_LOG_LEVEL as LogLevel) || 'INFO';
-		recorder.addTransport(new ConsoleTransport(consoleLevel));
-		recorder.addTransport(new FileTransport('DEBUG'));
+    const taskScheduler = new TaskScheduler(this.commandBus, this.eventBus);
+    this.container.register('TaskScheduler', taskScheduler);
 
-		recorder.info('SuperNova 2.0 Runtime Initializing...', { type: 'SYSTEM' });
+    const agentService = new AgentService(agentRepo, this);
+    this.container.register('AgentService', agentService);
 
-		// --- 4. 載入代理配置 ---
-		recorder.info(`Loading all agents from repository: ${agentsDir}...`, { type: 'SYSTEM' });
-		await this.agentManager.loadAllAgents();
+    const planningCoordinator = new PlanningCoordinator(this.commandBus, this.eventBus, this.modelRegistry, agentService);
+    this.container.register('PlanningCoordinator', planningCoordinator);
 
-		// --- 5. 啟動脈搏引擎 ---
-		this.pulseEngine.start();
+    const agentExecutorService = new AgentExecutorService(this.commandBus, this.eventBus, taskRepo, agentService);
+    this.container.register('AgentExecutorService', agentExecutorService);
 
-		this.isRunning = true;
-		recorder.info('SuperNova 2.0 Runtime is active and ready.', { type: 'SYSTEM' });
-	}
+    const userService = new UserService(userRepo);
+    this.container.register('UserService', userService);
 
-	/**
-	 * 停止系統
-	 */
-	async stop(): Promise<void> {
-		this.pulseEngine.stop();
-		this.isRunning = false;
-		recorder.info('Runtime stopped.', { type: 'SYSTEM' });
-	}
+    const memoryService = new MemoryService(memoryRepo);
+    this.container.register('MemoryService', memoryService);
+
+    const orchestratedContextService = new OrchestratedContextService(contextRepo);
+    this.container.register('OrchestratedContextService', orchestratedContextService);
+
+    const taskService = new TaskService(this.commandBus, this.eventBus, taskRepo, orchestratedContextService);
+    this.container.register('TaskService', taskService);
+
+    // 6. 啟動所有組件生命週期 (這會觸發 agentService.start() 進而執行 loadAllAgents)
+    await this.container.boot();
+
+    this.isRunning = true;
+    recorder.info('[GlobalRuntime] SuperNova 0.3.0 is active and ready.', { type: 'SYSTEM' });
+  }
+
+  /**
+   * 停止系統
+   */
+  async stop(): Promise<void> {
+    recorder.info('[GlobalRuntime] Stopping runtime...', { type: 'SYSTEM' });
+    await this.container.shutdown();
+    this.isRunning = false;
+    recorder.info('[GlobalRuntime] Runtime stopped.', { type: 'SYSTEM' });
+  }
+
+  /**
+   * 設定日誌傳輸器
+   */
+  private setupLogging(): void {
+    const consoleLevel = (process.env.CONSOLE_LOG_LEVEL as LogLevel) || 'INFO';
+    recorder.addTransport(new ConsoleTransport(consoleLevel));
+    recorder.addTransport(new FileTransport('DEBUG'));
+  }
 }

@@ -3,7 +3,7 @@ import * as path from 'path';
 import { z } from 'zod';
 
 import { recorder } from '../../infra/LogManager';
-import { IAgentExecuteContext } from '../../infra/types/agent';
+import { IAgentExecuteContext } from '../../core/messaging/IBus';
 import { BaseFileTool } from './BaseFileTool';
 
 /**

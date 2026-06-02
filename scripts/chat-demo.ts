@@ -1,99 +1,123 @@
 import * as dotenv from 'dotenv';
 import * as readline from 'readline';
-
 import { ChatOpenAI } from '@langchain/openai';
 
-import { MainAgent } from '../src/agent/MainAgent';
-import { InferenceEngine, ModelRegistry } from '../src/infra/ModelRegistry';
-import { ModelPreset } from '../src/infra/types/agent';
-import { Session } from '../src/models/Session';
 import { GlobalRuntime } from '../src/runtime/GlobalRuntime';
+import { InferenceEngine } from '../src/infra/ModelRegistry';
+import { ModelPreset } from '../src/infra/types/agent';
+import { Commands, Events, IEvent } from '../src/core/messaging/IBus';
+import { StartSessionCommand, SendMessageCommand } from '../src/application/session/SessionService';
 
 dotenv.config();
 
 /**
- * 多輪對話互動演示 (Multi-turn Chat Demo)
+ * SuperNova 0.3.0 多輪對話演示 (Command-Driven Chat Demo)
  */
 async function runChatDemo() {
-	console.log("💬 [SuperNova 2.0] 啟動多輪對話模式...");
-	console.log("輸入 'exit' 或 'quit' 結束對話。\n");
+  console.log("🚀 [SuperNova 0.3.0] 啟動 Command-Driven 對話模式...");
+  console.log("輸入 'exit' 或 'quit' 結束對話。\n");
+const runtime = GlobalRuntime.getInstance();
 
-	// 初始化運行時
-	const runtime = new GlobalRuntime();
+if (!process.env.OPENAI_API_KEY) {
+  console.error("❌ 錯誤：未偵測到 OPENAI_API_KEY，請檢查 .env 檔案。");
+  process.exit(1);
+}
+
+// 1. 先啟動系統基礎設施
+await runtime.start();
+
+// 2. 配置真實模型
+const realModel = new ChatOpenAI({
+  modelName: "gpt-4o-mini",
+  temperature: 0,
+  apiKey: process.env.OPENAI_API_KEY
+});
+
+const inference = new InferenceEngine(realModel as any);
+runtime.modelRegistry.registerModel(ModelPreset.SMART, inference);
+runtime.modelRegistry.registerModel(ModelPreset.FAST, inference);
+runtime.modelRegistry.registerModel(ModelPreset.EVAL, inference);
+
+const sessionId = "demo-session";
 
 
-	// 2. 配置真實模型 (ReAct 模式強烈建議使用 GPT-4o 或同等級模型)
-	const realModel = new ChatOpenAI({
-		modelName: "gpt-4o-mini",
-		temperature: 0,
-		apiKey: process.env.OPENAI_API_KEY
-	});
-	const inference = new InferenceEngine(realModel as any);
-	runtime.modelRegistry.registerModel(ModelPreset.SMART, inference);
-	runtime.modelRegistry.registerModel(ModelPreset.FAST, inference);
-	runtime.modelRegistry.registerModel(ModelPreset.EVAL, inference);
+  // 4. 監聽系統事件，輸出非同步反饋
+  runtime.eventBus.subscribe(Events.Session.Started, (event: IEvent<Events.Session.Started, any>) => {
+    console.log(`\n📢 [Event] Session Started: ${event.payload.sessionId}`);
+  });
 
-	await runtime.start();
+  runtime.eventBus.subscribe(Events.Task.Created, (event: IEvent<Events.Task.Created, any>) => {
+    console.log(`\n📋 [Event] Task Graph Created. Processing: ${event.payload.goal}`);
+  });
 
-	// 3. 獲取 MainAgent 並建立 Session
-	const mainAgent = runtime.agentManager.getAgent('main-agent-01') as MainAgent;
-	if (!mainAgent) {
-		throw new Error("MainAgent 'main-agent-01' not found. Please check agents/ directory.");
-	}
+  runtime.eventBus.subscribe(Events.Session.Updated, (event: IEvent<Events.Session.Updated, any>) => {
+    console.log(`\n🔄 [Event] Progress Sync: ${event.payload.lastSummary}`);
+  });
 
-	const EnableHistory = false;
+  // 5. 建立互動介面
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+    prompt: '【User】> '
+  });
 
-	let session: Session;
+  rl.prompt();
 
-	if (EnableHistory) {
-		session = await runtime.sessionManager.getSession("demo-session") as any as Session;
-	} else {
-		session = await runtime.sessionManager.createSession(
-			mainAgent.id,                         // responsibleAgentId
-			"ADMIN",                             // userId
-			`demo-session`        // id
-		);
-	}
+  rl.on('line', async (line) => {
+    const input = line.trim();
 
-	// 4. 建立 Readline 介面
-	const rl = readline.createInterface({
-		input: process.stdin,
-		output: process.stdout,
-		prompt: '【User】> '
-	});
+    if (input.toLowerCase() === 'exit' || input.toLowerCase() === 'quit') {
+      console.log("\n👋 感謝使用，再見！");
+      await runtime.stop();
+      process.exit(0);
+    }
 
-	rl.prompt();
+    if (!input) {
+      rl.prompt();
+      return;
+    }
 
-	rl.on('line', async (line) => {
-		const input = line.trim();
+    try {
+      // 獲取 SessionService 實例 (透過 runtime.container)
+      const sessionService = runtime.container.resolve<any>('SessionService');
+      const existingSession = sessionService.getSession(sessionId);
 
-		if (input.toLowerCase() === 'exit' || input.toLowerCase() === 'quit') {
-			console.log("\n👋 感謝使用，再見！");
-			process.exit(0);
-		}
+      if (!existingSession) {
+        // 第一次對話：發送 Start 指令
+        console.log(`\n⏳ [System] Initializing Session...`);
+        await runtime.commandBus.send(new StartSessionCommand({
+          sessionId,
+          userId: "ADMIN",
+          agentId: "main-agent-01"
+        }));
+      } else {
+        // 後續對話：發送 SendMessage 指令
+        console.log(`\n⏳ [System] Sending Message...`);
+        await runtime.commandBus.send(new SendMessageCommand({
+          sessionId,
+          userId: "ADMIN",
+          content: input
+        }));
+      }
 
-		if (!input) {
-			rl.prompt();
-			return;
-		}
+    } catch (err: any) {
+      console.error(`\n❌ [Error]: ${err.message}\n`);
+    }
 
-		try {
-			// 呼叫 MainAgent 處理訊息 (ReAct 模式)
-			// 要改成動態呼叫agent
-			const response = await mainAgent.handleUserMessage(session, input)
-			console.log(`\n【Assistant】> ${response}\n`);
-		} catch (err: any) {
-			console.error(`\n❌ 發生錯誤: ${err.message}\n`);
-		}
-
-		rl.prompt();
-	}).on('close', () => {
-		console.log("\n👋 會話已關閉。");
-		process.exit(0);
-	});
+    rl.prompt();
+  }).on('close', async () => {
+    console.log("\n👋 會話關閉。");
+    await runtime.stop();
+    process.exit(0);
+  });
 }
 
 runChatDemo().catch(err => {
-	console.error("Chat Demo failed:", err);
-	process.exit(1);
+  console.error("Chat Demo failed:", err);
+  process.exit(1);
+});
+
+runChatDemo().catch(err => {
+  console.error("Chat Demo failed:", err);
+  process.exit(1);
 });

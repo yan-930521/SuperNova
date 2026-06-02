@@ -1,3 +1,4 @@
+import { AgentType } from '../infra/types/agent';
 import { BaseAgent } from './BaseAgent';
 
 /**
@@ -10,6 +11,6 @@ export class WorkerAgent extends BaseAgent {
    * @param id 代理 ID
    */
   constructor(id: string) {
-    super(id, 'WORKER');
+    super(id,  AgentType.WORKER);
   }
 }

@@ -6,6 +6,7 @@ import { Config } from './Config';
  * 提供合理的預設值確保系統即便在沒有設定檔的情況下也能正常啟動。
  */
 export const DEFAULT_CONFIG: Config = {
+  version: "v0.3.0",
   runtime: {
     /** 預設 Tick 頻率為 100ms */
     tick_rate_ms: 100,

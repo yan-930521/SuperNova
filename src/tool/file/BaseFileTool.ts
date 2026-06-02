@@ -1,7 +1,7 @@
 import * as path from 'path';
 import { z } from 'zod';
 
-import { IAgentExecuteContext } from '../../infra/types/agent';
+import { IAgentExecuteContext } from '../../core/messaging/IBus';
 import { BaseTool, ToolMetadata } from '../BaseTool';
 
 /**

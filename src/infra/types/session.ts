@@ -56,33 +56,3 @@ export interface SessionDTO {
   /** 額外的業務元數據 */
   metadata: Record<string, any>;
 }
-
-/**
- * 會話儲存庫接口
- * 負責 SessionDTO 的持久化。
- */
-export interface ISessionRepository {
-  /**
-   * 保存或更新會話狀態
-   * @param session 會話數據對象
-   */
-  save(session: SessionDTO): Promise<void>;
-
-  /**
-   * 僅附加一條訊息到會話歷史 (效能優化)
-   * @param id 會話識別碼
-   * @param message 訊息對象 (JSON)
-   */
-  appendMessage(id: string, message: MessageDTO): Promise<void>;
-
-  /**
-   * 根據 ID 查找會話
-   */
-  findById(id: string): Promise<SessionDTO | null>;
-
-  /**
-   * 查找特定用戶的所有會話紀錄
-   * @param userId 用戶識別碼
-   */
-  findByUser(userId: string): Promise<SessionDTO[]>;
-}
