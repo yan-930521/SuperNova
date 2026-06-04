@@ -1,59 +1,64 @@
-import { MessageDTO } from './session';
-
 /**
- * 記憶層級 Enum
- * 定義記憶存儲的生命週期與用途。
+ * 記憶體層級枚舉
  */
 export enum MemoryLayer {
-  /** 
-   * 工作記憶 (短暫，關聯到特定 Chain 或 Session)
-   * @deprecated 0.3.0 版起由 OrchestratedContext (Blackboard) 接管
-   */
-  WORKING = 'WORKING',
-  /** 持久記憶 (長期存儲，跨 Session 可用) */
-  PERSISTENT = 'PERSISTENT'
+  /** L1: 黑板 / 會話即時狀態 (Pointer Index) */
+  L1 = 'L1',
+  /** L2: 事實層 / 結構化知識 (Facts) */
+  L2 = 'L2',
+  /** L3: SOP 層 / 程序化知識 (SOPs) */
+  L3 = 'L3',
 }
 
 /**
- * 記憶類型 Enum
+ * 統一記憶體傳輸對象 (Memory DTO)
  */
-export enum MemoryType {
-  /** 變數/鍵值對 */
-  VARIABLE = 'variable',
-  /** 緩衝區 (對話片段) */
-  BUFFER = 'buffer',
-  /** 事實/知識點 */
-  FACT = 'fact',
-  /** 標準作業程序 */
-  SOP = 'sop'
+export interface MemoryDTO<T = any> {
+  /** 唯一識別 ID (例如: "mem_l2_001") */
+  readonly id: string;
+  /** 關聯的會話 ID (或 "global") */
+  readonly sessionId: string;
+  /** 所屬層級 */
+  readonly layer: MemoryLayer;
+  /** 寫入者 Agent ID */
+  readonly authorId: string;
+  /** 寫入時間戳 */
+  readonly timestamp: number;
+  /** 實際資料負載 */
+  readonly data: T;
+  /** 擴展元數據 */
+  readonly metadata?: Record<string, any>;
 }
 
 /**
- * 記憶數據傳輸對象 (Memory Data Transfer Object)
- * 用於封裝記憶內容及其元數據。
+ * L1 黑板指針數據
  */
-export interface MemoryDTO {
-  /** 記憶唯一識別碼 */
-  id: string;
-  /** 所屬記憶層級 */
-  layer: MemoryLayer;
-  /** 命名空間 (用於分類或隔離不同模組的記憶) */
-  namespace: string;
-  /** 記憶類型 */
-  type: MemoryType;
-  /** 記憶核心內容 */
-  content: string;
-  /** 記憶摘要 (可選) */
-  summary?: string;
-  /** 標籤列表 (用於檢索與檢索強化) */
-  tags: string[];
-  /** 關聯的會話 ID */
-  sessionId: string;
-  /** 關聯的鏈 ID (僅 WORKING 層級有效) */
-  chainId?: string;
-  /** 存儲時間戳 */
-  timestamp: number;
-  /** 額外的業務元數據 */
-  metadata?: Record<string, any>;
-  }
+export interface IBlackboardPointer {
+  readonly key: string;          // 語義 Key
+  readonly pointerId: string;    // 實際 ID
+  readonly description: string;  // 描述
+}
 
+/**
+ * L2 事實層數據
+ */
+export interface IFactData {
+  readonly topic: string;
+  readonly content: any;
+  readonly confidence: number;
+  readonly sourceTaskId?: string;
+  readonly verifiedBy?: string;
+}
+
+/**
+ * L3 SOP 層數據
+ */
+export interface ISOPData {
+  readonly title: string;
+  readonly steps: string[];
+  readonly conditions: string[];
+  readonly failureCases?: {
+    readonly problem: string;
+    readonly solution: string;
+  }[];
+}

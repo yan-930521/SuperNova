@@ -1,4 +1,5 @@
 import { ILifecycle } from '../../core/lifecycle/ILifecycle';
+import { MemoryLayer } from '../types/memory';
 
 /**
  * 基礎實體介面，所有需持久化的對象必須具備唯一識別碼
@@ -98,33 +99,28 @@ export interface IUserRepository<T extends IEntity> extends IRepository<T> {
  */
 export interface IMemoryRepository<T extends IEntity> extends IRepository<T> {
   /**
-   * 根據命名空間查找特定會話的所有記憶
-   * @param namespace 命名空間
+   * 按命名空間查找 (已棄用: 建議使用 findBySession)
+   * @param namespace 命名空間 (通常為 sessionId)
    * @param sessionId 會話識別碼
    */
   findByNamespace(namespace: string, sessionId: string): Promise<T[]>;
 
   /**
-   * 獲取一級索引 (L1 Index)
+   * 查找特定會話下的記憶
+   * @param sessionId 會話識別碼
+   * @param layer 記憶層級
+   */
+  findBySession(sessionId: string, layer: MemoryLayer): Promise<T[]>;
+
+  /**
+   * 獲取特定層級的所有記憶
+   * @param layer 記憶層級
+   */
+  findAllByLayer(layer: MemoryLayer): Promise<T[]>;
+
+  /**
+   * 獲取 L1 索引列表
    * @param sessionId 會話識別碼
    */
   getL1Index(sessionId: string): Promise<string[]>;
-}
-
-/**
- * 推理記錄儲存庫介面 (Inference/Log)
- * 用於持久化詳細的推理過程
- */
-export interface IInferenceRepository<T extends IEntity> extends IRepository<T> {
-  /**
-   * 根據 Trace ID 查找推理記錄
-   */
-  findByTraceId(traceId: string): Promise<T | null>;
-}
-
-/**
- * 協同上下文儲存庫介面 (Blackboard/Context)
- */
-export interface IContextRepository<T extends IEntity> extends IRepository<T> {
-  // 基礎 CRUD 已足夠
 }
