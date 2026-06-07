@@ -1,9 +1,9 @@
 import { z } from 'zod';
 
+import { TaskService } from '../../../src_bk/TaskService';
 import { IAgentExecuteContext } from '../../core/messaging/IBus';
 import { GlobalRuntime } from '../../runtime/GlobalRuntime';
 import { BaseTool } from '../BaseTool';
-import { TaskService } from '../../application/task/TaskService';
 
 /**
  * TaskInfoTool

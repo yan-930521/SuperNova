@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { OrchestratedContextService } from '../../application/memory/OrchestratedContextService';
+import { OrchestratedContextService } from '../../../src_bk/OrchestratedContextService';
 import { IAgentExecuteContext } from '../../core/messaging/IBus';
 import { GlobalRuntime } from '../../runtime/GlobalRuntime';
 import { BaseTool } from '../BaseTool';

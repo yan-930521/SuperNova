@@ -4,7 +4,7 @@
 
 ## 1. 通訊基座 (Communication Infrastructure)
 - **共享實例**: 所有參與協作的 Agent 共享一個特殊的 `EventBus` 實例。
-- **實例持有**: 該 `EventBus` 實例由 `SupervisorAgent` 建立並持有。
+- **實例持有**: 該 `EventBus` 實例由 `SupervisorAgent` 持有。
 - **依賴注入**: 其他角色 Agent (Planning, Doing, etc.) 在初始化時，由 `SupervisorAgent` 負責將該通訊實例「注入」其中。
 
 ## 2. 協作模式：主動路由 (Active Routing)

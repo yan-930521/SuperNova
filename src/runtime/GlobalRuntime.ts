@@ -1,27 +1,16 @@
 import * as path from 'node:path';
 
-import { AgentExecutorService } from '../application/agent/AgentExecutorService';
-import { AgentService } from '../application/agent/AgentService';
 import { UserService } from '../application/identity/UserService';
 import { MemoryService } from '../application/memory/MemoryService';
-import { OrchestratedContextService } from '../application/memory/OrchestratedContextService';
-// 新版應用服務
-import { SessionService } from '../application/session/SessionService';
-import { PlanningCoordinator } from '../application/task/PlanningCoordinator';
-import { TaskScheduler } from '../application/task/TaskScheduler';
-import { TaskService } from '../application/task/TaskService';
 import { Config } from '../config/Config';
 import { ConfigLoader } from '../config/ConfigLoader';
 import { ComponentContainer } from '../core/container/ComponentContainer';
-import { CommandBus, EventBus } from '../core/messaging/MessageBus';
+import { EventBus } from '../core/messaging/MessageBus';
 import { LogLevel, recorder } from '../infra/LogManager';
 import { ModelRegistry } from '../infra/ModelRegistry';
 import {
     FileSystemAgentRepository
 } from '../infra/persistence/filesystem/FileSystemAgentRepository';
-import {
-    FileSystemContextRepository
-} from '../infra/persistence/filesystem/FileSystemContextRepository';
 import {
     FileSystemMemoryRepository
 } from '../infra/persistence/filesystem/FileSystemMemoryRepository';
@@ -47,7 +36,6 @@ export class GlobalRuntime {
   public readonly container: ComponentContainer;
 
   // --- 暴露核心組件供外部快速訪問 (Service Location Pattern) ---
-  public commandBus!: CommandBus;
   public eventBus!: EventBus;
   public modelRegistry!: ModelRegistry;
   public toolRegistry!: ToolRegistry;
@@ -89,7 +77,6 @@ export class GlobalRuntime {
     }
 
     // 3. 註冊核心基礎設施
-    this.commandBus = new CommandBus();
     this.eventBus = new EventBus();
     this.modelRegistry = new ModelRegistry();
     this.modelRegistry.registerDefaultModels();
@@ -98,7 +85,6 @@ export class GlobalRuntime {
 
     const pulseEngine = new PulseEngine(this.eventBus);
 
-    this.container.register('CommandBus', this.commandBus);
     this.container.register('EventBus', this.eventBus);
     this.container.register('ModelRegistry', this.modelRegistry);
     this.container.register('ToolRegistry', this.toolRegistry);
@@ -111,42 +97,20 @@ export class GlobalRuntime {
     const sessionRepo = new FileSystemSessionRepository(path.join(root, 'workspace/sessions'));
     const taskRepo = new FileSystemTaskRepository(path.join(root, 'workspace/tasks'));
     const memoryRepo = new FileSystemMemoryRepository(path.join(root, 'workspace/memory'));
-    const contextRepo = new FileSystemContextRepository(path.join(root, 'workspace/memory/contexts'));
 
     this.container.register('UserRepo', userRepo);
     this.container.register('AgentRepo', agentRepo);
     this.container.register('SessionRepo', sessionRepo);
     this.container.register('TaskRepo', taskRepo);
     this.container.register('MemoryRepo', memoryRepo);
-    this.container.register('ContextRepo', contextRepo);
 
     // 5. 註冊應用層服務 (Services)
-    const sessionService = new SessionService(this.commandBus, this.eventBus, sessionRepo);
-    this.container.register('SessionService', sessionService);
-
-    const taskScheduler = new TaskScheduler(this.commandBus, this.eventBus);
-    this.container.register('TaskScheduler', taskScheduler);
-
-    const agentService = new AgentService(agentRepo, this);
-    this.container.register('AgentService', agentService);
-
-    const planningCoordinator = new PlanningCoordinator(this.commandBus, this.eventBus, this.modelRegistry, agentService);
-    this.container.register('PlanningCoordinator', planningCoordinator);
-
-    const agentExecutorService = new AgentExecutorService(this.commandBus, this.eventBus, taskRepo, agentService);
-    this.container.register('AgentExecutorService', agentExecutorService);
-
     const userService = new UserService(userRepo);
     this.container.register('UserService', userService);
 
     const memoryService = new MemoryService(memoryRepo);
     this.container.register('MemoryService', memoryService);
 
-    const orchestratedContextService = new OrchestratedContextService(contextRepo);
-    this.container.register('OrchestratedContextService', orchestratedContextService);
-
-    const taskService = new TaskService(this.commandBus, this.eventBus, taskRepo, orchestratedContextService);
-    this.container.register('TaskService', taskService);
 
     // 6. 啟動所有組件生命週期 (這會觸發 agentService.start() 進而執行 loadAllAgents)
     await this.container.boot();

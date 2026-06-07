@@ -1,10 +1,10 @@
 import { z } from 'zod';
 
+import { TaskService } from '../../../src_bk/TaskService';
+import { AgentService } from '../../application/agent/AgentService';
 import { IAgentExecuteContext } from '../../core/messaging/IBus';
 import { GlobalRuntime } from '../../runtime/GlobalRuntime';
 import { BaseTool } from '../BaseTool';
-import { TaskService } from '../../application/task/TaskService';
-import { AgentService } from '../../application/agent/AgentService';
 
 /**
  * TaskAssignTool (已廢棄，僅供過渡期參考)

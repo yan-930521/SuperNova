@@ -1,13 +1,13 @@
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 
-import { recorder } from '../../infra/LogManager';
+import { TaskService } from '../../../src_bk/TaskService';
+import { AgentService } from '../../application/agent/AgentService';
 import { IAgentExecuteContext } from '../../core/messaging/IBus';
+import { recorder } from '../../infra/LogManager';
 import { TaskStatus } from '../../infra/types/task';
 import { GlobalRuntime } from '../../runtime/GlobalRuntime';
 import { BaseTool } from '../BaseTool';
-import { TaskService } from '../../application/task/TaskService';
-import { AgentService } from '../../application/agent/AgentService';
 
 /**
  * TaskCreateTool (已廢棄，僅供過渡期參考)

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { DispatchTaskCommand } from '../../application/task/TaskService';
+import { DispatchTaskCommand } from '../../../src_bk/TaskService';
 import { Commands, IAgentExecuteContext } from '../../core/messaging/IBus';
 import { GlobalRuntime } from '../../runtime/GlobalRuntime';
 import { PromptLoader } from '../../utils/PromptLoader';

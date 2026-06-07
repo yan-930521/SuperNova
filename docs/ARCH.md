@@ -1,69 +1,85 @@
-# SuperNova 0.3.0 架構設計 (Architecture Design)
+# SuperNova 系統架構 (System Architecture)
 
-## 1. 核心哲學 (Core Philosophy)
-SuperNova 0.3.0 延續並深化了 **「狀態分離與職責解耦」** 的原則。系統採用 **分層領域架構 (Layered Domain Architecture)**，將技術實現（基礎設施）與業務編排（應用層）及核心邏輯（領域層）徹底隔離。
+## 1. 系統概述
+SuperNova 是一個基於事件驅動與 PDCA 循環的代理蜂群系統。它採用分層架構，通過全局運行時 (Global Runtime) 管理組件生命週期，並利用 AI 推理引擎實現自主規劃與任務自癒。
 
-## 2. 四層架構模型 (Four-Layer Model)
+## 2. 核心分層
+- **Agent 層 (`src/agent/`)**: 定義代理基類與 PDCA 專業角色 (Plan, Do, Check, Act)。
+- **應用層 (`src/application/`)**: 提供業務邏輯服務，如任務調度、規劃協調與會話管理。
+- **領域層 (`src/domain/`)**: 定義核心實體與業務對象。
+- **基礎設施層 (`src/infra/`)**: 提供持久化、日誌、推理引擎與系統監控。
+- **核心層 (`src/core/`)**: 提供 DI 容器、生命週期管理與消息總線。
 
-### 2.1 介面層 (Interface Layer)
-- **職責**: 處理外部輸入（如 CLI、API），將其轉化為系統內部的 `Command`。
-- **組件**: Demo 腳本、控制台進入點。
+---
 
-### 2.2 應用層 (Application Services)
-- **職責**: 負責 **跨模組編排 (Orchestration)**，是系統的業務大腦。
-- **SessionService (客戶經理)**: 管理人機對話生命週期，維護溝通總帳。
-- **TaskService (專案主管)**: 管理任務生命週期，處理 3x3 自癒決策與狀態變遷。
-- **TaskScheduler (排程器)**: **(新)** 獨立的執行節拍器，負責根據 `TaskGraph` 狀態與資源分配執行任務。
+## 3. 代碼架構樹 (Source Code Tree)
 
-### 2.3 領域層 (Domain Layer)
-- **職責**: 純粹的業務邏輯與狀態變遷，無外部依賴。
-- **BaseSession 體系**: 引入「全域會話協議」，確立 **「任務即會話 (Task is a Session)」** 的繼承結構。
-- **TaskGraph**: 純粹的 DAG 演算與依賴檢核邏輯。
+### `src/`
+- `index.ts`: 系統入口，啟動示範。
+- **`runtime/`**
+    - `GlobalRuntime.ts`: **GlobalRuntime** (單例)
+        - `start()`: 初始化所有組件。
+        - `stop()`: 優雅關閉。
+- **`core/`**
+    - **`container/`**
+        - `ComponentContainer.ts`: **ComponentContainer**
+            - `register(name, instance)`: 註冊組件。
+            - `boot()`: 啟動所有組件生命週期。
+    - **`lifecycle/`**
+        - `ILifecycle.ts`: 生命週期介面。
+    - **`messaging/`**
+        - `MessageBus.ts`: **EventBus**
+            - `publish(event)` / `subscribe(type, handler)`: 非同步事件廣播。
+            - `send(command)`: 指令發送。
+- **`infra/`**
+    - `LogManager.ts`: **LogManager** (Recorder)
+        - `record(action, message, context)`: 結構化操作紀錄。
+    - `PulseEngine.ts`: **PulseEngine**
+        - `tick()`: 發布系統脈搏事件。
+        - `watchTask(taskId, timeout)`: 任務心跳監控。
+    - `ModelRegistry.ts`: **ModelRegistry** & **InferenceEngine**
+        - `infer(state, schema, options)`: 執行結構化推理。
+    - **`persistence/`**
+        - `IRepository.ts`: 儲存庫介面定義。
+        - **`filesystem/`**: 各種 FileSystem Repository 實現。
+- **`agent/`**
+    - `BaseAgent.ts`: **BaseAgent** (抽象類)
+        - `setupSubscriptions()`: 定義事件監聽。
+    - **`roles/`**
+        - `SupervisorAgent.ts`: **SupervisorAgent** - 中樞。
+        - `PlanningAgent.ts`: **PlanningAgent** - 規劃者。
+        - `DoingAgent.ts`: **DoingAgent** - 執行者。
+        - `CheckingAgent.ts`: **CheckingAgent** - 審核者。
+        - `ActingAgent.ts`: **ActingAgent** - 改善者。
+- **`application/`**
+    - **`memory/`**: **MemoryService**
+    - **`identity/`**: **UserService**
+    - **`session/`**: **SessionService**
 
-### 2.4 基礎設施層 (Infrastructure Adapters)
-- **職責**: 技術支撐，通過 `IRepository` 與 `Provider` 介面對外提供服務。
-- **Persistence**: 統一的 `BaseFileSystemRepository` 支援 JSON 與增量 JSONL 存儲。
-- **Messaging**: 強型別的 `CommandBus` (同步) 與 `EventBus` (非同步) 通訊基座。
-- **Observability**: `PulseEngine` 負責心跳偵測與超時自癒。
+---
 
-## 3. 雙層總帳與統一會話 (Unified Session Protocol)
+## 4. 當前進度 (Current Progress)
 
-系統將所有的訊息流動視為不同層級的「會話鏈」：
+### 已完成模塊 (Completed)
+- [x] **系統基礎建設**: 
+    - [x] 組件容器 (DI) 與生命週期管理。
+    - [x] 非同步事件總線 (EventBus)。
+    - [x] 結構化日誌系統 (JSONL Recorder)。
+    - [x] 全局運行時 (Global Runtime) 組合根。
+- [x] **監控與自癒**:
+    - [x] 脈搏引擎 (PulseEngine) 定期觸發與超時監控。
+    - [x] 任務 3x3 自癒決策 - Level 1 節點重試機制。
+- [x] **Agent 體系**:
+    - [x] 代理基類 (BaseAgent) 與 PDCA 角色定義。
+    - [x] 指揮官代理 (SupervisorAgent) 通訊骨架。
+- [x] **數據持久化**:
+    - [x] 文件系統存儲 (FileSystem Repository) 針對 Agents, Memory, Sessions, Tasks, Users。
+    - [x] 層級式記憶存儲 (L1/L2/L3 Memory Repository)。
+- [x] **工具系統**:
+    - [x] 工具註冊表 (ToolRegistry) 與多種標準工具 (文件、網路、系統)。
 
-### 3.1 一級總帳 (Communication Ledger)
-- **實體**: `UserSession` (繼承自 `BaseSession`)。
-- **內容**: 用戶與 AI 的對話、任務執行的高階摘要。
-- **管理**: 由 `SessionService` 維護連貫性。
-
-### 3.2 二級總帳 (Execution Ledger)
-- **實體**: `Task` (繼承自 `BaseSession`)。
-- **內容**: Agent 執行的完整思考軌跡 (Thought -> Action -> Observation)。每個任務都是一個具備目標的獨立會話。
-- **管理**: 由 `TaskService` 監控執行狀態。
-
-## 4. 通訊協議：Command-Event 混合模式
-
-為了確保結構明確與通訊統一，系統嚴格遵循以下模式：
-
-- **Commands (指令)**: 
-    - **方向**: 點對點 (一對一)。
-    - **特性**: 同步呼叫、期待回傳結果、用於請求「主動動作」。
-    - **範例**: `Events.Session.Start`。
-- **Events (事件)**: 
-    - **方向**: 廣播 (一對多)。
-    - **特性**: 非同步發布、不等待回傳、用於通知「狀態變遷」。
-    - **範例**: `Events.Task.Finished`。
-
-## 5. 系統自癒與觀測 (Self-Healing & Observability)
-
-### 5.1 3x3 自癒階梯
-1. **Node Retry**: 單體任務失敗自動原地重試。
-2. **Cognitive Re-plan**: 偵測到邏輯錯誤或重試耗盡，觸發 `PlanningCoordinator` 修正任務圖。
-3. **STUCK 標記**: 終極失敗，等待人類介入 (HITL)。
-
-### 5.2 脈搏監控 (Pulse Engine)
-- **Heartbeat**: 實作 `ILifecycle`，在背景定時掃描超時任務。
-- **Hooks**: 支援 `INTERVAL`、`THRESHOLD` 與 `EVENT` 三種自動化觸發機制。
-
-## 6. 執行安全與隔離 (Execution Sandbox)
-- **路徑重定向**: Infrastructure 層統一處理路徑映射，確保領域層與 Worker 僅能操作 `workspace/` 內的受控資源。
-- **無狀態執行**: Worker 由應用層在派發時注入上下文與依賴結果，確保可隨時拋棄與重啟。
+### 進行中/待優化 (In Progress / TODO)
+- [ ] **Agent 實裝**: 完成 PDCA 各專業角色的具體 LLM 推理邏輯。
+- [ ] **自癒進階**: 實現 Level 2 (認知重規劃) 與 Level 3 (人工介入) 機制。
+- [ ] **記憶優化**: 完善 L1/L2/L3 記憶的滾動與檢索優化。
+- [ ] **前端界面**: 完成 Web UI 監控面板與交互終端。
