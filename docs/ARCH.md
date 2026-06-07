@@ -66,8 +66,10 @@ SuperNova 是一個基於事件驅動與 PDCA 循環的代理蜂群系統。它�
     - [x] 非同步事件總線 (EventBus)。
     - [x] 結構化日誌系統 (JSONL Recorder)。
     - [x] 全局運行時 (Global Runtime) 組合根。
+    - [x] **通訊標準化**: 實作 `traceId` 與 `spanId` 追蹤機制。
+    - [x] **上下文服務**: 實作 `ContextService` 與 Key-Only 注入策略。
 - [x] **監控與自癒**:
-    - [x] 脈搏引擎 (PulseEngine) 定期觸發與超時監控。
+    - [x] 脈搏引擎 (PulseEngine) 定期觸發與超時監控 (支援 Trace 追蹤)。
     - [x] 任務 3x3 自癒決策 - Level 1 節點重試機制。
 - [x] **Agent 體系**:
     - [x] 代理基類 (BaseAgent) 與 PDCA 角色定義。
@@ -78,7 +80,7 @@ SuperNova 是一個基於事件驅動與 PDCA 循環的代理蜂群系統。它�
 - [x] **工具系統**:
     - [x] 工具註冊表 (ToolRegistry) 與多種標準工具 (文件、網路、系統)。
 
-### 進行中/待優化 (In Progress / TODO)
+### 待優化 (TODO)
 - [ ] **Agent 實裝**: 完成 PDCA 各專業角色的具體 LLM 推理邏輯。
 - [ ] **自癒進階**: 實現 Level 2 (認知重規劃) 與 Level 3 (人工介入) 機制。
 - [ ] **記憶優化**: 完善 L1/L2/L3 記憶的滾動與檢索優化。

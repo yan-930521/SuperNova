@@ -91,11 +91,12 @@ export class PulseEngine implements ILifecycle {
   /**
    * 將任務加入監控清單
    * @param taskId 任務 ID
+   * @param traceId 追蹤 ID
    * @param timeout 超時時間 (ms)，預設 30000ms
    */
-  public watchTask(taskId: string, timeout: number = 30000): void {
-    this.watchTasks.set(taskId, { lastActive: Date.now(), timeout });
-    recorder.info(`[PulseEngine] Watching task ${taskId} (timeout: ${timeout}ms)`, { type: 'SYSTEM' });
+  public watchTask(taskId: string, traceId: string, timeout: number = 30000): void {
+    this.watchTasks.set(taskId, { lastActive: Date.now(), timeout, traceId });
+    recorder.info(`[PulseEngine] Watching task ${taskId} (Trace: ${traceId}, Timeout: ${timeout}ms)`, { type: 'SYSTEM' });
   }
 
   /**

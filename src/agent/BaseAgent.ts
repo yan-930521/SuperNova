@@ -1,22 +1,24 @@
-import { MemoryService } from '../application/memory/MemoryService';
 import { IAgentEventPayload, IEventBus } from '../core/messaging/IBus';
 import { recorder } from '../infra/LogManager';
+import { GlobalRuntime } from '../runtime/GlobalRuntime';
 
 /**
  * BaseAgent (代理基類) - SuperNova 0.4.0
  * 
  * 所有專業角色 Agent 的抽象基類。
  * 核心特性：
- * 1. 事件驅動 (Event-Driven): 透過注入的 IEventBus 進行通訊。
- * 2. 外部黑板 (Blackboard): 透過 BlackboardService.for(sessionId) 動態存取狀態。
+ * 1. 唯一注入 (Single Injection): 僅透過構造函數注入 Agent 專用 EventBus。
+ * 2. 服務訪問 (Service Access): 透過 GlobalRuntime 單例存取其他系統級服務。
  */
 export abstract class BaseAgent {
+  protected readonly runtime = GlobalRuntime.getInstance();
+
   constructor(
     public readonly id: string,
     protected readonly bus: IEventBus<IAgentEventPayload>
   ) {
     this.setupSubscriptions();
-    recorder.info(`[BaseAgent] Agent [${this.id}] initialized and listening for events.`, { 
+    recorder.info(`[BaseAgent] Agent [${this.id}] initialized.`, { 
       type: 'SYSTEM',
       agent_id: this.id 
     });

@@ -11,17 +11,18 @@
 
 ## 1. 核心開發路徑 (The Implementation Path)
 
-### 階段 1：基礎基礎設施與語義標準化 (Foundation & Semantics)
+### 第一階段：基礎基礎設施與語義標準化 (Foundation & Semantics)
 *目標：建立穩定且可追蹤的通訊基座。*
-- **任務 1.1 標準化 Agent 消息與 TraceID**：
+- [x] **任務 1.1 標準化 Agent 消息與 TraceID**：
     - 實作 `IAgentMessage` 包裝事件負載，確保跨 Agent 請求具備統一的追蹤標記。
-- **任務 1.2 實作 ContextService 與模板引擎**：
+- [x] **任務 1.2 實作 ContextService 與模板引擎**：
     - 根據 `docs/context/prompt_template.md` 實作自動化 Prompt 合成。
     - **重點任務**：實作 L1 黑板的 **Key-Only 注入邏輯**，Agent 僅能在 Prompt 中看到變數名，具體內容需呼叫工具讀取。
-- **任務 1.3 脈搏引擎 (PulseEngine) 任務監控**：
+- [x] **任務 1.3 脈搏引擎 (PulseEngine) 任務監控**：
     - 實作超時偵測，為每個階段任務設定「生命預期」。
 
 ### 階段 2：PDCA 認知閉環實裝 (The Reasoning Loop)
+
 *目標：讓各角色具備實際的 LLM 推理能力。*
 - **任務 2.1 DoingAgent 的 ReAct 循環**：
     - 讓 DoingAgent 具備「思考 -> 行動 -> 觀察」的自我修正能力。
@@ -84,7 +85,4 @@
 
 ---
 
-## 4. 當前首要行動 (Immediate Action Items)
-1. **Task-001**：實作 `IAgentMessage` 與 `traceId` 追蹤機制。
-2. **Task-002**：實作 `ContextService` 並將 L1 改為 **Key-Only 注入**。
-3. **Task-003**：完成 `DoingAgent` 的第一個完整 ReAct 推理循環測試。
+## 5. 核心開發進度 (Milestones)

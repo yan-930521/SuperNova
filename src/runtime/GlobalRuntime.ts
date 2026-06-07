@@ -2,6 +2,7 @@ import * as path from 'node:path';
 
 import { UserService } from '../application/identity/UserService';
 import { MemoryService } from '../application/memory/MemoryService';
+import { ContextService } from '../application/context/ContextService';
 import { Config } from '../config/Config';
 import { ConfigLoader } from '../config/ConfigLoader';
 import { ComponentContainer } from '../core/container/ComponentContainer';
@@ -111,8 +112,10 @@ export class GlobalRuntime {
     const memoryService = new MemoryService(memoryRepo);
     this.container.register('MemoryService', memoryService);
 
+    const contextService = new ContextService();
+    this.container.register('ContextService', contextService);
 
-    // 6. 啟動所有組件生命週期 (這會觸發 agentService.start() 進而執行 loadAllAgents)
+    // 6. 啟動所有組件生命週期
     await this.container.boot();
 
     this.isRunning = true;
