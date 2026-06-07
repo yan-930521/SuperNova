@@ -30,15 +30,22 @@ export abstract class BaseAgent {
   /**
    * 通用的狀態與日誌紀錄工具
    */
-  protected log(msg: string, level: 'info' | 'error' | 'debug' = 'info'): void {
+  protected log(msg: string, level: 'info' | 'error' | 'debug' = 'info', context?: Partial<IAgentEventPayload>): void {
     const formattedMsg = `[Agent:${this.id}] ${msg}`;
+    const logContext = {
+      type: 'AGENT',
+      agent_id: this.id,
+      trace_id: context?.traceId,
+      session_id: context?.sessionId,
+      ...context?.metadata
+    };
     
     if (level === 'error') {
-      recorder.error(formattedMsg, { type: 'AGENT', agent_id: this.id });
+      recorder.error(formattedMsg, logContext);
     } else if (level === 'debug') {
-      recorder.debug(formattedMsg, { type: 'AGENT', agent_id: this.id });
+      recorder.debug(formattedMsg, logContext);
     } else {
-      recorder.info(formattedMsg, { type: 'AGENT', agent_id: this.id });
+      recorder.info(formattedMsg, logContext);
     }
   }
 }
