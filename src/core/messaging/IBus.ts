@@ -73,6 +73,9 @@ export type AgentEventType =
  */
 export interface IAgentEventPayload {
   readonly sessionId: string;
+  readonly traceId: string;    // 新增：追蹤整個任務鏈
+  readonly spanId?: string;    // 新增：識別當前執行片段
+  readonly parentSpanId?: string; // 新增：用於父子關係
   readonly taskId?: string;
   readonly goal?: string;
   readonly content?: string;
