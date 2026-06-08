@@ -1,17 +1,24 @@
 import { BaseSession } from '../session/BaseSession';
 import { TaskDTO, TaskStatus } from '../../infra/types/task';
 import { IAgentExecuteResult } from '../../infra/types/agent';
+import { TaskFlow } from './template/TaskFlow';
+import { TaskGraph } from './TaskGraph';
 
 /**
  * 任務實體 (Task)
  * 繼承自 BaseSession，代表二級總帳（Agent 執行的思考與行為軌跡）。
- * 實現「任務即會話」的概念。
+ * 實現「任務即會話」與「分形架構」。
  */
 export class Task extends BaseSession {
   public dependencies: string[] = [];
   public assignedAgentId: string | null = null;
   public requiredCapabilities: string[] = [];
   public retryCount: number = 0;
+
+  /** 任務流轉狀態機 (微觀流程) */
+  public flow!: TaskFlow;
+  /** 子任務圖 (宏觀拆解) */
+  public subGraph?: TaskGraph;
 
   constructor(
     id: string,
@@ -33,12 +40,17 @@ export class Task extends BaseSession {
   }
 
   /**
+   * 驅動狀態機前進
+   */
+  public nextPhase(result: string): string {
+    return this.flow.transition(result);
+  }
+
+  /**
    * 從代理執行結果中吸收歷史軌跡
-   * 這是「任務即會話」的核心：Worker 的思考過程會被併入此 Task 的 Session 歷史中。
    */
   public absorbExecuteResult(aeResult: IAgentExecuteResult): void {
     if (aeResult.result && aeResult.result.history) {
-      // 過濾掉可能的重複訊息，併入歷史
       this.history.push(...aeResult.result.history);
     }
     
@@ -69,7 +81,17 @@ export class Task extends BaseSession {
     task.retryCount = dto.retryCount || 0;
     task.metadata = dto.metadata || {};
     
-    // 處理歷史紀錄
+    // 還原狀態機
+    if (dto.flow) {
+      task.flow = TaskFlow.fromDTO(dto.flow);
+    }
+
+    // 還原子圖 (分形)
+    if (dto.subGraph) {
+      task.subGraph = new TaskGraph();
+      task.subGraph.loadData(dto.subGraph);
+    }
+
     if (dto.history) {
       task.setHistory(dto.history);
     }
@@ -94,7 +116,13 @@ export class Task extends BaseSession {
       requiredCapabilities: this.requiredCapabilities,
       retryCount: this.retryCount,
       history: this.history,
-      metadata: this.metadata as Record<string, any>
+      metadata: this.metadata as Record<string, any>,
+      flow: this.flow.toDTO(),
+      subGraph: this.subGraph ? {
+        nodes: this.subGraph.getAllTasks().map(t => t.toDTO()),
+        milestones: [], // TODO: 補全里程碑邏輯
+        currentMilestoneIndex: 0
+      } : undefined
     };
   }
 }

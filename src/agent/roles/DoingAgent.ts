@@ -1,7 +1,7 @@
+import { ContextService } from '../../application/context/ContextService';
 import { AgentEvent, AgentEvents, IAgentEventPayload, IEventBus } from '../../core/messaging/IBus';
 import { ModelPreset } from '../../infra/types/agent';
 import { ReActResponseSchema } from '../../schemas/agent/AgentOutputSchemas';
-import { ContextService } from '../../application/context/ContextService';
 import { BaseAgent } from '../BaseAgent';
 
 /**
@@ -59,13 +59,13 @@ export class DoingAgent extends BaseAgent {
           try {
             // 4. 執行工具
             const tool = toolRegistry.getTool(toolName);
-            const observation = await tool.execute(args, { sessionId, traceId, taskId } as any);
+            // const observation = await tool.execute(args, { sessionId, traceId, taskId } as any);
             
             this.log(`Observation: Tool execution successful`, 'debug', { traceId, sessionId });
             
             // 紀錄到歷史
-            history.push({ role: 'assistant', content: JSON.stringify(response) });
-            history.push({ role: 'system', content: `Observation: ${JSON.stringify(observation)}` });
+            // history.push({ role: 'assistant', content: JSON.stringify(response) });
+            // history.push({ role: 'system', content: `Observation: ${JSON.stringify(observation)}` });
 
           } catch (toolError) {
             this.log(`Tool Error: ${toolError}`, 'error', { traceId, sessionId });

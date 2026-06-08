@@ -1,7 +1,7 @@
-import { AgentEvent, AgentEvents, Events, IAgentEventPayload, IEventBus } from '../../core/messaging/IBus';
+import { ContextService } from '../../application/context/ContextService';
+import { AgentEvent, AgentEvents, IAgentEventPayload, IEventBus } from '../../core/messaging/IBus';
 import { ModelPreset } from '../../infra/types/agent';
 import { TodoListResponseSchema } from '../../schemas/agent/AgentOutputSchemas';
-import { ContextService } from '../../application/context/ContextService';
 import { BaseAgent } from '../BaseAgent';
 
 /**
@@ -70,18 +70,18 @@ export class PlanningAgent extends BaseAgent {
       this.log(`Plan generated with ${result.phases.length} phases and ${flatTasks.length} tasks.`, 'info', { traceId, sessionId });
 
       // 5. 發布任務圖已建立事件 (廣播給 TaskService/TaskScheduler)
-      this.bus.publish({
-        type: Events.Task.Created as any, // 轉換為 EventBus 支援的字串
-        timestamp: Date.now(),
-        payload: {
-          chainId: traceId, // 以 traceId 作為任務鏈 ID
-          sessionId,
-          goal,
-          nodes: flatTasks,
-          planningDocument: result.planning_document,
-          traceId
-        }
-      } as any);
+      // this.bus.publish({
+      //   type: Events.Task.Created as any, // 轉換為 EventBus 支援的字串
+      //   timestamp: Date.now(),
+      //   payload: {
+      //     chainId: traceId, // 以 traceId 作為任務鏈 ID
+      //     sessionId,
+      //     goal,
+      //     nodes: flatTasks,
+      //     planningDocument: result.planning_document,
+      //     traceId
+      //   }
+      // } as any);
 
     } catch (error) {
       this.log(`Planning failed: ${error}`, 'error', { traceId, sessionId });

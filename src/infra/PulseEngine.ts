@@ -1,5 +1,5 @@
 import { ILifecycle } from '../core/lifecycle/ILifecycle';
-import { AllEventTypes, Events, IEvent, IEventBus } from '../core/messaging/IBus';
+import { AgentEvents, AllEventTypes, Events, IEvent, IEventBus } from '../core/messaging/IBus';
 import { recorder } from './LogManager';
 
 /**
@@ -56,7 +56,12 @@ export class PulseEngine implements ILifecycle {
   private hooks = new Map<string, IPulseHook>();
   private statePool: Record<string, unknown> = {};
   private eventHandlers = new Map<string, (event: IEvent<any, any>) => void>();
-  private watchTasks = new Map<string, { lastActive: number, timeout: number }>();
+  private watchTasks = new Map<string, { 
+    lastActive: number, 
+    timeout: number, 
+    traceId: string,
+    sessionId: string 
+  }>();
 
   constructor(private eventBus: IEventBus) {}
 
@@ -92,10 +97,11 @@ export class PulseEngine implements ILifecycle {
    * 將任務加入監控清單
    * @param taskId 任務 ID
    * @param traceId 追蹤 ID
+   * @param sessionId 會話 ID
    * @param timeout 超時時間 (ms)，預設 30000ms
    */
-  public watchTask(taskId: string, traceId: string, timeout: number = 30000): void {
-    this.watchTasks.set(taskId, { lastActive: Date.now(), timeout, traceId });
+  public watchTask(taskId: string, traceId: string, sessionId: string, timeout: number = 30000): void {
+    this.watchTasks.set(taskId, { lastActive: Date.now(), timeout, traceId, sessionId });
     recorder.info(`[PulseEngine] Watching task ${taskId} (Trace: ${traceId}, Timeout: ${timeout}ms)`, { type: 'SYSTEM' });
   }
 
@@ -198,7 +204,11 @@ export class PulseEngine implements ILifecycle {
     // 1. 檢查任務超時
     for (const [taskId, info] of this.watchTasks.entries()) {
       if (Date.now() - info.lastActive > info.timeout) {
-        recorder.warn(`[PulseEngine] Task ${taskId} timed out.`, { type: 'SYSTEM' });
+        recorder.warn(`[PulseEngine] Task ${taskId} timed out. Escalating to SA.`, { 
+          type: 'SYSTEM',
+          trace_id: info.traceId,
+          session_id: info.sessionId
+        });
         
         // 發布新的強型別任務失敗事件
         this.eventBus.publish({
@@ -207,6 +217,20 @@ export class PulseEngine implements ILifecycle {
           payload: { 
             taskId, 
             error: `Execution timeout: No heartbeat received for ${info.timeout / 1000}s` 
+          }
+        });
+
+        // 重要：發送換檔訊號給 SA
+        this.eventBus.publish({
+          type: AgentEvents.Flow.Escalate,
+          timestamp: Date.now(),
+          payload: {
+            sessionId: info.sessionId,
+            traceId: info.traceId,
+            spanId: `timeout_${taskId}_${Date.now()}`,
+            taskId,
+            reason: `TIMEOUT: Task execution exceeded ${info.timeout / 1000}s`,
+            metadata: { originalTimeout: info.timeout }
           }
         });
         

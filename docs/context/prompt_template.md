@@ -14,8 +14,11 @@
 ## 2. 任務上下文 (Context - 從 Memory L1/L2/L3 投影)
 - 原始目標: {{global_objective}}
 - 當前里程碑: {{current_milestone}}
+- **已知全域事實 (Global L2)**: 
+    - {{global_verified_facts}} (格式範例: `- global:fact_name`)
+- **當前會話事實 (Session L2)**: 
+    - {{session_verified_facts}} (格式範例: `- session:fact_name`)
 - **歷史經驗/SOP (L3)**: {{insights_from_acting_agent}}
-- **已知事實 (L2)**: {{verified_facts}}
 
 ## 3. 執行環境 (Environment)
 - 可用工具: {{available_tools}}

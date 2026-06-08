@@ -129,4 +129,14 @@ export abstract class BaseFileSystemRepository<T extends IEntity> implements IRe
   protected getFilePath(id: string): string {
     return path.join(this.baseDir, `${id}.json`);
   }
+
+  /**
+   * 取得特定作用域的目錄 (例如會話目錄)
+   * @param scopeDir 子目錄路徑片段
+   */
+  protected async getScopedDir(scopeDir: string): Promise<string> {
+    const fullPath = path.join(this.baseDir, scopeDir);
+    await fs.mkdir(fullPath, { recursive: true });
+    return fullPath;
+  }
 }

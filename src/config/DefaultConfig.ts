@@ -6,7 +6,7 @@ import { Config } from './Config';
  * 提供合理的預設值確保系統即便在沒有設定檔的情況下也能正常啟動。
  */
 export const DEFAULT_CONFIG: Config = {
-  version: "v0.3.0",
+  version: "v0.4.0",
   runtime: {
     /** 預設 Tick 頻率為 100ms */
     tick_rate_ms: 100,
@@ -30,5 +30,12 @@ export const DEFAULT_CONFIG: Config = {
     default_tool_timeout_ms: 30000,
     /** 預設不允許執行 TIER_3 級別的高風險工具 */
     allow_tier_3_tools: false,
+  },
+  storage: {
+    base_dir: './workspace',
+    sessions_dir: 'sessions',
+    memory_dir: 'memory',
+    global_facts_dir: 'L2_global',
+    sops_dir: 'L3_sops',
   },
 };

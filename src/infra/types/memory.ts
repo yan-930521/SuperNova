@@ -1,14 +1,7 @@
 /**
- * 記憶體層級枚舉
+ * 記憶體層級型別
  */
-export enum MemoryLayer {
-  /** L1: 黑板 / 會話即時狀態 (Pointer Index) */
-  L1 = 'L1',
-  /** L2: 事實層 / 結構化知識 (Facts) */
-  L2 = 'L2',
-  /** L3: SOP 層 / 程序化知識 (SOPs) */
-  L3 = 'L3',
-}
+export type MemoryLayer = 'L1' | 'L2' | 'L3';
 
 /**
  * 統一記憶體傳輸對象 (Memory DTO)
@@ -18,7 +11,7 @@ export interface MemoryDTO<T = any> {
   readonly id: string;
   /** 關聯的會話 ID (或 "global") */
   readonly sessionId: string;
-  /** 所屬層級 */
+  /** 所屬層級 (L1, L2, L3) */
   readonly layer: MemoryLayer;
   /** 寫入者 Agent ID */
   readonly authorId: string;

@@ -11,6 +11,24 @@ export interface Config {
   readonly observability: ObservabilityConfig;
   /** 安全性相關配置 */
   readonly security: SecurityConfig;
+  /** 儲存路徑相關配置 */
+  readonly storage: StorageConfig;
+}
+
+/**
+ * 儲存配置子介面
+ */
+export interface StorageConfig {
+  /** 儲存根目錄 (workspace) */
+  readonly base_dir: string;
+  /** 會話子目錄 */
+  readonly sessions_dir: string;
+  /** 記憶體根目錄 */
+  readonly memory_dir: string;
+  /** 全局事實子目錄 */
+  readonly global_facts_dir: string;
+  /** SOP 子目錄 */
+  readonly sops_dir: string;
 }
 
 /**

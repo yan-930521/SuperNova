@@ -51,6 +51,13 @@ export namespace AgentEvents {
     Finish = "ACTING_FINISH",
     Fail = "ACTING_FAIL",
   }
+
+  /** 任務流轉狀態機事件 */
+  export enum Flow {
+    Initialize = "FLOW_INITIALIZE", // 初始化 TaskFlow
+    Transition = "FLOW_TRANSITION", // 狀態遷徙觸發
+    Escalate = "FLOW_ESCALATE",     // 異常上報/換檔
+  }
 }
 
 /**
@@ -66,16 +73,19 @@ export type AgentEventType =
   | AgentEvents.Planning 
   | AgentEvents.Doing 
   | AgentEvents.Checking 
-  | AgentEvents.Acting;
+  | AgentEvents.Acting
+  | AgentEvents.Flow;
 
 /**
  * 統一代理事件負載介面
  */
 export interface IAgentEventPayload {
   readonly sessionId: string;
-  readonly traceId: string;    // 新增：追蹤整個任務鏈
-  readonly spanId?: string;    // 新增：識別當前執行片段
-  readonly parentSpanId?: string; // 新增：用於父子關係
+  readonly traceId: string;       // 追蹤整個任務鏈
+  readonly spanId: string;        // 識別當前執行片段 (必填)
+  readonly parentSpanId?: string; // 用於父子關係
+  readonly templateType?: string; // 初始路由指定的模板
+  readonly currentPhase?: string; // 當前 PDCA 階段
   readonly taskId?: string;
   readonly goal?: string;
   readonly content?: string;

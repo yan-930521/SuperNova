@@ -1,7 +1,8 @@
+import { z } from 'zod';
+
+import { ContextService } from '../../application/context/ContextService';
 import { AgentEvent, AgentEvents, IAgentEventPayload, IEventBus } from '../../core/messaging/IBus';
 import { ModelPreset } from '../../infra/types/agent';
-import { z } from 'zod';
-import { ContextService } from '../../application/context/ContextService';
 import { BaseAgent } from '../BaseAgent';
 
 /**
@@ -48,7 +49,7 @@ export class CheckingAgent extends BaseAgent {
           payload: { sessionId, traceId, taskId, reason: result.rationale }
         });
       } else {
-        this.log(`Task ${taskId} FAILED check: ${result.rationale}`, 'warn', { traceId, sessionId });
+        this.log(`Task ${taskId} FAILED check: ${result.rationale}`, 'error', { traceId, sessionId });
         this.bus.publish({
           type: AgentEvents.Checking.Fail,
           timestamp: Date.now(),

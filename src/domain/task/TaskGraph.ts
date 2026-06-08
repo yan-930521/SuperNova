@@ -1,20 +1,10 @@
+import { TaskStatus, TaskGraphData } from '../../infra/types/task';
 import { Task } from './Task';
-import { TaskStatus } from '../../infra/types/task';
 
 /**
- * 任務圖資料結構介面
- */
-export interface TaskGraphData {
-  nodes: Task[];
-  milestones: string[];
-  currentMilestoneIndex: number;
-}
-
-/**
- * TaskGraph (任務圖) - 純領域實體
- * 負責維護任務（節點）與依賴（邊）的邏輯關係。
- * 使用入度 (In-degree) 算法來計算任務的就緒狀態。
- * 遵循領域純粹性：不依賴任何外部 IO、日誌或 Runtime。
+ * TaskGraph (任務圖) - 領域實體
+ * 負責管理一組任務間的依賴關係 (Directed Acyclic Graph)。
+ * 在 0.4.0 架構中，它是「分形架構」的核心，一個 Task 可以持有一個 TaskGraph 作為其 subGraph。
  */
 export class TaskGraph {
   /** 節點存儲：taskId -> Task Entity */
@@ -24,12 +14,11 @@ export class TaskGraph {
   /** 入度表：taskId -> number of incomplete dependencies */
   private inDegreeMap = new Map<string, number>();
 
-  /**
-   * 獲取圖中任務的總數量
-   */
-  get size(): number {
-    return this.nodes.size;
-  }
+  constructor(
+    public readonly id: string = `graph_${Date.now()}`,
+    public milestones: string[] = [],
+    public currentMilestoneIndex: number = 0
+  ) {}
 
   /**
    * 獲取所有任務實體
@@ -40,7 +29,6 @@ export class TaskGraph {
 
   /**
    * 添加任務節點
-   * @param task 任務實體
    */
   public addTask(task: Task): void {
     if (this.nodes.has(task.id)) return;
@@ -48,19 +36,16 @@ export class TaskGraph {
     this.nodes.set(task.id, task);
     this.adjList.set(task.id, new Set());
     
-    // 初始化入度，根據任務目前的 dependencies 計算
-    // 注意：這裡只計算「還沒完成」的依賴
+    // 初始化入度
     this.inDegreeMap.set(task.id, 0);
   }
 
   /**
    * 建立依賴關係
-   * @param parentId 前置任務 ID
-   * @param childId 後續任務 ID
    */
   public addDependency(parentId: string, childId: string): void {
     if (!this.nodes.has(parentId) || !this.nodes.has(childId)) {
-      throw new Error(`[TaskGraph] Cannot add dependency: node ${parentId} or ${childId} not found`);
+      throw new Error(`[TaskGraph] Node ${parentId} or ${childId} not found`);
     }
 
     if (this.isReachable(childId, parentId)) {
@@ -70,24 +55,22 @@ export class TaskGraph {
     const children = this.adjList.get(parentId)!;
     if (!children.has(childId)) {
       children.add(childId);
-      
-      // 更新子任務的入度
       const currentInDegree = this.inDegreeMap.get(childId) || 0;
       this.inDegreeMap.set(childId, currentInDegree + 1);
     }
   }
 
   /**
-   * 獲取當前所有入度為 0 的任務 ID（即就緒節點）
+   * 獲取目前就緒的任務 (入度為 0)
    */
-  public getReadyTasks(): string[] {
-    const readyTasks: string[] = [];
+  public getReadyTasks(): Task[] {
+    const readyTasks: Task[] = [];
     for (const [taskId, inDegree] of this.inDegreeMap.entries()) {
       if (inDegree === 0) {
         const task = this.nodes.get(taskId);
-        // 只有 PENDING 或 READY 狀態的節點才算作待執行
+        // 只有處於待命狀態的任務才算 Ready
         if (task && (task.status === TaskStatus.PENDING || task.status === TaskStatus.READY)) {
-          readyTasks.push(taskId);
+          readyTasks.push(task);
         }
       }
     }
@@ -95,18 +78,9 @@ export class TaskGraph {
   }
 
   /**
-   * 標記任務完成，並解鎖後續依賴任務
+   * 當任務完成時，解鎖後續依賴
    */
-  public completeTask(taskId: string): void {
-    const task = this.nodes.get(taskId);
-    if (!task) throw new Error(`[TaskGraph] Task ${taskId} not found`);
-
-    task.updateStatus(TaskStatus.COMPLETED);
-
-    // 關鍵：將此節點從入度表中移除，不再視為待執行
-    this.inDegreeMap.delete(taskId);
-
-    // 更新所有後續任務的入度
+  public handleTaskCompletion(taskId: string): void {
     const children = this.adjList.get(taskId);
     if (children) {
       for (const childId of children) {
@@ -116,10 +90,12 @@ export class TaskGraph {
         }
       }
     }
+    // 從入度表中移除已完成節點
+    this.inDegreeMap.delete(taskId);
   }
 
   /**
-   * 使用 DFS 檢查循環依賴
+   * DFS 循環檢查
    */
   private isReachable(start: string, target: string, visited = new Set<string>()): boolean {
     if (start === target) return true;
@@ -127,43 +103,48 @@ export class TaskGraph {
     const children = this.adjList.get(start);
     if (children) {
       for (const child of children) {
-        if (!visited.has(child)) {
-          if (this.isReachable(child, target, visited)) return true;
-        }
+        if (!visited.has(child) && this.isReachable(child, target, visited)) return true;
       }
     }
     return false;
   }
 
   /**
-   * 取得特定任務實體
-   */
-  public getTask(taskId: string): Task | undefined {
-    return this.nodes.get(taskId);
-  }
-
-  /**
-   * 從外部 JSON 數據重建圖結構
+   * 從 JSON 資料還原結構
    */
   public loadData(data: TaskGraphData): void {
     this.nodes.clear();
     this.adjList.clear();
     this.inDegreeMap.clear();
+    this.milestones = data.milestones || [];
+    this.currentMilestoneIndex = data.currentMilestoneIndex || 0;
 
     // 1. 載入節點
-    for (const task of data.nodes) {
+    for (const nodeDto of data.nodes) {
+      const task = Task.fromDTO(nodeDto);
       this.addTask(task);
     }
 
-    // 2. 重建邊與計算入度
-    for (const task of data.nodes) {
-      for (const parentId of task.dependencies) {
+    // 2. 重建依賴
+    for (const nodeDto of data.nodes) {
+      for (const parentId of nodeDto.dependencies) {
         try {
-          this.addDependency(parentId, task.id);
+          this.addDependency(parentId, nodeDto.id);
         } catch (e) {
-          // 靜默處理，或由上層過濾無效依賴
+          // 容錯處理：略過無效依賴
         }
       }
     }
+  }
+
+  /**
+   * 轉換為可持久化的 DTO
+   */
+  public toDTO(): TaskGraphData {
+    return {
+      nodes: this.getAllTasks().map(task => task.toDTO()),
+      milestones: this.milestones,
+      currentMilestoneIndex: this.currentMilestoneIndex
+    };
   }
 }

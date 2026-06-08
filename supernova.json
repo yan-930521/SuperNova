@@ -13,5 +13,12 @@
   "security": {
     "default_tool_timeout_ms": 30000,
     "allow_tier_3_tools": false
+  },
+  "storage": {
+    "base_dir": "./workspace",
+    "sessions_dir": "sessions",
+    "memory_dir": "memory",
+    "global_facts_dir": "L2_global",
+    "sops_dir": "L3_sops"
   }
 }

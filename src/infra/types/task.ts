@@ -82,6 +82,30 @@ export interface TaskDTO {
   retryCount?: number;
   /** 任務相關的額外元數據 */
   metadata?: Record<string, any>;
+  /** 任務流轉狀態機數據 */
+  flow: TaskFlowDTO;
+  /** 子任務圖 (分形架構支援) */
+  subGraph?: TaskGraphData;
+}
+
+/**
+ * 任務流轉數據傳輸對象 (TaskFlow DTO)
+ */
+export interface TaskFlowDTO {
+  /** 模板類型：Instant, Simple, Standard, Complex, Exploratory, Emergency, Recursive */
+  templateType: string;
+  /** 當前階段 (e.g., 'PLANNING', 'DOING', 'CHECKING') */
+  currentPhase: string;
+  /** 流程階段序列 (有序) */
+  phases: string[];
+  /** 狀態機變遷歷史 */
+  history: Array<{
+    phase: string;
+    timestamp: number;
+    result: string;
+  }>;
+  /** 換檔標記 (是否已被 SA 升級/調整) */
+  isEscalated: boolean;
 }
 
 /**

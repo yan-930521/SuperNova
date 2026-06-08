@@ -60,6 +60,44 @@ export class MemoryService implements ILifecycle {
     return memory;
   }
 
+  /**
+   * 捷徑方法：直接將數據寫入 L1 黑板 (全角色 Agent 適用)
+   * @param sessionId 會話 ID
+   * @param authorId 寫入者 ID
+   * @param key 語義 Key (例如: 'current_plan', 'final_code')
+   * @param data 具體數據或指針信息
+   */
+  async postToL1(
+    sessionId: string,
+    authorId: string,
+    key: string,
+    data: any,
+    description: string = ''
+  ): Promise<void> {
+    const pointerId = `ptr_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+    const l1Data: IBlackboardPointer = {
+      key,
+      pointerId,
+      description: description || `Data posted by ${authorId}`
+    };
+
+    const memory = new L1Memory(key, sessionId, authorId, Date.now(), l1Data);
+    memory.metadata = { rawData: data }; // 將原始數據存入 metadata 方便檢索
+
+    if (!this.l1.has(sessionId)) {
+      this.l1.set(sessionId, new Map());
+    }
+    this.l1.get(sessionId)!.set(key, memory);
+
+    await this.memoryRepo.save(memory.toDTO());
+    
+    recorder.debug(`[MemoryService] Shared L1 entry created: ${key}`, { 
+      type: 'SYSTEM', 
+      session_id: sessionId,
+      agent_id: authorId
+    });
+  }
+
   // --- L2 / L3 操作 ---
 
   async saveL2Memory(sessionId: string, dto: MemoryDTO<IFactData>): Promise<void> {
@@ -101,7 +139,7 @@ export class MemoryService implements ILifecycle {
     let total = 0;
 
     // 恢復 L1
-    const l1Dtos = await this.memoryRepo.findBySession(sessionId, MemoryLayer.L1);
+    const l1Dtos = await this.memoryRepo.findBySession(sessionId, 'L1');
     if (l1Dtos.length > 0) {
       if (!this.l1.has(sessionId)) this.l1.set(sessionId, new Map());
       l1Dtos.forEach(dto => {
@@ -112,7 +150,7 @@ export class MemoryService implements ILifecycle {
     }
 
     // 恢復 L2
-    const l2Dtos = await this.memoryRepo.findBySession(sessionId, MemoryLayer.L2);
+    const l2Dtos = await this.memoryRepo.findBySession(sessionId, 'L2');
     if (l2Dtos.length > 0) {
       if (!this.l2.has(sessionId)) this.l2.set(sessionId, new Map());
       l2Dtos.forEach(dto => {
@@ -122,7 +160,7 @@ export class MemoryService implements ILifecycle {
     }
 
     // 恢復 L3
-    const l3Dtos = await this.memoryRepo.findBySession(sessionId, MemoryLayer.L3);
+    const l3Dtos = await this.memoryRepo.findBySession(sessionId, 'L3');
     if (l3Dtos.length > 0) {
       if (!this.l3.has(sessionId)) this.l3.set(sessionId, new Map());
       l3Dtos.forEach(dto => {
