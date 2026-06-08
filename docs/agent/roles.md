@@ -1,12 +1,13 @@
-# Agent 五大角色定義 (Agent Roles)
+# Agent 五大角色定義 (Agent Roles) - v0.4.0
 
-在 SuperNova 0.3.0 重構架構中，Agent 體系從通用的 Main/Worker 模式轉向高度專業化的五大角色分工，以解決 Context 漂移並提高執行精度。
+在 SuperNova 0.4.0 架構中，Agent 體系從通用的 Main/Worker 模式轉向高度專業化的五大角色分工，以解決 Context 漂移並提高執行精度。
 
 ## 1. SupervisorAgent (指揮官/系統進入點)
 - **職責**: 
-    - 系統的唯一進入點，對接用戶需求。
-    - 負責全局目標的合規性檢查與邊界設定。
-    - 持有特殊的 `EventBus` 實例，扮演「路由中樞」角色。
+    - **對話式交互**: 作為系統的唯一進入點，負責接收用戶的自然語言指令並進行初步意圖解析。
+    - **全局路由**: 負責全局目標的合規性檢查與邊界設定，並在 Swarm 中發起最初的 Planning 任務。
+    - **追蹤監控**: 持有 Swarm EventBus，負責跨 Agent 任務鏈的 Trace 追蹤與自癒調度。
+    - **任務路由與動態升級**: 負責依據語意自動選擇適配的任務模板（如 Instant, Standard 等），並集中處理所有 Sub-Agent 的異常上報（EscalationReport），進行任務路徑的動態換檔升級。
 - **角色定位**: 專案經理 (PM)。
 
 ## 2. PlanningAgent (規劃師/架構師)
