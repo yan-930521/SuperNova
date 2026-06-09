@@ -1,4 +1,4 @@
-import { IAgentEventPayload, IEventBus } from '../core/messaging/IBus';
+import { IAgentEventPayload, IEventBus, IAgentExecuteContext } from '../core/messaging/IBus';
 import { recorder } from '../infra/LogManager';
 import { GlobalRuntime } from '../runtime/GlobalRuntime';
 import { MemoryService } from '../application/memory/MemoryService';
@@ -6,6 +6,10 @@ import { PulseEngine } from '../infra/PulseEngine';
 import { ModelPreset } from '../infra/types/agent';
 import { PromptLoader } from '../utils/PromptLoader';
 import { InferenceEngine } from '../infra/ModelRegistry';
+import { createReactAgent } from '@langchain/langgraph/prebuilt';
+import { tool as langChainTool } from '@langchain/core/tools';
+import { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import { IdGenerator } from '../utils/IdGenerator';
 
 /**
  * BaseAgent (代理基類) - SuperNova 0.4.0
@@ -19,6 +23,8 @@ import { InferenceEngine } from '../infra/ModelRegistry';
  */
 export abstract class BaseAgent {
    protected readonly runtime = GlobalRuntime.getInstance();
+   /** LangChain 原生的 ReAct Agent 執行器 */
+   protected reactAgent: ReturnType<typeof createReactAgent> | null = null;
 
    constructor(
      public readonly id: string,
@@ -37,7 +43,7 @@ export abstract class BaseAgent {
    protected abstract setupSubscriptions(): void;
 
    /**
-    * 統一的引擎初始化方法
+    * 統一的推理引擎初始化方法 (用於結構化輸出)
     * @param preset 模型預設類型 (SMART, FAST, EVAL 等)
     * @param promptPath 身份或任務專用的 Prompt Markdown 路徑
     */
@@ -51,6 +57,49 @@ export abstract class BaseAgent {
      } catch (error) {
        this.log(`Engine initialization failed for ${promptPath}: ${error}`, 'error');
        throw error;
+     }
+   }
+
+   /**
+    * 初始化 LangChain 原生 ReAct Agent 執行器
+    * 動態將系統的 BaseTool 封裝為 LangChain 認識的格式。
+    */
+   public buildExecutionEngine(modelPreset: ModelPreset): void {
+     try {
+       const model = this.runtime.modelRegistry.getRawModel(modelPreset);
+       const allTools = this.runtime.toolRegistry.getAllTools();
+
+       // 將 SuperNova BaseTool 包裝為 LangChain 原生工具
+       const nativeTools = allTools.map(t => langChainTool(async (input, config) => {
+         const context = config?.configurable?.toolContext || {
+           sessionId: 'unknown',
+           agentId: this.id,
+           traceId: IdGenerator.trace()
+         };
+
+         // 確保 context 中包含 agentId
+         const executeContext: IAgentExecuteContext = {
+           ...context,
+           agentId: context.agentId || this.id
+         };
+
+         return await (t as any).execute(input, executeContext);
+       }, {
+         name: t.name,
+         description: t.description,
+         schema: t.schema as any
+       }));
+
+       // 建立預編譯 ReAct Agent
+       // 注意：我們不在這裡固定 messageModifier，而是在 invoke 時動態處理
+       this.reactAgent = createReactAgent({
+         llm: model,
+         tools: nativeTools
+       });
+       
+       recorder.info(`Agent [${this.id}] ReAct Engine built successfully.`, { type: 'SYSTEM' });
+     } catch (error: any) {
+       recorder.error(`Failed to build execution engine for Agent [${this.id}]: ${error.message}`);
      }
    }
 
@@ -81,6 +130,8 @@ export abstract class BaseAgent {
    */
   protected log(msg: string, level: 'info' | 'error' | 'debug' | 'warn' = 'info', context?: Partial<IAgentEventPayload>): void {
     const formattedMsg = `[Agent:${this.id}] ${msg}`;
+    
+    // 自動從 context 中提取 trace 資訊，如果未提供則嘗試保持一致性
     const logContext = {
       type: 'AGENT',
       agent_id: this.id,
@@ -100,5 +151,21 @@ export abstract class BaseAgent {
     } else {
       recorder.info(formattedMsg, logContext);
     }
+  }
+
+  /**
+   * 輔助方法：根據觸發事件，生成繼承的 Payload 基礎
+   * 確保 traceId 貫通且 parentSpanId 正確指向
+   * @param trigger 觸發當前動作的事件 Payload
+   * @param rolePrefix 當前 Agent 的角色縮寫
+   */
+  protected inheritPayload(trigger: IAgentEventPayload, rolePrefix: 'sa' | 'pa' | 'da' | 'ca' | 'aa' | 'sys'): Partial<IAgentEventPayload> {
+    return {
+      sessionId: trigger.sessionId,
+      traceId: trigger.traceId,           // DNA 繼承：traceId 絕對不變
+      parentSpanId: trigger.spanId,       // 鏈路貫通：我的父節點是你的 spanId
+      spanId: IdGenerator.span(rolePrefix), // 留下足跡：生成我自己的 spanId
+      taskId: trigger.taskId
+    };
   }
 }
