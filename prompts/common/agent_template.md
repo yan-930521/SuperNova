@@ -1,6 +1,6 @@
 # Role
 
-{{AGENT_ROLE}}
+{{AGENT_IDENTITY}}
 
 ---
 

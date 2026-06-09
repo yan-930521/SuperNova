@@ -1,15 +1,17 @@
-import { IAgentEventPayload, IEventBus, IAgentExecuteContext } from '../core/messaging/IBus';
-import { recorder } from '../infra/LogManager';
-import { GlobalRuntime } from '../runtime/GlobalRuntime';
+import { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import { tool as langChainTool } from '@langchain/core/tools';
+import { createReactAgent } from '@langchain/langgraph/prebuilt';
+
+import { ContextService } from '../application/context/ContextService';
 import { MemoryService } from '../application/memory/MemoryService';
+import { IAgentEventPayload, IAgentExecuteContext, IEventBus } from '../core/messaging/IBus';
+import { recorder } from '../infra/LogManager';
+import { InferenceEngine } from '../infra/ModelRegistry';
 import { PulseEngine } from '../infra/PulseEngine';
 import { ModelPreset } from '../infra/types/agent';
-import { PromptLoader } from '../utils/PromptLoader';
-import { InferenceEngine } from '../infra/ModelRegistry';
-import { createReactAgent } from '@langchain/langgraph/prebuilt';
-import { tool as langChainTool } from '@langchain/core/tools';
-import { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import { GlobalRuntime } from '../runtime/GlobalRuntime';
 import { IdGenerator } from '../utils/IdGenerator';
+import { PromptLoader } from '../utils/PromptLoader';
 
 /**
  * BaseAgent (代理基類) - SuperNova 0.4.0
@@ -122,6 +124,23 @@ export abstract class BaseAgent {
   protected updateHeartbeat(taskId: string): void {
     const pulseEngine = this.runtime.container.resolve<PulseEngine>('PulseEngine');
     pulseEngine.updateHeartbeat(taskId);
+  }
+
+  /**
+   * 統一獲取完整上下文 System Prompt 的輔助方法
+   * 自動整合 Identity Prompt 與 ContextService 投影的黑板數據
+   * @param identityPrompt 該角色的身分定義文本
+   * @param eventPayload 當前事件的 payload
+   * @param memoryService MemoryService 實例 (用於獲取黑板 key)
+   */
+  protected async getSystemPrompt(
+    identityPrompt: string, 
+    eventPayload: IAgentEventPayload
+  ): Promise<string> {
+    const contextService = this.runtime.container.resolve<ContextService>('ContextService');
+    const memoryService = this.runtime.container.resolve<MemoryService>('MemoryService');
+    const blackboardKeys = await memoryService.getL1Index(eventPayload.sessionId);
+    return contextService.renderPrompt(identityPrompt, eventPayload, blackboardKeys);
   }
 
   /**

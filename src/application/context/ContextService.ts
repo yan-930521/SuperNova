@@ -21,11 +21,11 @@ export class ContextService {
 
   /**
    * 根據 Agent 角色與黑板狀態渲染 Prompt
-   * @param role Agent 角色名稱 (如 'DoingAgent')
+   * @param identityPrompt 完整的角色身分定義內容
    * @param payload 當前事件負載 (包含 sessionId, traceId, goal 等)
    * @param blackboardKeys 當前 L1 黑板中的所有 Key 列表
    */
-  public renderPrompt(role: string, payload: IAgentEventPayload, blackboardKeys: string[]): string {
+  public renderPrompt(identityPrompt: string, payload: IAgentEventPayload, blackboardKeys: string[]): string {
     const metadata = payload.metadata || {};
 
     // 1. Task Constraints
@@ -54,7 +54,7 @@ export class ContextService {
 
     // 4. 執行模板替換
     return this.template
-      .replace('{{AGENT_ROLE}}', role)
+      .replace('{{AGENT_IDENTITY}}', identityPrompt)
       .replace('{{TASK_CONSTRAINTS}}', taskConstraints)
       .replace('{{EMPHASIZED_CONSTRAINTS}}', emphasizedConstraints)
       .replace('{{L1_BLACKBOARD}}', l1Blackboard)
