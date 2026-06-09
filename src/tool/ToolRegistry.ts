@@ -1,3 +1,6 @@
+import { DynamicStructuredTool } from '@langchain/core/tools';
+
+import { IAgentExecuteContext } from '../core/messaging/IBus';
 import { ITool } from './BaseTool';
 
 /**

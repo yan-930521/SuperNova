@@ -59,9 +59,9 @@ export class CheckingAgent extends BaseAgent {
           type: AgentEvents.Checking.Pass,
           timestamp: Date.now(),
           payload: { 
-            sessionId, traceId, taskId, 
-            reason: result.rationale,
-            spanId: IdGenerator.span('ca')
+            ...this.inheritPayload(event.payload, 'ca'),
+            taskId, 
+            reason: result.rationale
           }
         });
       } 
@@ -71,10 +71,10 @@ export class CheckingAgent extends BaseAgent {
           type: AgentEvents.Checking.Fail,
           timestamp: Date.now(),
           payload: { 
-            sessionId, traceId, taskId, 
+            ...this.inheritPayload(event.payload, 'ca'),
+            taskId, 
             error: result.rationale,
-            content: result.improvement_suggestions, // 提供給 DA 的修正建議
-            spanId: IdGenerator.span('ca')
+            content: result.improvement_suggestions // 提供給 DA 的修正建議
           }
         });
       } 
@@ -85,9 +85,9 @@ export class CheckingAgent extends BaseAgent {
           type: AgentEvents.Flow.Escalate,
           timestamp: Date.now(),
           payload: { 
-            sessionId, traceId, taskId, 
+            ...this.inheritPayload(event.payload, 'ca'),
+            taskId, 
             reason: `QA_BLOCKER: ${result.rationale}`,
-            spanId: IdGenerator.span('ca'),
             metadata: { findings: result.findings }
           }
         });
@@ -101,9 +101,9 @@ export class CheckingAgent extends BaseAgent {
         type: AgentEvents.Checking.Fail,
         timestamp: Date.now(),
         payload: { 
-          sessionId, traceId, taskId, 
-          error: `QA_SYSTEM_ERROR: ${String(error)}`,
-          spanId: IdGenerator.span('ca')
+          ...this.inheritPayload(event.payload, 'ca'),
+          taskId, 
+          error: `QA_SYSTEM_ERROR: ${String(error)}`
         }
       });
     }

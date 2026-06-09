@@ -64,7 +64,10 @@ export class PulseEngine implements ILifecycle {
     sessionId: string 
   }>();
 
-  constructor(private eventBus: IEventBus) {}
+  constructor(
+    private systemBus: IEventBus,
+    private agentBus: IEventBus
+  ) {}
 
   /**
    * 生命週期：初始化
@@ -165,7 +168,8 @@ export class PulseEngine implements ILifecycle {
         this.handleEventHook(hook, event);
       };
       this.eventHandlers.set(hook.id, handler);
-      this.eventBus.subscribe(hook.config.eventType, handler);
+      this.systemBus.subscribe(hook.config.eventType, handler);
+      this.agentBus.subscribe(hook.config.eventType, handler);
     }
   }
 
@@ -179,7 +183,8 @@ export class PulseEngine implements ILifecycle {
     if (hook.type === PulseHookType.EVENT && hook.config.eventType) {
       const handler = this.eventHandlers.get(id);
       if (handler) {
-        this.eventBus.unsubscribe(hook.config.eventType, handler);
+        this.systemBus.unsubscribe(hook.config.eventType, handler);
+        this.agentBus.unsubscribe(hook.config.eventType, handler);
         this.eventHandlers.delete(id);
       }
     }
@@ -196,7 +201,7 @@ export class PulseEngine implements ILifecycle {
     // recorder.debug(`[PulseEngine] tick: ${this.tickCount}`, { type: 'SYSTEM' });
 
     // 0. 發布系統脈搏事件 (驅動排程器)
-    this.eventBus.publish({
+    this.systemBus.publish({
       type: SystemEvents.Runtime.Tick,
       timestamp: Date.now(),
       payload: { tickCount: this.tickCount }
@@ -212,7 +217,7 @@ export class PulseEngine implements ILifecycle {
         });
         
         // 發布新的強型別任務失敗事件
-        this.eventBus.publish({
+        this.systemBus.publish({
           type: SystemEvents.Task.Failed,
           timestamp: Date.now(),
           payload: { 
@@ -222,7 +227,7 @@ export class PulseEngine implements ILifecycle {
         });
 
         // 重要：發送換檔訊號給 SA
-        this.eventBus.publish({
+        this.agentBus.publish({
           type: AgentEvents.Flow.Escalate,
           timestamp: Date.now(),
           payload: {
@@ -282,7 +287,7 @@ export class PulseEngine implements ILifecycle {
     const { action } = hook;
     switch (action.type) {
       case PulseActionType.EMIT_EVENT:
-        this.eventBus.publish(action.payload as IEvent<any, any>);
+        this.systemBus.publish(action.payload as IEvent<any, any>);
         break;
       case PulseActionType.LOG:
         recorder.info(`[PulseEngine] Hook ${hook.id} action: ${JSON.stringify(action.payload)}`, { type: 'SYSTEM' });

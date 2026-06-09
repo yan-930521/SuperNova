@@ -16,6 +16,11 @@ export const DEFAULT_CONFIG: Config = {
     agents_dir: './agents',
     /** 預設保底 Agent ID */
     default_fallback_agent_id: 'default-worker',
+    /** 預設併發設定 */
+    concurrency: {
+      global_max_running_tasks: 20,
+      task_max_fan_out: 5
+    }
   },
   observability: {
     /** 預設運行於開發模式 */

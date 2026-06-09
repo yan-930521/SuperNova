@@ -159,13 +159,14 @@ export abstract class BaseAgent {
    * @param trigger 觸發當前動作的事件 Payload
    * @param rolePrefix 當前 Agent 的角色縮寫
    */
-  protected inheritPayload(trigger: IAgentEventPayload, rolePrefix: 'sa' | 'pa' | 'da' | 'ca' | 'aa' | 'sys'): Partial<IAgentEventPayload> {
+  protected inheritPayload(trigger: IAgentEventPayload, rolePrefix: 'sa' | 'pa' | 'da' | 'ca' | 'aa' | 'sys'): IAgentEventPayload {
     return {
       sessionId: trigger.sessionId,
       traceId: trigger.traceId,           // DNA 繼承：traceId 絕對不變
       parentSpanId: trigger.spanId,       // 鏈路貫通：我的父節點是你的 spanId
       spanId: IdGenerator.span(rolePrefix), // 留下足跡：生成我自己的 spanId
-      taskId: trigger.taskId
+      taskId: trigger.taskId,
+      metadata: trigger.metadata
     };
   }
 }

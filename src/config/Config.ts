@@ -37,12 +37,24 @@ export interface StorageConfig {
 export interface RuntimeConfig {
   /** 全局 Tick 頻率 (ms)，控制系統邏輯循環的步進間隔 */
   readonly tick_rate_ms: number;
-  /** 系統允許同時存在的最大活動會話數 */
+  /** 系統允許同時存在的最大活動會話數 (接案上限) */
   readonly max_active_sessions: number;
   /** Agent 設定存放目錄 (相對路徑) */
   readonly agents_dir: string;
   /** 預設的保底 Worker Agent ID */
   readonly default_fallback_agent_id: string;
+  /** 併發控制設定 */
+  readonly concurrency: ConcurrencyConfig;
+}
+
+/**
+ * 併發控制配置子介面
+ */
+export interface ConcurrencyConfig {
+  /** 全局最大並行執行任務數 (防 LLM Rate Limit 爆掉) */
+  readonly global_max_running_tasks: number;
+  /** 單一母任務最大並行子任務數 (防單一任務資源霸佔) */
+  readonly task_max_fan_out: number;
 }
 
 /**

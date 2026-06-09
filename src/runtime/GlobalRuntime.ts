@@ -29,8 +29,15 @@ import { ConsoleTransport } from '../infra/transports/ConsoleTransport';
 import { FileTransport } from '../infra/transports/FileTransport';
 import { ToolRegistry } from '../tool/ToolRegistry';
 
+// Agent Roles
+import { SupervisorAgent } from '../agent/roles/SupervisorAgent';
+import { PlanningAgent } from '../agent/roles/PlanningAgent';
+import { DoingAgent } from '../agent/roles/DoingAgent';
+import { CheckingAgent } from '../agent/roles/CheckingAgent';
+import { ActingAgent } from '../agent/roles/ActingAgent';
+
 /**
- * 全局運行時類 (Global Runtime) - SuperNova 0.3.0
+ * 全局運行時類 (Global Runtime) - SuperNova 0.4.0
  * 系統組合根 (Composition Root)，負責初始化組件容器、註冊服務並管理生命週期。
  */
 export class GlobalRuntime {
@@ -40,11 +47,19 @@ export class GlobalRuntime {
   public readonly container: ComponentContainer;
 
   // --- 暴露核心組件供外部快速訪問 (Service Location Pattern) ---
-  public eventBus!: EventBus;
+  public systemBus!: EventBus;
+  public agentBus!: EventBus;
   public modelRegistry!: ModelRegistry;
   public toolRegistry!: ToolRegistry;
 
   public config!: Config;
+
+  // --- 內建核心 Agents ---
+  public supervisorAgent!: SupervisorAgent;
+  public planningAgent!: PlanningAgent;
+  public doingAgent!: DoingAgent;
+  public checkingAgent!: CheckingAgent;
+  public actingAgent!: ActingAgent;
 
   /**
    * 構造函數：初始化容器
@@ -72,7 +87,7 @@ export class GlobalRuntime {
 
     // 1. 初始化日誌系統
     this.setupLogging();
-    recorder.info('[GlobalRuntime] SuperNova 0.3.0 is initializing...', { type: 'SYSTEM' });
+    recorder.info('[GlobalRuntime] SuperNova 0.4.0 is initializing...', { type: 'SYSTEM' });
 
     // 2. 載入配置
     if (!this.config) {
@@ -81,15 +96,19 @@ export class GlobalRuntime {
     }
 
     // 3. 註冊核心基礎設施
-    this.eventBus = new EventBus();
+    this.systemBus = new EventBus();
+    this.agentBus = new EventBus();
+    
     this.modelRegistry = new ModelRegistry();
     this.modelRegistry.registerDefaultModels();
     this.toolRegistry = new ToolRegistry();
     this.toolRegistry.registerStandardTools();
 
-    const pulseEngine = new PulseEngine(this.eventBus);
+    // PulseEngine 需要監聽 systemBus 的 Tick，但可能會觸發 Agent 的 Escalate
+    const pulseEngine = new PulseEngine(this.systemBus, this.agentBus);
 
-    this.container.register('EventBus', this.eventBus);
+    this.container.register('SystemBus', this.systemBus);
+    this.container.register('AgentBus', this.agentBus);
     this.container.register('ModelRegistry', this.modelRegistry);
     this.container.register('ToolRegistry', this.toolRegistry);
     this.container.register('PulseEngine', pulseEngine);
@@ -101,7 +120,6 @@ export class GlobalRuntime {
     const userRepo = new FileSystemUserRepository(path.join(storageBase, 'users'));
     const agentRepo = new FileSystemAgentRepository(this.config?.runtime.agents_dir || './agents');
     const sessionRepo = new FileSystemSessionRepository(path.join(storageBase, this.config.storage.sessions_dir));
-    // 注意：TaskRepo 與 MemoryRepo 現在以 storageBase 為根，內部自行管理 sessions/ 與 memory/ 子目錄
     const taskRepo = new FileSystemTaskRepository(storageBase);
     const memoryRepo = new FileSystemMemoryRepository(storageBase);
 
@@ -124,14 +142,23 @@ export class GlobalRuntime {
     const taskService = new TaskService(taskRepo);
     this.container.register('TaskService', taskService);
 
-    const taskScheduler = new TaskScheduler(this.eventBus, taskService);
+    const taskScheduler = new TaskScheduler(this.systemBus, this.agentBus, taskService);
     this.container.register('TaskScheduler', taskScheduler);
 
     // 6. 啟動所有組件生命週期
     await this.container.boot();
 
+    // 7. 初始化核心無狀態 Agent 單例 (只傳入 agentBus)
+    this.supervisorAgent = new SupervisorAgent('Supervisor-01', this.agentBus);
+    this.planningAgent = new PlanningAgent('Planner-01', this.agentBus);
+    this.doingAgent = new DoingAgent('Doer-01', this.agentBus);
+    this.checkingAgent = new CheckingAgent('Checker-01', this.agentBus);
+    this.actingAgent = new ActingAgent('Actor-01', this.agentBus);
+    
+    recorder.info('[GlobalRuntime] Core Stateless Agents registered.', { type: 'SYSTEM' });
+
     this.isRunning = true;
-    recorder.info('[GlobalRuntime] SuperNova 0.3.0 is active and ready.', { type: 'SYSTEM' });
+    recorder.info('[GlobalRuntime] SuperNova 0.4.0 is active and ready.', { type: 'SYSTEM' });
   }
 
   /**

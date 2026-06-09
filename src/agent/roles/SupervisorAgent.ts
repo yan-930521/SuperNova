@@ -35,7 +35,8 @@ export class SupervisorAgent extends BaseAgent {
    */
   private async onDispatch(event: AgentEvent): Promise<void> {
     const { sessionId, goal } = event.payload;
-    const traceId = event.payload.traceId || IdGenerator.trace();
+    // 錨定點：不再手動生成 traceId，交由 TaskService 在建立根任務時自動處理
+    const traceId = event.payload.traceId;
 
     this.log(`[Supervisor] Dispatching goal: ${goal}`, 'info', { traceId, sessionId });
 
@@ -45,6 +46,7 @@ export class SupervisorAgent extends BaseAgent {
       const decision = await this.routerEngine.infer({
         goal,
         currentTask: "Initial Routing Decision",
+        messages: [],
         metadata: { ...event.payload, traceId }
       }, RoutingDecisionSchema);
 
@@ -56,12 +58,9 @@ export class SupervisorAgent extends BaseAgent {
         type: AgentEvents.Flow.Initialize,
         timestamp: Date.now(),
         payload: {
-          sessionId,
-          traceId,
+          ...this.inheritPayload(event.payload, 'sa'),
           goal,
           templateType: decision.templateType,
-          spanId: IdGenerator.span('sa'),
-          parentSpanId: event.payload.spanId,
           metadata: {
             routingRationale: decision.rationale,
             priority: decision.suggestedPriority
@@ -77,11 +76,9 @@ export class SupervisorAgent extends BaseAgent {
         type: AgentEvents.Flow.Initialize,
         timestamp: Date.now(),
         payload: { 
-          sessionId, 
-          traceId, 
+          ...this.inheritPayload(event.payload, 'sa'),
           goal, 
-          templateType: 'Standard', 
-          spanId: IdGenerator.span('sa') 
+          templateType: 'Standard'
         }
       });
     }
@@ -104,6 +101,7 @@ export class SupervisorAgent extends BaseAgent {
       const decision = await this.shifterEngine.infer({
         goal: event.payload.goal || "Restore system operation",
         currentTask: "Dynamic Gear Shifting Decision",
+        messages: [],
         metadata: { ...event.payload }
       }, EscalationDecisionSchema);
 
@@ -116,9 +114,8 @@ export class SupervisorAgent extends BaseAgent {
           type: AgentEvents.Flow.Initialize,
           timestamp: Date.now(),
           payload: {
-            ...event.payload,
+            ...this.inheritPayload(event.payload, 'sa'),
             templateType: decision.newTemplateType,
-            spanId: IdGenerator.span('sa'),
             metadata: {
               ...event.payload.metadata,
               shiftReasoning: decision.reasoning,
@@ -132,9 +129,8 @@ export class SupervisorAgent extends BaseAgent {
           type: AgentEvents.Flow.Initialize,
           timestamp: Date.now(),
           payload: {
-            ...event.payload,
+            ...this.inheritPayload(event.payload, 'sa'),
             templateType: 'Emergency',
-            spanId: IdGenerator.span('sa'),
             metadata: {
               ...event.payload.metadata,
               shiftReasoning: decision.reasoning

@@ -12,9 +12,11 @@ export class ConsoleTransport implements ILogTransport {
   send(entry: ILogEntry): void {
     const timestamp = entry.timestamp.split('T')[1].split('.')[0]; // 簡化時間顯示
     const sessionInfo = entry.session_id ? ` [Session: ${entry.session_id}]` : '';
+    const traceInfo = entry.trace_id ? ` [Trace: ${entry.trace_id}]` : '';
+    const spanInfo = entry.span_id ? ` [Span: ${entry.span_id}]` : '';
     const typeInfo = `[${entry.type}]`;
     
-    const formattedMessage = `[${timestamp}] [${entry.level}] ${typeInfo}${sessionInfo} ${entry.message}`;
+    const formattedMessage = `[${timestamp}] [${entry.level}] ${typeInfo}${sessionInfo}${traceInfo}${spanInfo} ${entry.message}`;
 
     switch (entry.level) {
       case 'DEBUG':

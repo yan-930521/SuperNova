@@ -77,10 +77,11 @@ export class PlanningAgent extends BaseAgent {
             ...taskNode,
             id: newId,
             sessionId,
-            traceId,
+            traceId: traceId!, // 確保 DNA 承接至子任務
             status: 'pending',
             history: [],
             dependencies: [...previousPhaseTaskIds],
+            metadata: { parentTaskId: taskId },
             flow: {
               templateType: 'Simple',
               currentPhase: 'READY',
@@ -101,9 +102,7 @@ export class PlanningAgent extends BaseAgent {
         type: AgentEvents.Planning.Finish,
         timestamp: Date.now(),
         payload: {
-          sessionId,
-          traceId,
-          spanId: IdGenerator.span('pa'),
+          ...this.inheritPayload(event.payload, 'pa'),
           taskId: taskId, // 母任務 ID
           content: result.planning_document,
           metadata: {
@@ -124,11 +123,9 @@ export class PlanningAgent extends BaseAgent {
         type: AgentEvents.Planning.Fail,
         timestamp: Date.now(),
         payload: { 
-          sessionId, 
-          traceId, 
+          ...this.inheritPayload(event.payload, 'pa'),
           taskId, 
-          error: String(error),
-          spanId: IdGenerator.span('pa')
+          error: String(error)
         }
       });
     }

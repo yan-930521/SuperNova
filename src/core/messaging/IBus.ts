@@ -79,7 +79,7 @@ export type AllEventTypes =
  */
 export interface IAgentEventPayload {
   readonly sessionId: string;
-  readonly traceId: string;       // 追蹤整個任務鏈
+  readonly traceId?: string;      // 追蹤整個任務鏈 (根任務啟動時可選，之後必填)
   readonly spanId: string;        // 識別當前執行片段 (必填)
   readonly parentSpanId?: string; // 用於父子關係 (選填)
   readonly templateType?: string; // 初始路由指定的模板

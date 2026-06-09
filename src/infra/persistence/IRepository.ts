@@ -75,6 +75,8 @@ export interface ISessionRepository<T extends IEntity, M> extends IRepository<T>
   findByUser(userId: string): Promise<T[]>;
 }
 
+import { TaskStatus } from '../types/task';
+
 /**
  * 任務儲存庫介面 (Task)
  */
@@ -84,6 +86,12 @@ export interface ITaskRepository<T extends IEntity> extends IRepository<T> {
    * @param sessionId 會話識別碼
    */
   findBySession(sessionId: string): Promise<T[]>;
+
+  /**
+   * 按狀態查找任務
+   * @param status 任務狀態
+   */
+  findTasksByStatus(status: TaskStatus): Promise<T[]>;
 }
 
 /**

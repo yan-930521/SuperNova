@@ -42,7 +42,7 @@ Must contain:
       const spanId = IdGenerator.span('sys');
 
       // 2. 發布 Flow.Initialize 事件，觸發 TaskService 建立任務實體與狀態機
-      runtime.eventBus.publish({
+      runtime.agentBus.publish({
         type: AgentEvents.Flow.Initialize,
         timestamp: Date.now(),
         payload: {

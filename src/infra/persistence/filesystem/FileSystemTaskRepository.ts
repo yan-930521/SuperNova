@@ -116,6 +116,37 @@ export class FileSystemTaskRepository
   }
 
   /**
+   * 按狀態查找任務
+   */
+  async findTasksByStatus(status: TaskStatus): Promise<Task[]> {
+    const tasks: Task[] = [];
+    try {
+      const sessionsPath = path.join(this.baseDir, 'sessions');
+      const sessionDirs = await fs.readdir(sessionsPath);
+      for (const sessionId of sessionDirs) {
+        const sessionTasksPath = path.join(sessionsPath, sessionId, 'tasks');
+        try {
+          const taskDirs = await fs.readdir(sessionTasksPath);
+          for (const taskId of taskDirs) {
+            const dataPath = path.join(sessionTasksPath, taskId, 'data.json');
+            try {
+              const data = await fs.readFile(dataPath, 'utf-8');
+              const dto = JSON.parse(data) as TaskDTO;
+              if (dto.status === status) {
+                const task = Task.fromDTO(dto);
+                tasks.push(await this.loadTaskHistory(task, path.join(sessionTasksPath, taskId)));
+              }
+            } catch {
+              continue;
+            }
+          }
+        } catch { continue; }
+      }
+    } catch {}
+    return tasks;
+  }
+
+  /**
    * 輔助方法：加載並還原任務的歷史紀錄
    */
   private async loadTaskHistory(task: Task, taskDir: string): Promise<Task> {

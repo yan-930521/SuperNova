@@ -47,13 +47,19 @@ SuperNova 是一個基於事件驅動與 PDCA 循環的代理蜂群系統。它�
 - **清晰的交接 (Explicit Handoff)**：不同階段的 Agent 之間不看對方的內部思考過程。例如，`CheckingAgent` 不會去讀取 `DoingAgent` 嘗試錯誤的 ReAct 對話紀錄；它只透過 L1 Blackboard 上儲存的最終產出與事件 Payload 中攜帶的交接訊息來進行工作。這極大地節省了 Token 消耗並避免了注意力分散 (Attention Dilution)。
 
 ### 3.2 雙層總帳機制 (Two-Tier Ledger)
-為了解決傳統 Agent 系統中「對話上下文 (Context) 同時承載人機溝通與工具執行細節」所導致的 Token 污染與邏輯偏移 (Goal Drift)，SuperNova 實作了嚴格的雙層隔離：
+為了解決傳統 Agent 系統中「對話上下文 (Context) 同時承載人機溝通與工具執行細節」所導致的 Token 污染與邏輯偏移 (Goal Drift)，SuperNova 實作了嚴格實作了嚴格的雙層隔離：
 - **一級總帳 (Communication State - `UserSession`)**：
   這是 SupervisorAgent (SA) 與用戶對話的「客廳」。這裡只紀錄「用戶的高階要求」與「系統的最終結果摘要」。它保持了極度的精煉，確保 SA 在進行目標路由與決策時不會被底層執行的噪音干擾。
 - **二級總帳 (Execution State - `Task`)**：
   這是專業 Agent (PA, DA, CA) 執行的「工廠」。每個子任務都有自己的二級總帳，裡面紀錄了冗長的 ReAct 思考循環、工具調用的原始輸入輸出、以及除錯報錯訊息。這些 `history` 是作為「稽核軌跡 (Audit Trail)」、「提煉 SOP 的礦石」以及「崩潰除錯的線索」，**絕對不會**向上污染到一級總帳中。
 
-### 3.3 模組化推理編排 (Modular Reasoning Orchestration)
+### 3.3 鏈路追蹤與可觀察性 (Traceability & Observability)
+為了確保複雜任務鏈的可追蹤性，系統導入了嚴密的鏈路 ID 體系：
+- **根任務錨定 (Root-Task Anchoring)**：`traceId` 不再隨機生成，而是錨定於初始任務的 `taskId`。這使得開發者能透過一個 ID 串聯起整個任務樹的所有日誌與狀態。
+- **DNA 嚴格繼承**：透過 `BaseAgent.inheritPayload` 與 `TaskScheduler` 的中轉，確保所有衍生事件 (Event) 與子任務 (Sub-task) 無條件繼承 `traceId`。
+- **樹狀 Span 鏈鏈鏈鏈鏈接**：利用 `spanId` 與 `parentSpanId` 標識執行片段的父子關係，完整還原 PDCA 循環的動態呼叫圖。
+
+### 3.4 模組化推理編排 (Modular Reasoning Orchestration)
 系統不依賴單一大型系統提示詞。中樞代理擔任編排器角色，針對特定決策場景動態調用專業推理模組：
 - **路由專家**：判定任務模板。
 - **換檔專家**：處理異常上報與動態路徑修正。

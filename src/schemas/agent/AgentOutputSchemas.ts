@@ -50,7 +50,7 @@ export const ReActResponseSchema = z.object({
 	thought: z.string().describe("當前的思考過程"),
 	action: z.object({
 		toolName: z.string().describe("欲呼叫的工具名稱"),
-		args: z.any().describe("傳給工具的參數")
+		args: z.string().describe("傳給工具的參數，必須為有效的 JSON 字串格式")
 	}).nullable().describe("下一步要執行的動作，若已完成則為 null"),
 	answer: z.string().nullable().describe("最終答案，若尚未完成則為 null")
 }).describe("ReAct 代理的單步決策");
@@ -91,10 +91,10 @@ export const EscalationDecisionSchema = z.object({
  * 用於 ActingAgent 提煉知識與 SOP。
  */
 export const ReflectionSchema = z.object({
-	sop_content: z.string().optional().describe("建議新增或更新的 SOP 內容 (Markdown)"),
+	sop_content: z.string().describe("建議新增或更新的 SOP 內容 (Markdown，若無則提供空字串)"),
 	facts: z.array(z.object({
 		topic: z.string().describe("事實主題"),
-		content: z.any().describe("事實內容"),
+		content: z.string().describe("事實內容，請以字串或 JSON 字串格式提供"),
 		is_global: z.boolean().describe("是否具備跨會話的通用價值")
 	})).describe("提取出的結構化事實列表"),
 	improvement_briefing: z.string().describe("針對本次執行痛點的技術債或優化建議")
@@ -107,6 +107,6 @@ export const ReflectionSchema = z.object({
 export const CheckSchema = z.object({
 	decision: z.enum(['PASS', 'FAIL', 'ESCALATE']).describe("審核裁決：PASS(合格), FAIL(修正), ESCALATE(上報換檔)"),
 	rationale: z.string().describe("詳細的裁決理由與數據證據"),
-	improvement_suggestions: z.string().optional().describe("若為 FAIL，給予 DoingAgent 的具體修正指令"),
-	findings: z.array(z.string()).optional().describe("審核過程中發現的潛在風險或亮點")
+	improvement_suggestions: z.string().describe("若為 FAIL，給予 DoingAgent 的具體修正指令 (若為 PASS 則提供空字串)"),
+	findings: z.array(z.string()).describe("審核過程中發現的潛在風險或亮點 (可為空陣列)")
 });

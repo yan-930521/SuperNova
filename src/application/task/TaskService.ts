@@ -39,11 +39,12 @@ export class TaskService implements ILifecycle {
     goal: string;
     description: string;
     templateType: string;
-    traceId: string;
+    traceId?: string;
     parentTaskId?: string;
   }): Promise<Task> {
     const taskId = IdGenerator.task();
-    const traceId = params.traceId;
+    // 錨定策略：若未提供 traceId (代表鏈路起點)，則直接使用 taskId 作為 traceId
+    const traceId = params.traceId || IdGenerator.traceFromTask(taskId);
 
     const task = new Task(
       taskId,
@@ -104,6 +105,13 @@ export class TaskService implements ILifecycle {
    */
   async findBySession(sessionId: string): Promise<Task[]> {
     return await this.taskRepo.findBySession(sessionId);
+  }
+
+  /**
+   * 按狀態查找任務
+   */
+  async findTasksByStatus(status: TaskStatus): Promise<Task[]> {
+    return await this.taskRepo.findTasksByStatus(status);
   }
 
   /**

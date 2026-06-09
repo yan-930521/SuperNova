@@ -95,11 +95,9 @@ export class ActingAgent extends BaseAgent {
         type: AgentEvents.Acting.Finish,
         timestamp: Date.now(),
         payload: { 
-          sessionId, 
-          traceId, 
+          ...this.inheritPayload(event.payload, 'aa'),
           taskId, 
-          content: result.improvement_briefing || 'Reflection complete. Assets Distilled.',
-          spanId: IdGenerator.span('aa')
+          content: result.improvement_briefing || 'Reflection complete. Assets Distilled.'
         }
       });
 
@@ -111,11 +109,9 @@ export class ActingAgent extends BaseAgent {
         type: AgentEvents.Acting.Fail,
         timestamp: Date.now(),
         payload: { 
-          sessionId, 
-          traceId, 
+          ...this.inheritPayload(event.payload, 'aa'),
           taskId, 
-          error: String(error),
-          spanId: IdGenerator.span('aa')
+          error: String(error)
         }
       });
     }
