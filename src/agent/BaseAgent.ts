@@ -166,6 +166,8 @@ export abstract class BaseAgent {
       parentSpanId: trigger.spanId,       // 鏈路貫通：我的父節點是你的 spanId
       spanId: IdGenerator.span(rolePrefix), // 留下足跡：生成我自己的 spanId
       taskId: trigger.taskId,
+      goal: trigger.goal,                 // 業務繼承：保留目標
+      content: trigger.content,           // 業務繼承：保留內容
       metadata: trigger.metadata
     };
   }
