@@ -1,10 +1,11 @@
-import { Task } from '../../../domain/task/Task';
-import { ITaskRepository } from '../IRepository';
-import { BaseFileSystemRepository } from './BaseFileSystemRepository';
-import { recorder } from '../../LogManager';
-import { TaskDTO, TaskStatus } from '../../types/task';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+
+import { Task } from '../../../domain/task/Task';
+import { recorder } from '../../LogManager';
+import { TaskDTO, TaskStatus } from '../../types/task';
+import { ITaskRepository } from '../IRepository';
+import { BaseFileSystemRepository } from './BaseFileSystemRepository';
 
 /**
  * FileSystemTaskRepository
@@ -115,10 +116,36 @@ export class FileSystemTaskRepository
   }
 
   /**
+   * 輔助方法：加載並還原任務的歷史紀錄
+   */
+  private async loadTaskHistory(task: Task, taskDir: string): Promise<Task> {
+    const historyPath = path.join(taskDir, 'history.jsonl');
+    try {
+      const rawHistory = await fs.readFile(historyPath, 'utf-8');
+      const history = rawHistory
+        .split('\n')
+        .filter(line => line.trim())
+        .map(line => {
+          try {
+            return JSON.parse(line);
+          } catch {
+            return null;
+          }
+        })
+        .filter(item => item !== null);
+      
+      task.setHistory(history);
+    } catch {
+      // 無歷史紀錄
+    }
+    return task;
+  }
+
+  /**
    * 重寫刪除邏輯
    */
   async delete(id: string): Promise<void> {
-    // 實作略，需先定位 chainId
+    // 實作略，需先定位
     recorder.warn(`[TaskRepo] Delete task ${id} is not fully implemented for nested structure`, { type: 'SYSTEM' });
   }
 }

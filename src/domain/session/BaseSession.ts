@@ -5,6 +5,7 @@ import {
 
 import { IEntity } from '../../infra/persistence/IRepository';
 import { MessageDTO, MessageRole } from '../../infra/types/session';
+import { IdGenerator } from '../../utils/IdGenerator';
 
 /**
  * 基礎會話實體 (BaseSession)
@@ -68,7 +69,7 @@ export abstract class BaseSession implements IEntity {
       case MessageRole.TOOL:
         message = new ToolMessage({
           content,
-          tool_call_id: (metadata.tool_call_id as string) || `tool-${Date.now()}`
+          tool_call_id: (metadata.tool_call_id as string) || IdGenerator.pointer()
         });
         break;
       case MessageRole.WORKER:

@@ -19,6 +19,9 @@ import {
     FileSystemSessionRepository
 } from '../infra/persistence/filesystem/FileSystemSessionRepository';
 import { FileSystemTaskRepository } from '../infra/persistence/filesystem/FileSystemTaskRepository';
+import { TaskService } from '../application/task/TaskService';
+import { TaskScheduler } from '../application/task/TaskScheduler';
+
 // 新版持久層
 import { FileSystemUserRepository } from '../infra/persistence/filesystem/FileSystemUserRepository';
 import { PulseEngine } from '../infra/PulseEngine';
@@ -93,11 +96,14 @@ export class GlobalRuntime {
 
     // 4. 註冊持久層 (Repositories)
     const root = process.cwd();
-    const userRepo = new FileSystemUserRepository(path.join(root, 'workspace/users'));
+    const storageBase = path.join(root, this.config.storage.base_dir);
+
+    const userRepo = new FileSystemUserRepository(path.join(storageBase, 'users'));
     const agentRepo = new FileSystemAgentRepository(this.config?.runtime.agents_dir || './agents');
-    const sessionRepo = new FileSystemSessionRepository(path.join(root, 'workspace/sessions'));
-    const taskRepo = new FileSystemTaskRepository(path.join(root, 'workspace/tasks'));
-    const memoryRepo = new FileSystemMemoryRepository(path.join(root, 'workspace/memory'));
+    const sessionRepo = new FileSystemSessionRepository(path.join(storageBase, this.config.storage.sessions_dir));
+    // 注意：TaskRepo 與 MemoryRepo 現在以 storageBase 為根，內部自行管理 sessions/ 與 memory/ 子目錄
+    const taskRepo = new FileSystemTaskRepository(storageBase);
+    const memoryRepo = new FileSystemMemoryRepository(storageBase);
 
     this.container.register('UserRepo', userRepo);
     this.container.register('AgentRepo', agentRepo);
@@ -114,6 +120,12 @@ export class GlobalRuntime {
 
     const contextService = new ContextService();
     this.container.register('ContextService', contextService);
+
+    const taskService = new TaskService(taskRepo);
+    this.container.register('TaskService', taskService);
+
+    const taskScheduler = new TaskScheduler(this.eventBus, taskService);
+    this.container.register('TaskScheduler', taskScheduler);
 
     // 6. 啟動所有組件生命週期
     await this.container.boot();

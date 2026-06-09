@@ -12,7 +12,7 @@ export class L2Memory extends BaseMemory {
     timestamp: number,
     public readonly data: IFactData
   ) {
-    super(id, sessionId, MemoryLayer.L2, authorId, timestamp);
+    super(id, sessionId, 'L2', authorId, timestamp);
   }
 
   public toDTO(): MemoryDTO<IFactData> {

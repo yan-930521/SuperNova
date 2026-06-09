@@ -2,36 +2,16 @@
 
 為了確保五大角色 Agent 在不同任務階段都能獲得一致且精準的指令背景，系統採用統一的模板結構進行 Context 注入。
 
-## 模板骨架 (Skeleton)
+## 模板組成理論
 
-```markdown
-# {{AGENT_ROLE}} 任務指令
+系統 Prompt 模板由以下核心模組構成，旨在為 Agent 提供完整的認知空間：
 
-## 1. 核心身份 (Identity)
-- 角色角色: {{identity_description}}
-- 職責範圍: {{responsibility_boundary}}
-
-## 2. 任務上下文 (Context - 從 Memory L1/L2/L3 投影)
-- 原始目標: {{global_objective}}
-- 當前里程碑: {{current_milestone}}
-- **已知全域事實 (Global L2)**: 
-    - {{global_verified_facts}} (格式範例: `- global:fact_name`)
-- **當前會話事實 (Session L2)**: 
-    - {{session_verified_facts}} (格式範例: `- session:fact_name`)
-- **歷史經驗/SOP (L3)**: {{insights_from_acting_agent}}
-
-## 3. 執行環境 (Environment)
-- 可用工具: {{available_tools}}
-- 限制條件: {{constraints}}
-
-## 4. 具體任務與輸入 (Input - 來自 Blackboard)
-- 指令細節: {{task_instruction}}
-- 依賴結果: {{dependency_data}}
-
-## 5. 輸出規範 (Output Schema)
-- 格式要求: {{format_requirements}}
-```
+1.  **核心身份 (Identity)**: 定義代理人的角色屬性與職責邊界，防止職能越權。
+2.  **任務上下文 (Context)**: 從 Memory L1/L2/L3 投影而來的背景資訊，包括原始目標、當前進度以及已驗證的全域與局部事實。
+3.  **執行環境 (Environment)**: 明確標註當前可用的工具集與必須遵守的硬性限制條件。
+4.  **具體任務與輸入 (Input)**: 從 L1 黑板提取的具體指令細節與上游依賴數據。
+5.  **輸出規範 (Output Schema)**: 定義 Agent 必須遵循的結構化回傳格式。
 
 ## 注入邏輯
-- **結構性注入**: 由 `SupervisorAgent` 或 `ContextService` 根據當前 Agent 角色，從 Memory 層級中提取對應片段填入。
-- **動態更新**: 每次事件觸發（如 `Doing.Start`），模板會重新生成以包含最新的 Blackboard 狀態。
+- **結構性注入**: 由系統服務根據當前角色與任務階段，從動態記憶層級中提取對應片段填入對應模組。
+- **動態更新**: 每次協作事件觸發時，模板均會反映最新的黑板狀態，確保「知行合一」。

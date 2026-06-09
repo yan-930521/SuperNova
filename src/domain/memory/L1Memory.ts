@@ -12,7 +12,7 @@ export class L1Memory extends BaseMemory {
     timestamp: number,
     public readonly data: IBlackboardPointer
   ) {
-    super(id, sessionId, MemoryLayer.L1, authorId, timestamp);
+    super(id, sessionId, 'L1', authorId, timestamp);
   }
 
   public toDTO(): MemoryDTO<IBlackboardPointer> {

@@ -2,34 +2,37 @@
 
 在 SuperNova 0.4.0 架構中，Agent 體系從通用的 Main/Worker 模式轉向高度專業化的五大角色分工，以解決 Context 漂移並提高執行精度。
 
-## 1. SupervisorAgent (指揮官/系統進入點)
+## 1. SupervisorAgent (模組化推理編排器)
 - **職責**: 
-    - **對話式交互**: 作為系統的唯一進入點，負責接收用戶的自然語言指令並進行初步意圖解析。
-    - **全局路由**: 負責全局目標的合規性檢查與邊界設定，並在 Swarm 中發起最初的 Planning 任務。
-    - **追蹤監控**: 持有 Swarm EventBus，負責跨 Agent 任務鏈的 Trace 追蹤與自癒調度。
-    - **任務路由與動態升級**: 負責依據語意自動選擇適配的任務模板（如 Instant, Standard 等），並集中處理所有 Sub-Agent 的異常上報（EscalationReport），進行任務路徑的動態換檔升級。
-- **角色定位**: 專案經理 (PM)。
+    - **對話式交互**: 作為系統唯一進入點，解析用戶意圖。
+    - **模組化推理 (Modular Reasoning)**：不再依賴單一大型 Prompt，而是作為編排器，針對特定任務調用獨立的「專家推理模組」（如：路由專家、換檔專家）。
+    - **任務路由與智慧換檔**: 利用 `InferenceEngine` 決定 `templateType`，並集中處理 Sub-Agent 的 `EscalationReport` 進行動態路徑修正。
+    - **追蹤監控**: 持有 Swarm EventBus，負責跨任務鏈的 Trace 追蹤。
+- **角色定位**: 系統指揮官 / 推理編排員。
 
-## 2. PlanningAgent (規劃師/架構師)
+## 2. PlanningAgent (分形架構師)
 - **職責**: 
-    - 接收原始目標，將其拆解為具體的任務節點 (TaskGraph/Milestones)。
-    - 專注於邏輯拆解與流程設計，不參與具體執行。
+    - **分形拆解**: 接收目標並產出封裝於母任務 `subGraph` 中的 `TaskGraph`。
+    - **SOP 整合**: 在規劃時自動檢索 `L3 SOP` 路徑，並將標準步驟植入任務圖。
+    - **門禁定義**: 為每個子任務定義清晰的 `Success Criteria`。
 - **角色定位**: 系統架構師。
 
-## 3. DoingAgent (執行者/行動者)
+## 3. DoingAgent (核心執行者)
 - **職責**: 
-    - **執行與行動**: 根據規劃節點執行具體的邏輯實現與外部行動。
-    - 負責編寫代碼、生成內容、呼叫 API、執行指令或進行深度的推理運算。
-- **角色定位**: 核心開發與操作工程師 (Do/Action)。
+    - **ReAct 執行**: 根據規劃節點執行工具操作，具備自我修正推理。
+    - **共享寫入 (L1 Post)**: 執行中必須及時將發現的事實、代碼、中間變數寫入 L1 Blackboard。
+    - **範圍預警**: 偵測 Scope Creep（如需改動過多檔案），主動停止並上報 SA。
+- **角色定位**: 核心開發與操作工程師。
 
-## 4. CheckingAgent (審核者/QA)
+## 4. CheckingAgent (PDCA 質量門禁)
 - **職責**: 
-    - **檢核 (Check)**: 驗證 `DoingAgent` 的產出與行動結果是否符合 `PlanningAgent` 定義的規範。
-    - 提供回饋建議，決定任務是否合格。
-- **角色定位**: 品質保證 (Check)。
+    - **認知對比**: 從 L1 加載 DoingAgent 的痕跡，比對 PlanningAgent 的驗證標準。
+    - **流轉判定**: 決定任務是 `PASS` (進入 ACTING)、`FAIL` (回退 DOING) 還是 `ESCALATE` (上報 SA 換檔)。
+- **角色定位**: 質量保證 (QA)。
 
-## 5. ActingAgent (改善者/標準化者)
+## 5. ActingAgent (標準化與改善者)
 - **職責**: 
-    - **改善 (Act)**: 總結整輪 PDCA 的經驗，將成功的作法標準化或制度化（SOP）。
-    - 針對未達標或失敗之處進行根本原因分析，並將其作為下一輪 `PlanningAgent` 的優化基礎。
-- **角色定位**: 持續改進與標準化專家 (Act)。
+    - **事實升遷 (L2 Promotion)**: 判定並將 `L2 Session Fact` 升遷為全系統共用的 `L2 Global Fact`。
+    - **SOP 沉澱**: 將成功的執行路徑標準化為 `L3 SOP`。
+    - **系統優化建議**: 總結執行痛點，作為下一輪規劃的改良基礎。
+- **角色定位**: 知識管理與持續改進專家。

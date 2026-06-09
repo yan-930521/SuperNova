@@ -1,26 +1,14 @@
 import { MessageDTO } from './session';
 
 /**
- * 任務執行狀態 Enum
+ * 任務執行狀態 Type
  */
-export enum TaskStatus {
-  PENDING = 'pending',
-  READY = 'ready',
-  RUNNING = 'running',
-  COMPLETED = 'completed',
-  FAILED = 'failed'
-}
+export type TaskStatus = 'pending' | 'ready' | 'running' | 'completed' | 'failed';
 
 /**
- * 任務鏈/流程狀態 Enum
+ * 任務鏈/流程狀態 Type
  */
-export enum ChainStatus {
-  PLANNING = 'planning',
-  RUNNING = 'running',
-  COMPLETED = 'completed',
-  FAILED = 'failed',
-  STUCK = 'stuck'
-}
+export type ChainStatus = 'planning' | 'running' | 'completed' | 'failed' | 'stuck';
 
 /**
  * 任務日誌分類 Enum
@@ -45,7 +33,7 @@ export interface TaskDTO {
   /** 所屬的會話 ID */
   sessionId: string;
   /** 所屬的任務鏈 ID */
-  chainId: string;
+  traceId: string;
   /** 任務類型，如 'work', 'research', 'code' 等 */
   type: string;
   /** 任務具體要達成的目標 */
@@ -115,7 +103,6 @@ export interface ITaskRequest {
   goal: string;
   description: string;
   sessionId: string;
-  chainId: string;
   traceId: string;
   requesterId: string;
 }
@@ -124,7 +111,7 @@ export interface ITaskRequest {
  * 任務鏈狀態摘要
  */
 export interface IChainStatusSummary {
-  chainId: string;
+  traceId: string;
   status: ChainStatus;
   nodes: TaskDTO[];
   sessionId?: string;
@@ -137,6 +124,6 @@ export interface IChainStatusSummary {
  */
 export interface TaskGraphData {
   nodes: TaskDTO[];
-  milestones: string[];
-  currentMilestoneIndex: number;
+  phases: string[];
+  currentPhaseIndex: number;
 }

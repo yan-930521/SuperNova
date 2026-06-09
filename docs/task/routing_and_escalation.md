@@ -2,14 +2,21 @@
 
 SuperNova 系統依賴 Supervisor Agent (SA) 進行任務的集中分發與調度，採用 **混合路由架構 (Hybrid Routing Architecture)**。
 
-## 1. 初始路由 (Initial Routing)
-SA 作為唯一入口，在接收使用者輸入後，透過 LLM 的語義理解，在呼叫 `DispatchTask` 工具時「順便」決定最合適的初始模板（如 `Simple`, `Standard` 等）。預設信任 LLM 的直覺，以最快速度啟動系統。
+## 1. 智慧路由與模組化推理 (Smart Routing & Modular Reasoning)
+SA 不再依賴單一大型 System Prompt，而是利用 `InferenceEngine` 針對特定場景調用「專家推理模組」。
 
-## 2. 異常上報與 SA 集中換檔 (Escalation to SA)
-系統不允許 Sub-Agents (PA, DA, CA, AA) 自行變更任務模板。當遇到阻礙時，必須產出 `EscalationReport` 將決策權交還 SA。
+### 1.1 初始路由模組 (Routing Specialist)
+- **觸發時機**: 接收到新目標。
+- **組件**: `prompts/reasoning/sa_router.md` + `RoutingDecisionSchema`。
+- **行為**: 根據 LLM 語意判定，輸出強型別的 `templateType` 與推薦理由。
 
-**換檔行為 (Gear Shifting)**：
-SA 接收到報告後，會標記該任務的 `TaskFlow.isEscalated = true`，並根據反饋重新生成或更新 `TaskFlow` 實體（例如將 `templateType` 從 `Simple` 改為 `Standard`），從而改變後續的執行路徑。
+## 2. 異常上報與智慧換檔 (Escalation & Gear Shifting)
+當 Sub-Agents 回報 `EscalationReport` 時，SA 啟動換檔模組進行二次決策。
+
+### 2.1 換檔專家模組 (Gear-Shift Specialist)
+- **觸發時機**: 監聽到 `AgentEvents.Flow.Escalate`。
+- **組件**: `prompts/reasoning/sa_gear_shifter.md` + `EscalationDecisionSchema`。
+- **行為**: 分析異常原因（如：Scope Creep, Timeout），決定是否升級任務（如：Simple -> Standard）或發起 Emergency 修復流程。
 
 1. **範圍溢出 (Scope Creep)**
    - **情境**: DA 執行 `Simple` 任務時，發現涉及核心架構修改或多檔案牽連。

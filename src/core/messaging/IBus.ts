@@ -61,20 +61,18 @@ export namespace AgentEvents {
 }
 
 /**
- * 型別別名定義
+ * 彙整所有事件型別
  */
-export type SystemEventType = 
-  | SystemEvents.Runtime 
-  | SystemEvents.Session 
-  | SystemEvents.Task;
-
-export type AgentEventType = 
-  | AgentEvents.Supervisor 
-  | AgentEvents.Planning 
-  | AgentEvents.Doing 
-  | AgentEvents.Checking 
-  | AgentEvents.Acting
-  | AgentEvents.Flow;
+export type AllEventTypes = 
+  SystemEvents.Runtime | 
+  SystemEvents.Session | 
+  SystemEvents.Task | 
+  AgentEvents.Supervisor | 
+  AgentEvents.Planning | 
+  AgentEvents.Doing | 
+  AgentEvents.Checking | 
+  AgentEvents.Acting | 
+  AgentEvents.Flow;
 
 /**
  * 統一代理事件負載介面
@@ -95,6 +93,16 @@ export interface IAgentEventPayload {
 }
 
 /**
+ * 代理執行工具時的上下文介面
+ */
+export interface IAgentExecuteContext {
+  sessionId: string;
+  traceId: string;
+  agentId: string;
+  metadata?: Record<string, any>;
+}
+
+/**
  * 代理專用事件型別 (已綁定統一 Payload)
  */
 export type AgentEvent = IEvent<string, IAgentEventPayload>;
@@ -112,7 +120,6 @@ export interface IEvent<T extends string = string, P = any> {
 
 /**
  * 事件總線介面
- * @template P 基礎負載型別約束
  */
 export interface IEventBus<P = any> {
   /**

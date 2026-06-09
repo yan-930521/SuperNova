@@ -1,4 +1,5 @@
-import { TaskStatus, TaskGraphData } from '../../infra/types/task';
+import { TaskGraphData, TaskStatus } from '../../infra/types/task';
+import { IdGenerator } from '../../utils/IdGenerator';
 import { Task } from './Task';
 
 /**
@@ -15,9 +16,9 @@ export class TaskGraph {
   private inDegreeMap = new Map<string, number>();
 
   constructor(
-    public readonly id: string = `graph_${Date.now()}`,
-    public milestones: string[] = [],
-    public currentMilestoneIndex: number = 0
+    public readonly id: string = IdGenerator.graph(),
+    public phases: string[] = [],
+    public currentPhaseIndex: number = 0
   ) {}
 
   /**
@@ -69,7 +70,7 @@ export class TaskGraph {
       if (inDegree === 0) {
         const task = this.nodes.get(taskId);
         // 只有處於待命狀態的任務才算 Ready
-        if (task && (task.status === TaskStatus.PENDING || task.status === TaskStatus.READY)) {
+        if (task && (task.status === 'pending' || task.status === 'ready')) {
           readyTasks.push(task);
         }
       }
@@ -116,8 +117,8 @@ export class TaskGraph {
     this.nodes.clear();
     this.adjList.clear();
     this.inDegreeMap.clear();
-    this.milestones = data.milestones || [];
-    this.currentMilestoneIndex = data.currentMilestoneIndex || 0;
+    this.phases = data.phases || [];
+    this.currentPhaseIndex = data.currentPhaseIndex || 0;
 
     // 1. 載入節點
     for (const nodeDto of data.nodes) {
@@ -143,8 +144,8 @@ export class TaskGraph {
   public toDTO(): TaskGraphData {
     return {
       nodes: this.getAllTasks().map(task => task.toDTO()),
-      milestones: this.milestones,
-      currentMilestoneIndex: this.currentMilestoneIndex
+      phases: this.phases,
+      currentPhaseIndex: this.currentPhaseIndex
     };
   }
 }

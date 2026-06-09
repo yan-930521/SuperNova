@@ -1,26 +1,24 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { z } from 'zod';
-
-import { recorder } from '../../infra/LogManager';
 import { IAgentExecuteContext } from '../../core/messaging/IBus';
 import { BaseFileTool } from './BaseFileTool';
 
 /**
  * WriteFileTool
- * Writes content to a file. Restricted to the ./workspace directory.
+ * 寫入內容至檔案。受限於 ./workspace 目錄。
  */
 export class WriteFileTool extends BaseFileTool<{ path: string, content: string }, string> {
   constructor() {
     super({
       name: 'write_file',
-      description: 'Write content to a file. The path is relative to your current sandbox root.',
+      description: 'Write or overwrite content to a file. The path is relative to the workspace root.',
       category: 'file',
       safety_tier: 'TIER_2',
       required_capabilities: ['file_write'],
       schema: z.object({
-        path: z.string().describe("Target file path (e.g., 'report.md' or 'logs/info.txt'). Do NOT include 'workspace/' prefix."),
-        content: z.string().describe("Text content to write")
+        path: z.string().describe("Target file path to write (e.g., 'report.md')."),
+        content: z.string().describe("Text content to write to the file.")
       })
     });
   }
@@ -29,13 +27,11 @@ export class WriteFileTool extends BaseFileTool<{ path: string, content: string 
     try {
       const fullPath = this.validatePath(input.path, 'write');
 
-      // Create directories if missing
+      // 自動建立不存在的目錄
       const dir = path.dirname(fullPath);
       await fs.mkdir(dir, { recursive: true });
 
       await fs.writeFile(fullPath, input.content, 'utf-8');
-
-      recorder.info(`[WriteFileTool] Successfully wrote to ${input.path}`, { type: 'TOOL', session_id: context.sessionId });
       return `SUCCESS: File written to ${input.path}`;
     } catch (err: any) {
       return `ERROR: Failed to write to file "${input.path}": ${err.message}`;

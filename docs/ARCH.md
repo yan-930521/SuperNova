@@ -5,11 +5,12 @@ SuperNova 是一個基於事件驅動與 PDCA 循環的代理蜂群系統。它�
 
 本系統的核心理念是將「認知」與「執行」解耦，透過標準化的通訊協議讓多個專業代理人協同完成複雜任務。
 
+> **開發指引**：關於各個層級具體 Class 的職責定義與快速上手實作，請參閱 [QUICK_START.md](./QUICK_START.md)。
+
 ## 2. 核心分層與詳細定義
 
-### 2.1 Agent 層 (`src/agent/`)
+### 2.1 Agent 層
 定義代理基類與 PDCA 專業角色。
-- **詳情請參閱**: [Agent 角色定義](agent/roles.md)
 - **核心角色**: 
     - **Supervisor**: 系統中樞，負責路由與分發。
     - **Planning**: 邏輯拆解，產出任務圖譜。
@@ -17,131 +18,155 @@ SuperNova 是一個基於事件驅動與 PDCA 循環的代理蜂群系統。它�
     - **Checking**: 質量門禁，執行結果審核。
     - **Acting**: 持續改進，經驗標準化。
 
-### 2.2 應用層 (`src/application/`)
+### 2.2 應用層
 提供業務邏輯服務，協調各項領域資源。
 - **記憶服務**: 管理 L1/L2/L3 記憶的生命週期。
 - **任務服務**: 處理任務的持久化與狀態追蹤。
 - **會話服務**: 管理用戶會話與上下文隔離。
 
-### 2.3 領域層 (`src/domain/`)
+### 2.3 領域層
 定義系統的核心實體，確保業務邏輯的純粹性。包含任務 (Task)、記憶 (Memory) 與用戶 (User) 的模型定義。
 
-### 2.4 基礎設施層 (`src/infra/`)
+### 2.4 基礎設施層
 提供系統支撐能力。
 - **推理引擎**: 執行 LLM 推理與結構化輸出解析。
-- **持久化層**: 基於文件系統的數據儲存。
-- **監控脈搏**: [PulseEngine](task/self_healing.md) 負責心跳偵測與定期任務。
+- **持久化層**: 基於抽象接口的數據儲存，支持多種後端。
+- **監控脈搏**: 負責系統的心跳偵測與定期自癒任務。
 
-### 2.5 核心層 (`src/core/`)
-系統的基座，提供依賴注入 (DI) 容器、生命週期管理與 [非同步事件總線 (EventBus)](agent/collaboration.md)。
+### 2.5 核心層
+系統的基座，提供依賴注入 (DI) 容器、生命週期管理與非同步事件總線。
 
 ---
 
 ## 3. 核心運作機制
 
-### 3.1 PDCA 閉環協作
+### 3.1 代理生命週期與上下文隔離 (Agent Lifecycle & Context Isolation)
+為了確保系統的高可靠性與可擴展性，SuperNova 的代理架構遵循以下設計原則：
+- **無狀態單例 (Stateless Singletons)**：所有的 Agent (SA, PA, DA, CA, AA) 都是運行在 GlobalRuntime 中的單一實例。它們身上不綁定任何使用者的狀態或對話歷史。這使得同一個 Agent 能夠並行處理來自不同任務的事件。
+- **會話歷史獨立 (Independent Session History)**：每個 Task (本質上是一個二級 Session) 擁有獨立的對話歷史 (`history` 陣列)。這份歷史**不會**跨越 PDCA 階段共享。
+- **清晰的交接 (Explicit Handoff)**：不同階段的 Agent 之間不看對方的內部思考過程。例如，`CheckingAgent` 不會去讀取 `DoingAgent` 嘗試錯誤的 ReAct 對話紀錄；它只透過 L1 Blackboard 上儲存的最終產出與事件 Payload 中攜帶的交接訊息來進行工作。這極大地節省了 Token 消耗並避免了注意力分散 (Attention Dilution)。
+
+### 3.2 模組化推理編排 (Modular Reasoning Orchestration)
+系統不依賴單一大型系統提示詞。中樞代理擔任編排器角色，針對特定決策場景動態調用專業推理模組：
+- **路由專家**：判定任務模板。
+- **換檔專家**：處理異常上報與動態路徑修正。
+
+### 3.3 事件驅動架構 (Event-Driven Architecture)
+相較於傳統的 Pipeline 模式 (`plan().then(do).then(check)`)，SuperNova 堅持採用基於 Event Bus 與 TaskScheduler 的事件驅動架構。其核心考量為：
+- **強大的彈性與自癒能力**：當偵測到問題 (`CHECKING_FAIL` 或 `FLOW_ESCALATE`)，系統不需要依賴複雜的巢狀 `try-catch` 或 `while` 迴圈來回退狀態。TaskScheduler 可以輕鬆地將狀態機退回前一個階段，重新發布 `Start` 事件即可實現重試或換檔。
+- **狀態可持久化與非同步恢復 (Suspend & Resume)**：任務可以在任何階段被中斷（例如等待外部 API 或系統重啟）。只要 Task 的狀態持久化在資料庫中，下次開機便可發出對應的事件無縫接軌。
+- **異步與並行處理**：方便處理由 PlanningAgent 拆解出的大量並行子任務，互不阻塞。
+
+### 3.4 PDCA 閉環協作
 系統透過事件驅動模式推動任務流轉，每個階段皆由專業代理負責並產出驗證標準。
-- **詳情請參閱**: [PDCA 閉環流程](agent/pdca_loop.md) | [代理協作協議](agent/collaboration.md)
 
-### 3.2 三層記憶體架構 (Memory Matrix)
+#### 代理協作任務流轉圖
+
+```mermaid
+sequenceDiagram
+    participant User as 用戶/系統觸發
+    participant SA as SupervisorAgent<br/>(中樞/路由)
+    participant TS as TaskScheduler<br/>(任務排程器)
+    participant PA as PlanningAgent<br/>(規劃師)
+    participant DA as DoingAgent<br/>(行動者)
+    participant CA as CheckingAgent<br/>(審核者)
+    participant AA as ActingAgent<br/>(改善者)
+    participant L1 as L1 Blackboard<br/>(共享黑板)
+
+    User->>SA: 發布 Dispatch 任務目標
+    activate SA
+    SA->>SA: 路由推理 (選擇 PDCA 模板)
+    SA->>TS: 發布 Flow.Initialize (建立任務)
+    deactivate SA
+    
+    activate TS
+    TS->>TS: 建立 Task 實體，狀態進入 READY
+    TS->>TS: 推進狀態 -> PLANNING
+    TS->>PA: 觸發 Planning.Start
+    deactivate TS
+
+    %% P 階段
+    rect rgb(200, 230, 255)
+        Note over PA,TS: 【 P 階段: 拆解與規劃 】
+        activate PA
+        PA->>PA: 分形拆解 (產生 subGraph)
+        PA->>TS: 發布 Planning.Finish (附帶子任務節點)
+        deactivate PA
+    end
+    
+    TS->>TS: 推進狀態 -> DOING
+    TS->>DA: 觸發 Doing.Start
+
+    %% D 階段
+    rect rgb(230, 255, 230)
+        Note over DA,L1: 【 D 階段: ReAct 執行 】
+        activate DA
+        loop ReAct 循環 (Thought -> Action -> Observation)
+            DA->>DA: 推理與工具呼叫
+            DA->>L1: 實時同步觀察結果與產出
+        end
+        DA->>L1: 寫入最終產出 (Final Answer)
+        DA->>TS: 發布 Doing.Finish
+        deactivate DA
+    end
+
+    TS->>TS: 推進狀態 -> CHECKING
+    TS->>CA: 觸發 Checking.Start
+
+    %% C 階段
+    rect rgb(255, 230, 200)
+        Note over CA,SA: 【 C 階段: 質量門禁 】
+        activate CA
+        CA->>L1: 讀取黑板上的執行軌跡與產出
+        CA->>CA: 根據成功標準進行審核
+        
+        alt 審核不通過 (FAIL)
+            CA->>TS: 發布 Checking.Fail (附帶修正建議)
+            TS->>TS: 推進狀態退回 -> DOING
+            TS->>DA: 重新觸發 Doing.Start (Retry)
+        else 邏輯死胡同 (ESCALATE)
+            CA->>SA: 發布 Flow.Escalate (阻礙上報)
+            SA->>SA: 換檔推理 (Shift / Emergency Fix)
+            SA->>TS: 修改模板或中止
+        else 審核通過 (PASS)
+            CA->>TS: 發布 Checking.Pass
+            deactivate CA
+        end
+    end
+
+    TS->>TS: 推進狀態 -> ACTING
+    TS->>AA: 觸發 Acting.Start
+
+    %% A 階段
+    rect rgb(240, 230, 255)
+        Note over AA,TS: 【 A 階段: 知識沉澱 】
+        activate AA
+        AA->>L1: 讀取整體軌跡
+        AA->>AA: 提煉事實 (Facts) 與 SOP
+        AA->>AA: 寫入 L2 / L3 長期記憶
+        AA->>TS: 發布 Acting.Finish
+        deactivate AA
+    end
+
+    TS->>TS: 推進狀態 -> FINISH
+    TS->>User: 任務結案
+```
+
+#### 流程亮點說明：
+1. **中樞路由 (SA)**：起始任務不直接進入死板的流程，而是由 SupervisorAgent 先決定適合的 PDCA 複雜度模板（例如：Simple 還是 Standard）。
+2. **規劃分形 (PA)**：PlanningAgent 會將複雜目標拆解成具體的子任務清單（`subGraph`），這為「任務即會話」的分形架構打好基礎。
+3. **黑板同步 (L1)**：DoingAgent 在 ReAct 循環中會把結果持續寫入 L1 黑板，這確保了隨後的 CheckingAgent 能夠取得實體驗證數據，避免幻覺。
+4. **換檔退回 (Escalation & Retry)**：在 CheckingAgent 階段，任務不只會 Pass。如果實作瑕疵，會退回 DoingAgent；如果遇到邏輯阻礙（底層 API 根本不支援等），則觸發 `ESCALATE` 讓 SupervisorAgent 進行高層次換檔。
+5. **知識沉澱 (AA)**：流程成功後，ActingAgent 負責總結經驗並將其升遷至長期記憶（L2/L3），使整個系統具備演化能力。
+
+### 3.3 三層記憶體架構 (Memory Matrix)
 系統採用分層記憶體以平衡效能與長效知識儲存。
-- **L1 Blackboard (黑板)**: 存放即時變數，採用 Key-Only 投影策略。 [詳情](memory/L1.md)
-- **L2 Fact (事實)**: 存放已驗證的長期事實。 [詳情](memory/L2.md)
-- **L3 SOP (操作手冊)**: 存放標準化作業程序。 [詳情](memory/L3.md)
+- **L1 Blackboard (黑板)**: 存放即時變數。
+- **L2 Fact (事實)**: 存放已驗證的長期事實。
+- **L3 SOP (操作手冊)**: 存放標準化作業程序。
 
-### 3.4 持久化與儲存結構 (Persistence)
-系統採用「會話中心化」的目錄結構，確保數據隔離與跨會話知識複用。
-- **存儲路徑**:
-    - `workspace/memory/L2_global/`: 全系統共用事實庫 (JSONL)。
-    - `workspace/sessions/<sessionId>/`: 會話專屬空間。
-        - `blackboard.json`: L1 即時狀態（單一 JSON）。
-        - `L2_session/`: 本次會話專屬事實。
-        - `tasks/`: 任務元數據、狀態機與執行歷史。
-- **檢索原則**: 遵循「局部優先」策略 (L1 -> L2_session -> L2_global)。
-
----
-
-## 4. 當前進度 (Current Progress)
-*(以下進度反映真實代碼實現狀態)*
-
-### `src/`
-- `index.ts`: 系統入口，啟動示範。
-- **`runtime/`**
-    - `GlobalRuntime.ts`: **GlobalRuntime** (單例)
-        - `start()`: 初始化所有組件。
-        - `stop()`: 優雅關閉。
-- **`core/`**
-    - **`container/`**
-        - `ComponentContainer.ts`: **ComponentContainer**
-            - `register(name, instance)`: 註冊組件。
-            - `boot()`: 啟動所有組件生命週期。
-    - **`lifecycle/`**
-        - `ILifecycle.ts`: 生命週期介面。
-    - **`messaging/`**
-        - `MessageBus.ts`: **EventBus**
-            - `publish(event)` / `subscribe(type, handler)`: 非同步事件廣播。
-            - `send(command)`: 指令發送。
-- **`infra/`**
-    - `LogManager.ts`: **LogManager** (Recorder)
-        - `record(action, message, context)`: 結構化操作紀錄。
-    - `PulseEngine.ts`: **PulseEngine**
-        - `tick()`: 發布系統脈搏事件。
-        - `watchTask(taskId, timeout)`: 任務心跳監控。
-    - `ModelRegistry.ts`: **ModelRegistry** & **InferenceEngine**
-        - `infer(state, schema, options)`: 執行結構化推理。
-    - **`persistence/`**
-        - `IRepository.ts`: 儲存庫介面定義。
-        - **`filesystem/`**: 各種 FileSystem Repository 實現。
-- **`agent/`**
-    - `BaseAgent.ts`: **BaseAgent** (抽象類)
-        - `setupSubscriptions()`: 定義事件監聽。
-    - **`roles/`**
-        - `SupervisorAgent.ts`: **SupervisorAgent** - 中樞。
-        - `PlanningAgent.ts`: **PlanningAgent** - 規劃者。
-        - `DoingAgent.ts`: **DoingAgent** - 執行者。
-        - `CheckingAgent.ts`: **CheckingAgent** - 審核者。
-        - `ActingAgent.ts`: **ActingAgent** - 改善者。
-- **`application/`**
-    - **`memory/`**: **MemoryService**
-    - **`identity/`**: **UserService**
-    - **`session/`**: **SessionService**
-
----
-
-## 4. 當前進度 (Current Progress)
-
-### 已完成模塊 (Completed)
-- [x] **系統基礎建設**: 
-    - [x] 組件容器 (DI) 與生命週期管理。
-    - [x] 非同步事件總線 (EventBus)。
-    - [x] 結構化日誌系統 (JSONL Recorder)。
-    - [x] 全局運行時 (Global Runtime) 組合根。
-    - [x] **通訊標準化**: 實作 `traceId` 與 `spanId` 追蹤機制。
-- [x] **監控與事件**:
-    - [x] 脈搏引擎 (PulseEngine) 定期觸發與超時監控 (支援 Trace 追蹤)。
-- [x] **Agent 體系**:
-    - [x] 代理基類 (BaseAgent) 定義。
-    - [x] 五大專業角色 (Supervisor, Planning, Doing, Checking, Acting) 通訊骨架。
-- [x] **數據持久化**:
-    - [x] 文件系統存儲 (FileSystem Repository) 基礎實作。
-    - [x] 層級式記憶存儲 (L1/L2/L3 Memory Repository) 基礎結構。
-- [x] **工具系統**:
-    - [x] 工具註冊表 (ToolRegistry) 與標準工具集 (File, Web, System) 骨架。
-
-### 待優化 (TODO)
-- [ ] **認知與上下文實裝**:
-    - [ ] **ContextService 完整對接**: 實作從 MemoryService 動態獲取 L1 黑板 Keys 並注入 Prompt。
-    - [ ] **DoingAgent 語義對齊**: 實作 L3 SOP 與 L1 黑板數據的自動掛接邏輯。
-- [ ] **自癒機制實裝**:
-    - [ ] **Level 1**: 任務 3x3 自癒決策 - 節點原地重試機制。
-    - [ ] **Level 2**: 認知重規劃 (Cognitive Re-plan) 機制。
-    - [ ] **Level 3**: 人工介入 (Human-in-the-loop) 暫停與恢復。
-- [ ] **長期管理 (Trigger/Hook) 邏輯**:
-    - [ ] **TODO**: 討論觸發後是啟動完整 PDCA 鏈還是執行輕量化反應。
-- [ ] **Agent 核心推理**: 
-    - [ ] 為五大角色編寫並測試具體的 LLM System Prompts 與推理路徑。
-    - [ ] 打通 `DoingAgent` 的實際工具執行 (Tool Execution) 鏈路。
-- [ ] **記憶與隔離**:
-    - [ ] 完善 MemoryService 的 Session 隔離機制（目前為跨 Session 共用）。
-    - [ ] 實作 L1 -> L2 的事實沉澱與摘要算法。
-- [ ] **前端界面**: 完成 Web UI 監控面板與交互終端。
+### 3.4 持久化與儲存結構
+系統採用「會話中心化」的邏輯結構，確保數據隔離與跨會話知識複用。
+- **數據隔離**: 每個會話擁有獨立的即時狀態與任務軌跡。
+- **知識沉澱**: 全域事實庫支持跨任務的共用。
+- **檢索原則**: 遵循「局部優先」策略。

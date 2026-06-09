@@ -35,7 +35,7 @@ export class TextSummarizerTool extends BaseTool {
       const summary = await model.withSystemPrompt("You are a professional summarizer.").infer({
         goal: "Summarize text",
         messages: [{ role: 'user', content: prompt } as any],
-        planning: { milestones: [], currentMilestoneIdx: 0, taskGraph: null, projectedContext: {} },
+        planning: { phases: [], currentPhaseIdx: 0, taskGraph: null, projectedContext: {} },
         thoughtTree: { nodes: [], rootId: null, activeNodeId: null, iterationCount: 0 },
         currentTask: "Summarization",
         lastEvaluations: [],

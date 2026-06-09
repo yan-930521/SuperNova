@@ -12,7 +12,7 @@ export class L3Memory extends BaseMemory {
     timestamp: number,
     public readonly data: ISOPData
   ) {
-    super(id, sessionId, MemoryLayer.L3, authorId, timestamp);
+    super(id, sessionId, 'L3', authorId, timestamp);
   }
 
   public toDTO(): MemoryDTO<ISOPData> {

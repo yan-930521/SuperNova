@@ -3,33 +3,24 @@
 SuperNova 採用「模板驅動的狀態機 (Template-Driven State Machine)」模型進行任務編排，確保在不同場景下具備最優的執行路徑。
 
 ## 1. 核心編排模式：TaskFlow 狀態機
-每個 `Task` 實體內部持有一個 **`TaskFlow`** 屬性，這是一個動態的狀態機實體。它不僅定義了任務的「執行路徑」，更負責在狀態變遷時發送對應的 Agent 指令事件。
+每個 `Task` 實體內部持有一個 **`TaskFlow`** 實例。在 0.4.0 架構中，這不再是簡單的數據結構，而是一套位於 `src/domain/task/flow/` 的 **獨立領域類別體系**。
 
-### 1.1 任務類型模板 (Task Templates / Workflows)
-根據不同的業務場景，`TaskFlow` 提供以下 7 種預定義模板：
+### 1.1 任務類型類別 (Task Flow Classes)
+每個任務模板對應一個具體的類別，負責封裝該模板特有的狀態遷徙邏輯：
 
-- **Instant**: `READY -> DOING -> FINISH` (極短路徑)。
-- **Simple**: `READY -> DOING -> FINISH`。
-- **Standard**: `READY -> PLANNING -> DOING -> CHECKING -> ACTING -> FINISH` (完整 PDCA)。
-- **Complex**: 強化版 Standard，帶有完整驗證流程。
-- **Exploratory**: `READY -> PLANNING -> [DA1, DA2...] (並行) -> CHECKING -> ACTING -> FINISH`。
-- **Emergency**: `READY -> DOING (reAct) -> CHECKING -> ACTING -> FINISH` (跳過規劃)。
-- **Recursive**: 具備層層遞歸拆解能力的 PDCA 流程。
+- **`InstantFlow`**: 僅執行單次行動。
+- **`SimpleFlow`**: `READY -> DOING -> FINISH`。
+- **`StandardFlow`**: `READY -> PLANNING -> DOING -> CHECKING -> ACTING -> FINISH`。
+- **`ComplexFlow`**: 強化版 Standard，帶有更深度的驗證路徑。
+- **`ExploratoryFlow`**: 支援多路徑並行執行。
+- **`EmergencyFlow`**: `READY -> DOING (reAct) -> CHECKING -> ACTING -> FINISH`。
+- **`RecursiveFlow`**: 處理任務遞歸拆解。
+
+### 1.2 遷徙行為
+`TaskFlow` 類別定義了 `nextPhase(result)` 方法，根據執行結果決定狀態機的下一個節點，並在切換時觸發對應的系統事件。
 
 ### 1.2 TaskFlow 數據結構 (Domain Schema)
-```typescript
-interface TaskFlow {
-  templateType: string;      // 模板名稱
-  currentPhase: string;      // 當前階段 (e.g., 'DOING')
-  phases: string[];         // 完整的階段序列
-  history: Array<{           // 變遷軌跡
-    phase: string;
-    timestamp: number;
-    result: string;
-  }>;
-  isEscalated: boolean;      // 換檔標記
-}
-```
+系統追蹤並維護任務模板類型、當前所處階段、完整的階段序列以及變遷軌跡。同時也包含用於異常處理的換檔標記，確保流程具備可回溯性。
 
 ### 1.3 任務的分形架構 (Fractal Architecture)
 為了支援複雜任務的遞歸拆解（Recursive 模板），每個 `Task` 實體具備「分形」能力：

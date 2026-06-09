@@ -1,12 +1,10 @@
 import * as path from 'path';
-import { z } from 'zod';
-
 import { IAgentExecuteContext } from '../../core/messaging/IBus';
 import { BaseTool, ToolMetadata } from '../BaseTool';
 
 /**
  * BaseFileTool
- * Base class for all file-related tools with sandbox protection.
+ * 檔案操作工具基類，提供沙箱保護與路徑驗證。
  */
 export abstract class BaseFileTool<TIn = any, TOut = any> extends BaseTool<TIn, TOut> {
   protected readonly WORKSPACE_DIR: string;
@@ -16,7 +14,9 @@ export abstract class BaseFileTool<TIn = any, TOut = any> extends BaseTool<TIn, 
     '.git',
     'node_modules',
     'dist',
-    'package-lock.json'
+    'package-lock.json',
+    'bun.lockb',
+    'supernova.json'
   ];
 
   constructor(metadata: ToolMetadata<TIn>) {
@@ -26,37 +26,35 @@ export abstract class BaseFileTool<TIn = any, TOut = any> extends BaseTool<TIn, 
   }
 
   /**
-   * Validate if the path is within the sandbox.
-   * 自動處理路徑前綴：確保所有操作都在 workspace/ 內，且不會重複添加前綴。
+   * 驗證路徑是否在沙箱內 (./workspace)
+   * 自動處理路徑前綴，防止逃逸。
    */
   protected validatePath(filePath: string, operation: 'read' | 'write' | 'delete'): string {
-    // 1. 嘗試先從專案根目錄解析，看是否已經在 workspace 內
+    // 1. 統一解析為絕對路徑
     const absoluteFromRoot = path.resolve(this.PROJECT_ROOT, filePath);
     const relativeToWorkspaceFromRoot = path.relative(this.WORKSPACE_DIR, absoluteFromRoot);
     
     let absolutePath: string;
 
-    // 檢查是否已經在 workspace 內 (沒有向上跳轉且不是絕對路徑)
+    // 檢查是否已經在 workspace 內
     const alreadyInWorkspace = !relativeToWorkspaceFromRoot.startsWith('..') && !path.isAbsolute(relativeToWorkspaceFromRoot);
 
     if (alreadyInWorkspace) {
-        // 如果已經在 workspace 內 (例如傳入 "workspace/test.txt")，直接使用
         absolutePath = absoluteFromRoot;
     } else {
-        // 如果不在 workspace 內 (例如傳入 "test.txt")，則將其映射至 workspace 內
-        // 同時處理掉絕對路徑的情況，強制將其視為相對路徑
+        // 強制將所有路徑視為相對路徑並映射至 workspace 內
         const normalizedRelative = path.isAbsolute(filePath) 
             ? path.relative(this.PROJECT_ROOT, filePath) 
             : filePath;
         absolutePath = path.resolve(this.WORKSPACE_DIR, normalizedRelative);
     }
 
-    // 2. 嚴格邊界檢查 (二次確認，防止 ../../ 逃逸)
+    // 2. 嚴格邊界檢查 (防止 ../../ 逃逸)
     const finalRelative = path.relative(this.WORKSPACE_DIR, absolutePath);
     const isEscaping = finalRelative.startsWith('..') || path.isAbsolute(finalRelative);
 
     if (isEscaping) {
-      throw new Error(`Access denied: Operation escaped sandbox boundary. Attempted: ${filePath}`);
+      throw new Error(`Access denied: Operation [${operation}] escaped sandbox boundary. Attempted: ${filePath}`);
     }
 
     // 3. 黑名單檢查
@@ -71,10 +69,6 @@ export abstract class BaseFileTool<TIn = any, TOut = any> extends BaseTool<TIn, 
   private getBlacklistedPart(relativePath: string): string | null {
     const parts = relativePath.split(path.sep);
     return parts.find(part => this.BLACKLIST.includes(part)) || null;
-  }
-
-  private isBlacklisted(relativePath: string): boolean {
-    return this.getBlacklistedPart(relativePath) !== null;
   }
 
   abstract run(input: TIn, context: IAgentExecuteContext): Promise<TOut>;

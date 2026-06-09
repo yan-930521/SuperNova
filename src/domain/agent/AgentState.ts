@@ -33,8 +33,8 @@ export interface AgentState {
   };
   /** 任務規劃空間 (執行模式) */
   planning?: {
-    milestones: string[];
-    currentMilestoneIdx: number;
+    phases: string[];
+    currentPhaseIdx: number;
     taskGraph: TaskGraphData | null;
     projectedContext: unknown;
   };
@@ -95,14 +95,14 @@ export const AgentStateAnnotation = Annotation.Root({
   /** 任務規劃空間 */
   planning: Annotation<Required<NonNullable<AgentState['planning']>>>({
     reducer: (prev, action) => ({
-      milestones: action?.milestones ?? prev.milestones,
-      currentMilestoneIdx: action?.currentMilestoneIdx ?? prev.currentMilestoneIdx,
+      phases: action?.phases ?? prev.phases,
+      currentPhaseIdx: action?.currentPhaseIdx ?? prev.currentPhaseIdx,
       taskGraph: action?.taskGraph ?? prev.taskGraph,
       projectedContext: action?.projectedContext ?? prev.projectedContext,
     }),
     default: () => ({
-      milestones: [],
-      currentMilestoneIdx: 0,
+      phases: [],
+      currentPhaseIdx: 0,
       taskGraph: null,
       projectedContext: {},
     }),

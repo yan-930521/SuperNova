@@ -1,6 +1,7 @@
 import { ILifecycle } from '../core/lifecycle/ILifecycle';
-import { AgentEvents, AllEventTypes, Events, IEvent, IEventBus } from '../core/messaging/IBus';
+import { AgentEvents, AllEventTypes, SystemEvents, IEvent, IEventBus } from '../core/messaging/IBus';
 import { recorder } from './LogManager';
+import { IdGenerator } from '../utils/IdGenerator';
 
 /**
  * 脈搏掛鉤類型
@@ -196,7 +197,7 @@ export class PulseEngine implements ILifecycle {
 
     // 0. 發布系統脈搏事件 (驅動排程器)
     this.eventBus.publish({
-      type: Events.System.Tick,
+      type: SystemEvents.Runtime.Tick,
       timestamp: Date.now(),
       payload: { tickCount: this.tickCount }
     });
@@ -212,7 +213,7 @@ export class PulseEngine implements ILifecycle {
         
         // 發布新的強型別任務失敗事件
         this.eventBus.publish({
-          type: Events.Task.Failed,
+          type: SystemEvents.Task.Failed,
           timestamp: Date.now(),
           payload: { 
             taskId, 
@@ -227,7 +228,7 @@ export class PulseEngine implements ILifecycle {
           payload: {
             sessionId: info.sessionId,
             traceId: info.traceId,
-            spanId: `timeout_${taskId}_${Date.now()}`,
+            spanId: IdGenerator.span('sys'),
             taskId,
             reason: `TIMEOUT: Task execution exceeded ${info.timeout / 1000}s`,
             metadata: { originalTimeout: info.timeout }

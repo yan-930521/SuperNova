@@ -1,8 +1,17 @@
 import { BaseSession } from '../session/BaseSession';
 import { TaskDTO, TaskStatus } from '../../infra/types/task';
 import { IAgentExecuteResult } from '../../infra/types/agent';
-import { TaskFlow } from './template/TaskFlow';
+import { BaseTaskFlow } from './flow/BaseTaskFlow';
+import { StandardFlow } from './flow/StandardFlow';
+import { SimpleFlow } from './flow/SimpleFlow';
+import { EmergencyFlow } from './flow/EmergencyFlow';
 import { TaskGraph } from './TaskGraph';
+
+// 導入所有 Flow 類別用於還原
+import { InstantFlow } from './flow/InstantFlow';
+import { ComplexFlow } from './flow/ComplexFlow';
+import { ExploratoryFlow } from './flow/ExploratoryFlow';
+import { RecursiveFlow } from './flow/RecursiveFlow';
 
 /**
  * 任務實體 (Task)
@@ -15,19 +24,19 @@ export class Task extends BaseSession {
   public requiredCapabilities: string[] = [];
   public retryCount: number = 0;
 
-  /** 任務流轉狀態機 (微觀流程) */
-  public flow!: TaskFlow;
+  /** 任務流轉狀態機 (微觀流程) - 採用獨立類別實作 */
+  public flow!: BaseTaskFlow;
   /** 子任務圖 (宏觀拆解) */
   public subGraph?: TaskGraph;
 
   constructor(
     id: string,
-    public readonly chainId: string,
+    public readonly traceId: string,
     public readonly sessionId: string, // 父會話 ID
     public readonly goal: string,
     public readonly description: string,
     public readonly type: string = 'work',
-    status: TaskStatus = TaskStatus.PENDING
+    status: TaskStatus = 'pending'
   ) {
     super(id, status);
   }
@@ -41,9 +50,11 @@ export class Task extends BaseSession {
 
   /**
    * 驅動狀態機前進
+   * @param result 當前 Phase 的執行結果
    */
   public nextPhase(result: string): string {
-    return this.flow.transition(result);
+    // 呼叫領域類別內置的遷徙邏輯
+    return this.flow.nextPhase(result);
   }
 
   /**
@@ -55,20 +66,33 @@ export class Task extends BaseSession {
     }
     
     if (aeResult.status === 'success') {
-      this.updateStatus(TaskStatus.COMPLETED);
+      this.updateStatus('completed');
     } else {
-      this.updateStatus(TaskStatus.FAILED);
+      this.updateStatus('failed');
       this.metadata.lastError = aeResult.error;
     }
   }
 
   /**
-   * 從 DTO 還原為實體實例
+   * 設置子圖數據
+   * 確保將 DTO 數據正確轉換為 TaskGraph 領域物件
+   */
+  public setSubGraph(data: any): void {
+    if (data instanceof TaskGraph) {
+      this.subGraph = data;
+    } else {
+      this.subGraph = new TaskGraph();
+      this.subGraph.loadData(data);
+    }
+  }
+
+  /**
+   * 從 DTO 還原為實體實例 (根據 templateType 初始化對應的 Flow 類別)
    */
   public static fromDTO(dto: TaskDTO): Task {
     const task = new Task(
       dto.id,
-      dto.chainId,
+      dto.traceId,
       dto.sessionId,
       dto.goal,
       dto.description,
@@ -81,15 +105,25 @@ export class Task extends BaseSession {
     task.retryCount = dto.retryCount || 0;
     task.metadata = dto.metadata || {};
     
-    // 還原狀態機
+    // 根據 DTO 的 templateType 還原具體的 Flow 類別實例
     if (dto.flow) {
-      task.flow = TaskFlow.fromDTO(dto.flow);
+      const type = dto.flow.templateType;
+      switch (type) {
+        case 'Instant': task.flow = new InstantFlow(); break;
+        case 'Simple': task.flow = new SimpleFlow(); break;
+        case 'Standard': task.flow = new StandardFlow(); break;
+        case 'Complex': task.flow = new ComplexFlow(); break;
+        case 'Exploratory': task.flow = new ExploratoryFlow(); break;
+        case 'Emergency': task.flow = new EmergencyFlow(); break;
+        case 'Recursive': task.flow = new RecursiveFlow(); break;
+        default: task.flow = new StandardFlow(); break;
+      }
+      task.flow.restoreFromDTO(dto.flow);
     }
 
     // 還原子圖 (分形)
     if (dto.subGraph) {
-      task.subGraph = new TaskGraph();
-      task.subGraph.loadData(dto.subGraph);
+      task.setSubGraph(dto.subGraph);
     }
 
     if (dto.history) {
@@ -105,7 +139,7 @@ export class Task extends BaseSession {
   public toDTO(): TaskDTO {
     return {
       id: this.id,
-      chainId: this.chainId,
+      traceId: this.traceId,
       sessionId: this.sessionId,
       goal: this.goal,
       description: this.description,
@@ -118,11 +152,7 @@ export class Task extends BaseSession {
       history: this.history,
       metadata: this.metadata as Record<string, any>,
       flow: this.flow.toDTO(),
-      subGraph: this.subGraph ? {
-        nodes: this.subGraph.getAllTasks().map(t => t.toDTO()),
-        milestones: [], // TODO: 補全里程碑邏輯
-        currentMilestoneIndex: 0
-      } : undefined
+      subGraph: this.subGraph ? this.subGraph.toDTO() : undefined
     };
   }
 }

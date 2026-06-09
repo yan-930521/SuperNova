@@ -7,6 +7,7 @@ import { IMemoryRepository } from '../../infra/persistence/IRepository';
 import {
     IBlackboardPointer, IFactData, ISOPData, MemoryDTO, MemoryLayer
 } from '../../infra/types/memory';
+import { IdGenerator } from '../../utils/IdGenerator';
 
 /**
  * MemoryService (記憶服務 - L1/L2/L3 中央管理者)
@@ -19,9 +20,9 @@ import {
 export class MemoryService implements ILifecycle {
   // L1: sessionId -> key -> L1Memory
   private l1 = new Map<string, Map<string, L1Memory>>();
-  // L2: id -> L2Memory
+  // L2: sessionId -> id -> L1Memory
   private l2 = new Map<string, Map<string, L2Memory>>();
-  // L3: id -> L3Memory
+  // L3: sessionId -> id -> L1Memory
   private l3 = new Map<string, Map<string, L3Memory>>();
 
   constructor(
@@ -74,7 +75,7 @@ export class MemoryService implements ILifecycle {
     data: any,
     description: string = ''
   ): Promise<void> {
-    const pointerId = `ptr_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+    const pointerId = IdGenerator.pointer();
     const l1Data: IBlackboardPointer = {
       key,
       pointerId,
@@ -96,6 +97,15 @@ export class MemoryService implements ILifecycle {
       session_id: sessionId,
       agent_id: authorId
     });
+  }
+
+  /**
+   * 獲取特定會話的 L1 黑板 Key 列表
+   */
+  async getL1Index(sessionId: string): Promise<string[]> {
+    const sessionL1 = this.l1.get(sessionId);
+    if (!sessionL1) return [];
+    return Array.from(sessionL1.keys());
   }
 
   // --- L2 / L3 操作 ---
