@@ -16,6 +16,14 @@ export class IdGenerator {
   static task(): string { return this.generate('task_', false); } // 任務數量多，可省略時間戳縮短長度
   
   /**
+   * 從根任務 ID 生成 Trace ID (錨定策略)
+   * @param taskId 根任務 ID
+   */
+  static traceFromTask(taskId: string): string {
+    return taskId;
+  }
+
+  /**
    * 生成 Span ID
    * @param role 發起動作的 Agent 角色縮寫 (sa, pa, da, ca, aa, sys, user)
    */
