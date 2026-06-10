@@ -34,11 +34,9 @@ export class CheckingAgent extends BaseAgent {
     this.log(`QA Verification started for node: ${taskId}`, 'info', { traceId, sessionId });
 
     try {
-      // 1. 獲取上下文服務
-      const contextService = this.runtime.container.resolve<ContextService>('ContextService');
-
-      // 2. 渲染檢核指令 (自動投影 L1 黑板中的執行痕跡)
-      const systemPrompt = contextService.renderPrompt('CheckingAgent', event.payload, []);
+      // 1 & 2. 準備系統提示詞 (包含 Identity 貫通與黑板上下文)
+      const identityPrompt = PromptLoader.load('prompts/identity/checking_agent.md');
+      const systemPrompt = await this.getSystemPrompt(identityPrompt, event.payload);
 
       // 3. 定義結構化審核 Schema (已移至 AgentOutputSchemas)
 

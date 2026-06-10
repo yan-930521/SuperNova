@@ -38,15 +38,8 @@ export class DoingAgent extends BaseAgent {
         throw new Error("ReAct Engine is not initialized.");
       }
 
-      const contextService = this.runtime.container.resolve<ContextService>('ContextService');
-      const memoryService = this.runtime.container.resolve<MemoryService>('MemoryService');
-
-      // 1. 初始化會話上下文：獲取當前黑板已有的 Keys 指針
-      const blackboardKeys = await memoryService.getL1Index(sessionId);
-
-      // 2. 準備系統提示詞
-      const systemPrompt = contextService.renderPrompt('DoingAgent', event.payload, blackboardKeys);
-      const finalSystemPrompt = `${this.identityPrompt}\n\n${systemPrompt}`;
+      // 1 & 2. 準備系統提示詞 (包含 Identity 貫通與黑板上下文)
+      const finalSystemPrompt = await this.getSystemPrompt(this.identityPrompt, event.payload);
 
       // 3. 準備給 LLM 的輸入任務說明
       const inputMsg = `

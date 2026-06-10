@@ -38,12 +38,10 @@ export class PlanningAgent extends BaseAgent {
       // 1. TODO: 整合 SOP (L3) 檢索邏輯
       // 在正式推理前，應先依據 goal 關鍵字從 storage.sops_dir 檢索匹配的 SOP
 
-      // 2. 獲取上下文服務並準備渲染環境
-      const contextService = this.runtime.container.resolve<ContextService>('ContextService');
-      
-      // TODO: 這裡應從 MemoryService 獲取當前會話相關的 L2/L3 背景知識
-      const blackboardKeys: string[] = []; 
-      const systemPrompt = contextService.renderPrompt('PlanningAgent', event.payload, blackboardKeys);
+      // 2. 準備系統提示詞 (包含 Identity 貫通)
+      // TODO: 這裡應從 MemoryService 獲取當前會話相關的 L2/L3 背景知識 (已透過 getSystemPrompt 整合)
+      const identityPrompt = PromptLoader.load('prompts/identity/planning_agent.md');
+      const systemPrompt = await this.getSystemPrompt(identityPrompt, event.payload);
 
       // 3. 調用預熱好的引擎進行分階段拆解 (Goal Decomposition)
       const result = await this.planningEngine.withSystemPrompt(systemPrompt).infer({

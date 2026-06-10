@@ -35,11 +35,11 @@ export class ActingAgent extends BaseAgent {
     this.log(`Knowledge distillation started for node: ${taskId}`, 'info', { traceId, sessionId });
 
     try {
-      const contextService = this.runtime.container.resolve<ContextService>('ContextService');
       const memoryService = this.runtime.container.resolve<MemoryService>('MemoryService');
 
-      // 1. 渲染改善指令 (自動加載執行軌跡與黑板數據)
-      const systemPrompt = contextService.renderPrompt('ActingAgent', event.payload, []);
+      // 1. 渲染改善指令 (包含 Identity 貫通與黑板上下文)
+      const identityPrompt = PromptLoader.load('prompts/identity/acting_agent.md');
+      const systemPrompt = await this.getSystemPrompt(identityPrompt, event.payload);
 
       // 2. 定義結構化沈澱 Schema (已移至 AgentOutputSchemas)
       
