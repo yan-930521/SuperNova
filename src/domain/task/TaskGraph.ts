@@ -136,6 +136,14 @@ export class TaskGraph {
         }
       }
     }
+
+    // 3. 狀態對齊：根據節點狀態修正入度表
+    // 理由：若父任務在持久化前已完成，還原後需手動解鎖子任務的入度。
+    for (const task of this.nodes.values()) {
+      if (task.status === 'completed') {
+        this.handleTaskCompletion(task.id);
+      }
+    }
   }
 
   /**

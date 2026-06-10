@@ -27,6 +27,7 @@ export interface ILogEntry {
   session_id?: string;    
   agent_id?: string;      
   trace_id?: string;
+  task_id?: string;
   span_id?: string;       // 新增：當前執行片段 ID
   parent_span_id?: string; // 新增：父執行片段 ID
   message: string;        

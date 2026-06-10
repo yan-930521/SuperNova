@@ -1,17 +1,27 @@
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
-import { AgentEvent, AgentEvents, IAgentEventPayload, IEventBus } from '../../core/messaging/IBus';
+
+import { SessionService } from '../../application/session/SessionService';
+import { TaskService } from '../../application/task/TaskService';
+import {
+    AgentEvent, AgentEvents, IAgentEventPayload, IEventBus, SystemEvents
+} from '../../core/messaging/IBus';
+import { Task } from '../../domain/task/Task';
+import { InferenceEngine } from '../../infra/ModelRegistry';
 import { ModelPreset } from '../../infra/types/agent';
-import { EscalationDecisionSchema, RoutingDecisionSchema } from '../../schemas/agent/AgentOutputSchemas';
+import { MessageRole } from '../../infra/types/session';
+import { GlobalRuntime } from '../../runtime/GlobalRuntime';
+import {
+    EscalationDecisionSchema, RoutingDecisionSchema
+} from '../../schemas/agent/AgentOutputSchemas';
+import { IdGenerator } from '../../utils/IdGenerator';
 import { PromptLoader } from '../../utils/PromptLoader';
 import { BaseAgent } from '../BaseAgent';
-import { IdGenerator } from '../../utils/IdGenerator';
-import { InferenceEngine } from '../../infra/ModelRegistry';
 
 /**
  * SupervisorAgent (模組化推理編排器)
- * SuperNova 0.4.0 核心中樞
+ * SuperNova 0.5.0 核心中樞
  * 職責: 監聽事件並調用專業推理引擎（路由、換檔）進行精確決策。
- * v0.5.0: 升級為混合雙擎，具備互動守門員能力。
+ * v0.5.0: 升級為混合雙擎，具備互動守門員能力，並全面接管任務流轉決策權。
  */
 export class SupervisorAgent extends BaseAgent {
   /** 專業推理引擎緩存 (Fast Path) */
@@ -19,6 +29,7 @@ export class SupervisorAgent extends BaseAgent {
   private shifterEngine: InferenceEngine;
   /** 角色身分定義 */
   private identityPrompt: string;
+  private taskService: TaskService;
 
   constructor(id: string, bus: IEventBus<IAgentEventPayload>) {
     super(id, bus);
@@ -26,42 +37,59 @@ export class SupervisorAgent extends BaseAgent {
     this.routerEngine = this.initEngine(ModelPreset.SMART, 'prompts/reasoning/sa_router.md');
     this.shifterEngine = this.initEngine(ModelPreset.SMART, 'prompts/reasoning/sa_gear_shifter.md');
     
+    const container = GlobalRuntime.getInstance().container;
+    this.taskService = container.resolve<TaskService>('TaskService');
+
     // 初始化 ReAct 執行器用於對話互動 (Conversational Path)
     this.buildExecutionEngine(ModelPreset.SMART);
   }
 
   protected setupSubscriptions(): void {
-    // 1. 監聽全局分派指令 (對接用戶或外部系統)
-    this.bus.subscribe(AgentEvents.Supervisor.Dispatch, this.onDispatch.bind(this));
+    this.bus.subscribe(AgentEvents.Control.Chat, (e) => this.onChat(e));
+    this.bus.subscribe(AgentEvents.Control.Halt, (e) => {});
+    this.bus.subscribe(AgentEvents.Control.Dispatch, (e) => this.onDispatch(e));
 
-    // 2. 監聽異常上報 (對接內部 Sub-Agent)
-    this.bus.subscribe(AgentEvents.Flow.Escalate, this.onEscalate.bind(this));
+    this.bus.subscribe(AgentEvents.Flow.Initialize, (e) => this.onFlowInitialize(e));
+    this.bus.subscribe(AgentEvents.Flow.Transition, (e) => {});
+    this.bus.subscribe(AgentEvents.Flow.Escalate, (e) => this.onEscalate(e));
+
+    this.bus.subscribe(AgentEvents.Phase.Start, (e) => {});
+    this.bus.subscribe(AgentEvents.Phase.Finish, (e) => this.onPhaseFinish(e));
+    this.bus.subscribe(AgentEvents.Phase.Fail, (e) => this.onPhaseFail(e));
+
+    // 5. 監聽脈搏心跳進行調度
+    this.bus.subscribe(SystemEvents.Runtime.Tick, () => this.onTick());
   }
 
   /**
-   * 處理全局分派：啟動對話式守門員機制 (Conversational Path)
+   * 處理互動式對話：與用戶進行 ReAct 循環以釐清需求
    */
-  private async onDispatch(event: AgentEvent): Promise<void> {
-    const { sessionId, goal } = event.payload;
-    // 錨定點：不再手動生成 traceId，交由 TaskService 在建立根任務時自動處理
-    const traceId = event.payload.traceId;
+  private async onChat(event: AgentEvent): Promise<void> {
+    const { sessionId, content } = event.payload;
+    const traceId = event.payload.traceId || IdGenerator.trace();
 
-    this.log(`[Supervisor] Handling dispatch request. Goal: ${goal}`, 'info', { traceId, sessionId });
+    this.log(`[Supervisor] User interaction started. Content: ${content}`, 'info', { traceId, sessionId });
 
     try {
-      if (!this.reactAgent) {
-        throw new Error("Supervisor ReAct Engine is not initialized.");
-      }
+      if (!this.reactAgent) throw new Error("Supervisor ReAct Engine is not initialized.");
 
-      // 1. 準備系統提示詞 (包含 Identity 貫通與黑板上下文)
-      const finalSystemPrompt = await this.getSystemPrompt(this.identityPrompt, event.payload);
+      const sessionService = this.runtime.container.resolve<SessionService>('SessionService');
+      
+      // 1. 獲取會話實體並同步歷史紀錄
+      const session = await sessionService.getOrCreateSession(sessionId);
+      
+      // 將用戶當前輸入加入歷史
+      session.addMessage('user', MessageRole.USER, content || '');
 
-      // 2. 準備輸入訊息
-      const inputMsg = `User Goal: ${goal}`;
+      // 2. 準備系統提示詞 (包含 Identity 貫通與黑板上下文)
+      const systemPrompt = await this.getSystemPrompt(this.identityPrompt, event.payload);
 
-      this.updateHeartbeat(sessionId); // 使用 Session ID 作為心跳對象
+      // 3. 獲取完整歷史紀錄作為上下文
+      const historyMessages = session.getLangChainMessages();
 
-      // 4. 透過 RunnableConfig 傳遞 context 給底層工具 (DispatchTaskTool 需要)
+      this.updateHeartbeat(sessionId);
+
+      // 4. 透過 RunnableConfig 傳遞 context 給底層工具
       const config = {
         configurable: {
           toolContext: {
@@ -73,63 +101,221 @@ export class SupervisorAgent extends BaseAgent {
         }
       };
 
-      // 5. 執行 ReAct 迴圈：可能直接回答用戶，或呼叫 dispatch_task
+      // 5. 執行 ReAct 迴圈 (注入歷史紀錄)
       const result = await this.reactAgent.invoke({
         messages: [
-          new SystemMessage(finalSystemPrompt),
-          new HumanMessage(inputMsg)
+          new SystemMessage(systemPrompt),
+          ...historyMessages
         ]
       }, config);
 
-      // 解析最後一個 AI 訊息作為結果 (如果是對話追問)
       const finalAnswer = result.messages[result.messages.length - 1].content;
-      this.log(`[Supervisor] Interaction finished. Response: ${String(finalAnswer).substring(0, 100)}...`, 'info', { traceId, sessionId });
-
-    } catch (error) {
-      this.log(`[Supervisor] Dispatch processing failed: ${error}`, 'error', { traceId, sessionId });
       
-      // 容錯機制：若 ReAct 失敗，嘗試降級為原有的快速路由 (Fast Path)
-      this.log(`[Supervisor] Falling back to legacy fast-path routing...`, 'warn', { traceId, sessionId });
-      await this.legacyFastPathRouting(event);
+      // 6. 將 AI 回覆存回歷史紀錄並持久化
+      session.addMessage(this.id, MessageRole.ASSISTANT, String(finalAnswer));
+      await sessionService.saveSession(session);
+
+      this.log(`[Supervisor] Interaction response: ${String(finalAnswer)}`, 'info', { 
+        traceId, 
+        sessionId,
+        metadata: { finalAnswer }
+      });
+      
+      // 此處可擴充將 finalAnswer 推播給用戶端
+    } catch (error) {
+      this.log(`[Supervisor] Chat interaction failed: ${error}`, 'error', { traceId, sessionId });
     }
   }
 
   /**
-   * 舊有的快速路由邏輯 (作為降級備援)
+   * 處理直接分派請求：使用路由專家進行快速判斷 (Fast Path)
    */
-  private async legacyFastPathRouting(event: AgentEvent): Promise<void> {
-    const { sessionId, goal, traceId } = event.payload;
+  private async onDispatch(event: AgentEvent): Promise<void> {
+    const { sessionId, traceId: payloadTraceId, content } = event.payload;
+    const traceId = payloadTraceId || IdGenerator.trace();
+
+    this.log(`[Supervisor] Fast-track dispatching: ${content}`, 'info', { traceId, sessionId });
+
     try {
+      // 調用專業路由引擎進行結構化推理
       const decision = await this.routerEngine.infer({
-        goal: goal || 'No goal',
+        goal: content || 'No goal',
         currentTask: "Initial Routing Decision",
         messages: [],
         metadata: { ...event.payload, traceId }
       }, RoutingDecisionSchema);
 
-      this.bus.publish({
-        type: AgentEvents.Flow.Initialize,
-        timestamp: Date.now(),
-        payload: {
-          ...this.inheritPayload(event.payload, 'sa'),
-          goal,
-          templateType: decision.templateType,
-          metadata: {
-            routingRationale: decision.rationale,
-            priority: decision.suggestedPriority
-          }
-        }
+      this.log(`[Supervisor] Routing decision: ${decision.templateType}. Rationale: ${decision.rationale}`, 'info', { traceId, sessionId });
+
+      // 1. 建立任務 (此時處於 READY 階段)
+      const task = await this.taskService.createTask({
+        sessionId,
+        goal: content || '',
+        description: content || '',
+        templateType: decision.templateType,
+        traceId
       });
-    } catch (e) {
-      this.log(`Fallback routing failed: ${e}`, 'error');
+
+      this.log(`[Supervisor] Root task ${task.id} created. Template: ${decision.templateType}`, 'info', { traceId, sessionId });
+
+      // 2. 啟動首個 Phase (從 READY -> PLANNING/DOING)
+      await this.startTask(task.id, event.payload);
+
+    } catch (error) {
+      this.log(`[Supervisor] Fast-track routing failed: ${error}`, 'error', { traceId, sessionId });
     }
+  }
+
+  /**
+   * 處理任務初始化 (通常用於子任務或換檔後的重啟)
+   */
+  private async onFlowInitialize(event: AgentEvent): Promise<void> {
+    const { sessionId, templateType, content } = event.payload;
+    const traceId = event.payload.traceId || IdGenerator.trace();
+
+    try {
+      const task = await this.taskService.createTask({
+        sessionId,
+        goal: content || '',
+        description: content || '',
+        templateType: templateType || 'Standard',
+        traceId,
+        parentTaskId: event.payload.metadata?.parentTaskId
+      });
+
+      this.log(`[Supervisor] Task ${task.id} initialized via Flow event.`, 'info', { traceId, sessionId });
+      
+      await this.startTask(task.id, event.payload);
+    } catch (error) {
+      this.log(`[Supervisor] Flow initialization failed: ${error}`, 'error', { traceId, sessionId });
+    }
+  }
+
+  /**
+   * 監聽階段完成事件，推進狀態機並啟動下一階段
+   */
+  private async onPhaseFinish(event: AgentEvent): Promise<void> {
+    const { taskId, sessionId, traceId, result } = event.payload;
+    if (!taskId) return;
+
+    try {
+      // 1. 獲取新階段
+      const newPhase = await this.taskService.transitionTask(taskId, result || 'success');
+      
+      this.log(`[Supervisor] Phase finished for task ${taskId}. Result: ${result || 'success'}. Next: ${newPhase}`, 'info', { traceId, sessionId });
+
+      // 2. 如果不是 FINISH，啟動下一個階段
+      if (newPhase !== 'FINISH') {
+        this.bus.publish({
+          type: AgentEvents.Phase.Start,
+          timestamp: Date.now(),
+          payload: {
+            ...this.inheritPayload(event.payload, 'sa'),
+            taskId,
+            phase: newPhase as any
+          }
+        });
+      } else {
+        // 任務完成
+        const task = await this.taskService.getTask(taskId);
+        if (task) {
+          task.updateStatus('completed');
+          await this.taskService.updateTask(task);
+        }
+        this.log(`[Supervisor] Task ${taskId} completed successfully.`, 'info', { traceId, sessionId });
+      }
+    } catch (error) {
+      this.log(`[Supervisor] Phase transition failed: ${error}`, 'error', { traceId, sessionId });
+    }
+  }
+
+  /**
+   * 監聽階段失敗事件
+   */
+  private async onPhaseFail(event: AgentEvent): Promise<void> {
+    const { taskId, sessionId, traceId, error } = event.payload;
+    if (!taskId) return;
+
+    this.log(`[Supervisor] Phase failed for task ${taskId}. Error: ${error}`, 'error', { traceId, sessionId });
+    
+    // 自動觸發 Escalate 進行換檔推理
+    this.bus.publish({
+      type: AgentEvents.Flow.Escalate,
+      timestamp: Date.now(),
+      payload: {
+        ...this.inheritPayload(event.payload, 'sa'),
+        taskId,
+        reason: error || 'Phase execution failed',
+        content: `Task failed at phase ${event.payload.phase}`
+      }
+    });
+  }
+
+  /**
+   * Tick 併發調度邏輯：負責掃描並啟動 Ready 的子任務
+   */
+  private async onTick(): Promise<void> {
+    const tasks = this.taskService.getActiveTasks();
+    for (const task of tasks) {
+      // 只處理 pending 狀態的任務 (通常是 PlanningAgent 產出的子任務)
+      if (task.status === 'pending') {
+        const canStart = await this.checkDependencies(task);
+        if (canStart) {
+          this.log(`[Supervisor] Tick: Starting task ${task.id}`, 'info', { traceId: task.traceId, sessionId: task.sessionId });
+          await this.startTask(task.id, {
+            sessionId: task.sessionId,
+            traceId: task.traceId,
+            spanId: IdGenerator.span('sa')
+          } as any);
+        }
+      }
+    }
+  }
+
+  /**
+   * 輔助方法：啟動任務並推進到第一個工作階段
+   */
+  private async startTask(taskId: string, payload: IAgentEventPayload): Promise<void> {
+    const task = await this.taskService.getTask(taskId);
+    if (!task) return;
+
+    // 從 READY 推進到第一個工作階段 (PLANNING/DOING)
+    const firstWorkPhase = await this.taskService.transitionTask(task.id, 'success');
+    task.updateStatus('running');
+    await this.taskService.updateTask(task);
+
+    this.bus.publish({
+      type: AgentEvents.Phase.Start,
+      timestamp: Date.now(),
+      payload: {
+        ...this.inheritPayload(payload, 'sa'),
+        taskId: task.id,
+        phase: firstWorkPhase as any,
+        content: task.goal
+      }
+    });
+  }
+
+  /**
+   * 檢查任務依賴是否已全部完成
+   */
+  private async checkDependencies(task: Task): Promise<boolean> {
+    if (!task.dependencies || task.dependencies.length === 0) return true;
+    
+    for (const depId of task.dependencies) {
+      const depTask = await this.taskService.getTask(depId);
+      if (!depTask || depTask.status !== 'completed') {
+        return false;
+      }
+    }
+    return true;
   }
 
   /**
    * 處理換檔 (Dynamic Escalation)：分析異常原因並決定新的執行路徑 (Fast Path)
    */
   private async onEscalate(event: AgentEvent): Promise<void> {
-    const { sessionId, traceId, taskId, reason } = event.payload;
+    const { sessionId, traceId, taskId, reason, content } = event.payload;
     
     this.log(`[Supervisor] Escalation requested by task ${taskId}. Reason: ${reason}`, 'warn', {
       traceId,
@@ -140,7 +326,7 @@ export class SupervisorAgent extends BaseAgent {
       // 1. 調用預熱好的換檔專家引擎進行二次裁決
       // 該推理模組專門負責分析 Scope Creep 或 Timeout，並產出恢復策略。
       const decision = await this.shifterEngine.infer({
-        goal: event.payload.goal || "Restore system operation",
+        goal: content || "Restore system operation",
         currentTask: "Dynamic Gear Shifting Decision",
         messages: [],
         metadata: { ...event.payload }

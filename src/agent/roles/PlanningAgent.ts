@@ -1,12 +1,12 @@
 import { ContextService } from '../../application/context/ContextService';
 import { AgentEvent, AgentEvents, IAgentEventPayload, IEventBus } from '../../core/messaging/IBus';
+import { InferenceEngine } from '../../infra/ModelRegistry';
 import { ModelPreset } from '../../infra/types/agent';
+import { TaskDTO, TaskStatus } from '../../infra/types/task';
 import { TodoListResponseSchema } from '../../schemas/agent/AgentOutputSchemas';
+import { IdGenerator } from '../../utils/IdGenerator';
 import { PromptLoader } from '../../utils/PromptLoader';
 import { BaseAgent } from '../BaseAgent';
-import { IdGenerator } from '../../utils/IdGenerator';
-import { InferenceEngine } from '../../infra/ModelRegistry';
-import { TaskDTO, TaskStatus } from '../../infra/types/task';
 
 /**
  * PlanningAgent (規劃師) - SuperNova 0.4.0
@@ -24,28 +24,32 @@ export class PlanningAgent extends BaseAgent {
 
   protected setupSubscriptions(): void {
     // 監聽規劃啟動事件
-    this.bus.subscribe(AgentEvents.Planning.Start, this.onPlanStart.bind(this));
+    this.bus.subscribe(AgentEvents.Phase.Start, (e) => {
+      if (e.payload.phase === 'PLANNING') {
+        this.onStart(e);
+      }
+    });
   }
 
   /**
    * 處理規劃啟動：執行分形拆解邏輯
    */
-  private async onPlanStart(event: AgentEvent): Promise<void> {
-    const { sessionId, traceId, goal, taskId } = event.payload;
-    this.log(`Planning started for goal: ${goal}`, 'info', { traceId, sessionId });
+  private async onStart(event: AgentEvent): Promise<void> {
+    const { sessionId, traceId, taskId, content } = event.payload;
+
+    this.log(`Planning started for goal: ${content}`, 'info', { traceId, sessionId });
 
     try {
       // 1. TODO: 整合 SOP (L3) 檢索邏輯
       // 在正式推理前，應先依據 goal 關鍵字從 storage.sops_dir 檢索匹配的 SOP
 
-      // 2. 準備系統提示詞 (包含 Identity 貫通)
-      // TODO: 這裡應從 MemoryService 獲取當前會話相關的 L2/L3 背景知識 (已透過 getSystemPrompt 整合)
+      // 2. 準備系統提示詞 (包含 Identity 貫通與黑板上下文)
       const identityPrompt = PromptLoader.load('prompts/identity/planning_agent.md');
       const systemPrompt = await this.getSystemPrompt(identityPrompt, event.payload);
 
       // 3. 調用預熱好的引擎進行分階段拆解 (Goal Decomposition)
       const result = await this.planningEngine.withSystemPrompt(systemPrompt).infer({
-        goal: goal || 'No goal',
+        goal: content || 'No goal',
         currentTask: "Fractal Decomposition",
         messages: [], 
         metadata: { traceId, sessionId, parentTaskId: taskId }
@@ -75,7 +79,7 @@ export class PlanningAgent extends BaseAgent {
             ...taskNode,
             id: newId,
             sessionId,
-            traceId: traceId!, // 確保 DNA 承接至子任務
+            traceId: traceId!, // 確保承接至子任務
             status: 'pending',
             history: [],
             dependencies: [...previousPhaseTaskIds],
@@ -95,14 +99,15 @@ export class PlanningAgent extends BaseAgent {
 
       this.log(`Fractal plan generated: ${flatTasks.length} sub-tasks in ${result.phases.length} phases.`, 'info', { traceId, sessionId });
 
-      // 5. 發布規劃完成事件，將產出的子圖 (subGraph) 提交給 TaskService
+      // 5. 發布規劃完成事件
       this.bus.publish({
-        type: AgentEvents.Planning.Finish,
+        type: AgentEvents.Phase.Finish,
         timestamp: Date.now(),
         payload: {
           ...this.inheritPayload(event.payload, 'pa'),
           taskId: taskId, // 母任務 ID
           content: result.planning_document,
+          phase: 'PLANNING',
           metadata: {
             subGraph: {
               nodes: flatTasks,
@@ -118,11 +123,12 @@ export class PlanningAgent extends BaseAgent {
       
       // 發布失敗事件以觸發 SA 的換檔決策
       this.bus.publish({
-        type: AgentEvents.Planning.Fail,
+        type: AgentEvents.Phase.Fail,
         timestamp: Date.now(),
         payload: { 
           ...this.inheritPayload(event.payload, 'pa'),
           taskId, 
+          phase: 'PLANNING',
           error: String(error)
         }
       });

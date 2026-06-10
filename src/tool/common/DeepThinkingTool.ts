@@ -18,7 +18,7 @@ export class DeepThinkingTool extends BaseTool {
       required_capabilities: ['reasoning'],
       schema: z.object({
         problem: z.string().describe('The complex problem or scenario to think about.'),
-        steps: z.number().optional().default(3).describe('Number of reasoning steps to simulate.')
+        steps: z.number().describe('Number of reasoning steps to simulate (default to 3).')
       })
     });
   }

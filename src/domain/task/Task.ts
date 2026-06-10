@@ -24,6 +24,41 @@ export class Task extends BaseSession {
   public requiredCapabilities: string[] = [];
   public retryCount: number = 0;
 
+  /**
+   * 獲取母任務 ID
+   */
+  get parentTaskId(): string | undefined {
+    return this.metadata.parentTaskId as string | undefined;
+  }
+
+  /**
+   * 設定母任務 ID
+   */
+  set parentTaskId(id: string | undefined) {
+    this.metadata.parentTaskId = id;
+  }
+
+  /**
+   * 是否為母任務 (擁有子任務圖)
+   */
+  get isParent(): boolean {
+    return !!this.subGraph;
+  }
+
+  /**
+   * 是否為子任務 (擁有母任務 ID)
+   */
+  get hasParent(): boolean {
+    return !!this.metadata.parentTaskId;
+  }
+
+  /**
+   * 是否為根任務 (沒有母任務)
+   */
+  get isRoot(): boolean {
+    return !this.hasParent;
+  }
+
   /** 任務流轉狀態機 (微觀流程) - 採用獨立類別實作 */
   public flow!: BaseTaskFlow;
   /** 子任務圖 (宏觀拆解) */

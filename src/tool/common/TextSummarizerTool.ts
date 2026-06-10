@@ -19,7 +19,7 @@ export class TextSummarizerTool extends BaseTool {
       required_capabilities: ['utility'],
       schema: z.object({
         text: z.string().describe('The long text to summarize.'),
-        max_words: z.number().optional().default(100).describe('Target summary length in words.')
+        max_words: z.number().describe('Target summary length in words (default to 100).')
       })
     });
   }

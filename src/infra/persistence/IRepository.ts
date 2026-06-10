@@ -88,10 +88,21 @@ export interface ITaskRepository<T extends IEntity> extends IRepository<T> {
   findBySession(sessionId: string): Promise<T[]>;
 
   /**
+   * 查找特定會話下的根任務 (母任務)
+   * @param sessionId 會話識別碼
+   */
+  findRootsBySession(sessionId: string): Promise<T[]>;
+
+  /**
    * 按狀態查找任務
    * @param status 任務狀態
    */
   findTasksByStatus(status: TaskStatus): Promise<T[]>;
+
+  /**
+   * 查找所有非封存的活躍任務
+   */
+  findAllActiveTasks(): Promise<T[]>;
 }
 
 /**

@@ -16,12 +16,12 @@ export class TimeTool extends BaseTool {
       safety_tier: 'TIER_1',
       required_capabilities: ['utility'],
       schema: z.object({
-        timezone: z.string().optional().describe('Optional timezone (e.g., "Asia/Taipei"). Defaults to system timezone.')
+        timezone: z.string().describe('Timezone string (e.g., "Asia/Taipei"). Provide empty string for system default.')
       })
     });
   }
 
-  async run(input: { timezone?: string }, _context: IAgentExecuteContext): Promise<any> {
+  async run(input: { timezone: string }, _context: IAgentExecuteContext): Promise<any> {
     const now = new Date();
     const options: Intl.DateTimeFormatOptions = {
       year: 'numeric',
@@ -32,7 +32,7 @@ export class TimeTool extends BaseTool {
       second: '2-digit',
       weekday: 'long',
       timeZoneName: 'short',
-      timeZone: input.timezone
+      timeZone: input.timezone || undefined
     };
 
     return {

@@ -23,56 +23,44 @@ export namespace SystemEvents {
  * 代理協作事件命名空間 (AgentEvents)
  */
 export namespace AgentEvents {
-  export enum Supervisor {
-    Dispatch = "SUPERVISOR_DISPATCH",
-    Halt = "SUPERVISOR_HALT",
+  /**
+   * 控制層（Supervisor 不變，但語義更乾淨）
+   */
+  export enum Control {
+    Dispatch = "CONTROL_DISPATCH",
+    Halt = "CONTROL_HALT",
+    Chat = "CONTROL_CHAT",
   }
 
-  export enum Planning {
-    Start = "PLANNING_START",
-    Finish = "PLANNING_FINISH",
-    Fail = "PLANNING_FAIL",
+  /**
+   * 唯一執行事件
+   */
+  export enum Phase {
+    Start = "PHASE_START",
+    Finish = "PHASE_FINISH",
+    Fail = "PHASE_FAIL",
   }
 
-  export enum Doing {
-    Start = "DOING_START",
-    Finish = "DOING_FINISH",
-    Fail = "DOING_FAIL",
-  }
-
-  export enum Checking {
-    Start = "CHECKING_START",
-    Pass = "CHECKING_PASS",
-    Fail = "CHECKING_FAIL",
-  }
-
-  export enum Acting {
-    Start = "ACTING_START",
-    Finish = "ACTING_FINISH",
-    Fail = "ACTING_FAIL",
-  }
-
-  /** 任務流轉狀態機事件 */
+  /**
+   * PDCA流程狀態機
+   */
   export enum Flow {
-    Initialize = "FLOW_INITIALIZE", // 初始化 TaskFlow
-    Transition = "FLOW_TRANSITION", // 狀態遷徙觸發
-    Escalate = "FLOW_ESCALATE",     // 異常上報/換檔
+    Initialize = "FLOW_INITIALIZE",
+    Transition = "FLOW_TRANSITION",
+    Escalate = "FLOW_ESCALATE",
   }
 }
 
 /**
  * 彙整所有事件型別
  */
-export type AllEventTypes = 
-  SystemEvents.Runtime | 
-  SystemEvents.Session | 
-  SystemEvents.Task | 
-  AgentEvents.Supervisor | 
-  AgentEvents.Planning | 
-  AgentEvents.Doing | 
-  AgentEvents.Checking | 
-  AgentEvents.Acting | 
-  AgentEvents.Flow;
+export type AllEventTypes =
+  | SystemEvents.Runtime
+  | SystemEvents.Session
+  | SystemEvents.Task
+  | AgentEvents.Control
+  | AgentEvents.Phase
+  | AgentEvents.Flow;
 
 /**
  * 統一代理事件負載介面
@@ -82,13 +70,17 @@ export interface IAgentEventPayload {
   readonly traceId?: string;      // 追蹤整個任務鏈 (根任務啟動時可選，之後必填)
   readonly spanId: string;        // 識別當前執行片段 (必填)
   readonly parentSpanId?: string; // 用於父子關係 (選填)
-  readonly templateType?: string; // 初始路由指定的模板
-  readonly currentPhase?: string; // 當前 PDCA 階段
   readonly taskId?: string;
-  readonly goal?: string;
+
   readonly content?: string;
+
   readonly error?: string;
   readonly reason?: string;
+  
+  readonly templateType?: string; // 初始路由指定的模板
+  readonly phase?: "PLANNING" | "DOING" | "CHECKING" | "ACTING";
+  readonly result?: "success" | "fail" | "escalate";
+
   readonly metadata?: Record<string, any>;
 }
 
@@ -126,7 +118,7 @@ export interface IEventBus<P = any> {
    * 發佈事件
    */
   publish<T extends string, PL extends P>(event: IEvent<T, PL>): void;
-  
+
   /**
    * 訂閱事件
    */

@@ -7,24 +7,24 @@ import { BaseTool } from '../BaseTool';
 
 const TavilySearchSchema = z.object({
   query: z.string().describe('Search query string'),
-  includeDomains: z.array(z.string()).optional().describe('Domains to include'),
-  excludeDomains: z.array(z.string()).optional().describe('Domains to exclude'),
-  searchDepth: z.enum(['basic', 'advanced']).optional().describe('Search depth'),
-  includeImages: z.boolean().optional().describe('Whether to include images'),
-  timeRange: z.enum(['day', 'week', 'month', 'year']).optional().describe('Time range'),
-  topic: z.enum(['general', 'news', 'finance']).optional().describe('Search topic'),
-  max_results: z.number().optional().default(5).describe('Maximum number of results')
+  includeDomains: z.array(z.string()).describe('Domains to include (provide empty array if none)'),
+  excludeDomains: z.array(z.string()).describe('Domains to exclude (provide empty array if none)'),
+  searchDepth: z.enum(['basic', 'advanced']).describe('Search depth (default to basic)'),
+  includeImages: z.boolean().describe('Whether to include images (default to false)'),
+  timeRange: z.enum(['day', 'week', 'month', 'year']).describe('Time range (default to month)'),
+  topic: z.enum(['general', 'news', 'finance']).describe('Search topic (default to general)'),
+  max_results: z.number().describe('Maximum number of results (default to 5)')
 });
 
 type TavilySearchInput = {
   query: string;
-  includeDomains?: string[];
-  excludeDomains?: string[];
-  searchDepth?: 'basic' | 'advanced';
-  includeImages?: boolean;
-  timeRange?: 'day' | 'week' | 'month' | 'year';
-  topic?: 'general' | 'news' | 'finance';
-  max_results?: number;
+  includeDomains: string[];
+  excludeDomains: string[];
+  searchDepth: 'basic' | 'advanced';
+  includeImages: boolean;
+  timeRange: 'day' | 'week' | 'month' | 'year';
+  topic: 'general' | 'news' | 'finance';
+  max_results: number;
 };
 
 /**

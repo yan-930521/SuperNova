@@ -1,12 +1,12 @@
+import { ContextService } from '../../application/context/ContextService';
+import { MemoryService } from '../../application/memory/MemoryService';
 import { AgentEvent, AgentEvents, IAgentEventPayload, IEventBus } from '../../core/messaging/IBus';
+import { InferenceEngine } from '../../infra/ModelRegistry';
 import { ModelPreset } from '../../infra/types/agent';
 import { ReflectionSchema } from '../../schemas/agent/AgentOutputSchemas';
-import { ContextService } from '../../application/context/ContextService';
-import { BaseAgent } from '../BaseAgent';
-import { MemoryService } from '../../application/memory/MemoryService';
-import { PromptLoader } from '../../utils/PromptLoader';
 import { IdGenerator } from '../../utils/IdGenerator';
-import { InferenceEngine } from '../../infra/ModelRegistry';
+import { PromptLoader } from '../../utils/PromptLoader';
+import { BaseAgent } from '../BaseAgent';
 
 /**
  * ActingAgent (改善者) - SuperNova 0.4.0
@@ -23,16 +23,22 @@ export class ActingAgent extends BaseAgent {
   }
 
   protected setupSubscriptions(): void {
-    // 監聽改進啟動事件 (PDCA 最後一環)
-    this.bus.subscribe(AgentEvents.Acting.Start, this.onActStart.bind(this));
+    // 監聽啟動事件
+    this.bus.subscribe(AgentEvents.Phase.Start, (e) => {
+      if (e.payload.phase === 'ACTING') {
+        this.onStart(e);
+      }
+    });
   }
 
   /**
-   * 處理改進啟動：執行事實提取與 SOP 沉澱
+   * 處理啟動：提煉知識
    */
-  private async onActStart(event: AgentEvent): Promise<void> {
+  private async onStart(event: AgentEvent): Promise<void> {
     const { sessionId, traceId, taskId } = event.payload;
-    this.log(`Knowledge distillation started for node: ${taskId}`, 'info', { traceId, sessionId });
+
+    this.log(`Acting/Learning started for task: ${taskId}`, 'info', { traceId, sessionId });
+
 
     try {
       const memoryService = this.runtime.container.resolve<MemoryService>('MemoryService');
@@ -42,7 +48,7 @@ export class ActingAgent extends BaseAgent {
       const systemPrompt = await this.getSystemPrompt(identityPrompt, event.payload);
 
       // 2. 定義結構化沈澱 Schema (已移至 AgentOutputSchemas)
-      
+
       // 3. 調用預熱引擎進行知識提煉
       const result = await this.actingEngine.withSystemPrompt(systemPrompt).infer({
         goal: "Distill knowledge and standardize process",
@@ -92,25 +98,27 @@ export class ActingAgent extends BaseAgent {
 
       // 6. 發布任務終結訊號
       this.bus.publish({
-        type: AgentEvents.Acting.Finish,
+        type: AgentEvents.Phase.Finish,
         timestamp: Date.now(),
-        payload: { 
+        payload: {
           ...this.inheritPayload(event.payload, 'aa'),
-          taskId, 
+          taskId,
+          phase: 'ACTING',
           content: result.improvement_briefing || 'Reflection complete. Assets Distilled.'
         }
       });
 
     } catch (error) {
       this.log(`Distillation process failed: ${error}`, 'error', { traceId, sessionId });
-      
+
       // 即使改善失敗，也應發布結案訊號，避免流程掛起
       this.bus.publish({
-        type: AgentEvents.Acting.Fail,
+        type: AgentEvents.Phase.Fail,
         timestamp: Date.now(),
-        payload: { 
+        payload: {
           ...this.inheritPayload(event.payload, 'aa'),
-          taskId, 
+          taskId,
+          phase: 'ACTING',
           error: String(error)
         }
       });

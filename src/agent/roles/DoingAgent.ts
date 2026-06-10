@@ -1,11 +1,12 @@
+import { HumanMessage, SystemMessage } from '@langchain/core/messages';
+
 import { ContextService } from '../../application/context/ContextService';
+import { MemoryService } from '../../application/memory/MemoryService';
 import { AgentEvent, AgentEvents, IAgentEventPayload, IEventBus } from '../../core/messaging/IBus';
 import { ModelPreset } from '../../infra/types/agent';
-import { BaseAgent } from '../BaseAgent';
-import { MemoryService } from '../../application/memory/MemoryService';
-import { PromptLoader } from '../../utils/PromptLoader';
 import { IdGenerator } from '../../utils/IdGenerator';
-import { HumanMessage, SystemMessage } from '@langchain/core/messages';
+import { PromptLoader } from '../../utils/PromptLoader';
+import { BaseAgent } from '../BaseAgent';
 
 /**
  * DoingAgent (行動者) - SuperNova 0.4.0
@@ -23,14 +24,18 @@ export class DoingAgent extends BaseAgent {
 
   protected setupSubscriptions(): void {
     // 監聽任務執行啟動事件
-    this.bus.subscribe(AgentEvents.Doing.Start, this.onDoingStart.bind(this));
+    this.bus.subscribe(AgentEvents.Phase.Start, (e) => {
+      if (e.payload.phase === 'DOING') {
+        this.onStart(e);
+      }
+    });
   }
 
   /**
    * 處理執行啟動：開啟 ReAct 思考循環
    */
-  private async onDoingStart(event: AgentEvent): Promise<void> {
-    const { sessionId, traceId, taskId, goal, content } = event.payload;
+  private async onStart(event: AgentEvent): Promise<void> {    
+    const { sessionId, traceId, taskId, content } = event.payload;
     this.log(`Task execution started for node: ${taskId}`, 'info', { traceId, sessionId });
 
     try {
@@ -43,7 +48,7 @@ export class DoingAgent extends BaseAgent {
 
       // 3. 準備給 LLM 的輸入任務說明
       const inputMsg = `
-Goal: ${goal || 'Execute assigned task'}
+Goal: ${content || 'Execute assigned task'}
 Task ID: ${taskId}
 Task Details:
 ${content || 'No specific details provided.'}
@@ -86,11 +91,12 @@ ${content || 'No specific details provided.'}
 
       // 7. 發布完成事件
       this.bus.publish({
-        type: AgentEvents.Doing.Finish,
+        type: AgentEvents.Phase.Finish,
         timestamp: Date.now(),
         payload: { 
           ...this.inheritPayload(event.payload, 'da'),
           taskId, 
+          phase: 'DOING',
           content: finalAnswer
         }
       });
@@ -100,11 +106,12 @@ ${content || 'No specific details provided.'}
       
       // 回報失敗，觸發自癒流程
       this.bus.publish({
-        type: AgentEvents.Doing.Fail,
+        type: AgentEvents.Phase.Fail,
         timestamp: Date.now(),
         payload: { 
           ...this.inheritPayload(event.payload, 'da'),
           taskId, 
+          phase: 'DOING',
           error: String(error)
         }
       });

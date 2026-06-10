@@ -1,8 +1,16 @@
 import * as path from 'node:path';
 
+import { ActingAgent } from '../agent/roles/ActingAgent';
+import { CheckingAgent } from '../agent/roles/CheckingAgent';
+import { DoingAgent } from '../agent/roles/DoingAgent';
+import { PlanningAgent } from '../agent/roles/PlanningAgent';
+// Agent Roles
+import { SupervisorAgent } from '../agent/roles/SupervisorAgent';
+import { ContextService } from '../application/context/ContextService';
 import { UserService } from '../application/identity/UserService';
 import { MemoryService } from '../application/memory/MemoryService';
-import { ContextService } from '../application/context/ContextService';
+import { SessionService } from '../application/session/SessionService';
+import { TaskService } from '../application/task/TaskService';
 import { Config } from '../config/Config';
 import { ConfigLoader } from '../config/ConfigLoader';
 import { ComponentContainer } from '../core/container/ComponentContainer';
@@ -19,22 +27,12 @@ import {
     FileSystemSessionRepository
 } from '../infra/persistence/filesystem/FileSystemSessionRepository';
 import { FileSystemTaskRepository } from '../infra/persistence/filesystem/FileSystemTaskRepository';
-import { TaskService } from '../application/task/TaskService';
-import { TaskScheduler } from '../application/task/TaskScheduler';
-
 // 新版持久層
 import { FileSystemUserRepository } from '../infra/persistence/filesystem/FileSystemUserRepository';
 import { PulseEngine } from '../infra/PulseEngine';
 import { ConsoleTransport } from '../infra/transports/ConsoleTransport';
 import { FileTransport } from '../infra/transports/FileTransport';
 import { ToolRegistry } from '../tool/ToolRegistry';
-
-// Agent Roles
-import { SupervisorAgent } from '../agent/roles/SupervisorAgent';
-import { PlanningAgent } from '../agent/roles/PlanningAgent';
-import { DoingAgent } from '../agent/roles/DoingAgent';
-import { CheckingAgent } from '../agent/roles/CheckingAgent';
-import { ActingAgent } from '../agent/roles/ActingAgent';
 
 /**
  * 全局運行時類 (Global Runtime) - SuperNova 0.4.0
@@ -139,11 +137,11 @@ export class GlobalRuntime {
     const contextService = new ContextService();
     this.container.register('ContextService', contextService);
 
+    const sessionService = new SessionService(sessionRepo);
+    this.container.register('SessionService', sessionService);
+
     const taskService = new TaskService(taskRepo);
     this.container.register('TaskService', taskService);
-
-    const taskScheduler = new TaskScheduler(this.systemBus, this.agentBus, taskService);
-    this.container.register('TaskScheduler', taskScheduler);
 
     // 6. 啟動所有組件生命週期
     await this.container.boot();

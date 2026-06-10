@@ -1,38 +1,123 @@
 import { ILifecycle } from '../../core/lifecycle/ILifecycle';
-import { ITaskRepository } from '../../infra/persistence/IRepository';
+import { ComplexFlow } from '../../domain/task/flow/ComplexFlow';
+import { EmergencyFlow } from '../../domain/task/flow/EmergencyFlow';
+import { ExploratoryFlow } from '../../domain/task/flow/ExploratoryFlow';
+import { InstantFlow } from '../../domain/task/flow/InstantFlow';
+import { RecursiveFlow } from '../../domain/task/flow/RecursiveFlow';
+import { SimpleFlow } from '../../domain/task/flow/SimpleFlow';
+import { StandardFlow } from '../../domain/task/flow/StandardFlow';
 import { Task } from '../../domain/task/Task';
-import { TaskStatus } from '../../infra/types/task';
 import { recorder } from '../../infra/LogManager';
+import { ITaskRepository } from '../../infra/persistence/IRepository';
+import { TaskStatus } from '../../infra/types/task';
 import { IdGenerator } from '../../utils/IdGenerator';
 
-// 導入具體領域 Flow 類別
-import { StandardFlow } from '../../domain/task/flow/StandardFlow';
-import { SimpleFlow } from '../../domain/task/flow/SimpleFlow';
-import { EmergencyFlow } from '../../domain/task/flow/EmergencyFlow';
-import { InstantFlow } from '../../domain/task/flow/InstantFlow';
-import { ComplexFlow } from '../../domain/task/flow/ComplexFlow';
-import { ExploratoryFlow } from '../../domain/task/flow/ExploratoryFlow';
-import { RecursiveFlow } from '../../domain/task/flow/RecursiveFlow';
-
 /**
- * TaskService (任務應用層服務) - SuperNova 0.4.0
- * 職責: 負責任務實體的建立、讀取、持久化與分形子圖邏輯。
+ * TaskService (任務應用層服務) - SuperNova 0.5.0
+ * 職責: 負責任務實體的管理、快取與持久化。
+ * 核心策略：【記憶體優先】。Cache 是唯一事實來源，Repo 僅作為冷啟動水合與存檔使用。
  */
 export class TaskService implements ILifecycle {
+  /** 記憶體快取 (L1)：所有活躍任務的唯一實例 */
+  private activeTasks = new Map<string, Task>();
+
   constructor(
     private readonly taskRepo: ITaskRepository<Task>
   ) {}
 
+  /**
+   * 初始化：執行水合 (Hydration) 將冷數據搬入 L1
+   */
   async initialize(): Promise<void> {
-    recorder.info('[TaskService] Initialized.', { type: 'SYSTEM' });
+    try {
+      const { GlobalRuntime } = await import('../../runtime/GlobalRuntime');
+      const sessionService = GlobalRuntime.getInstance().container.resolve<any>('SessionService');
+      
+      const sessionIds = await sessionService.getAllSessionIds();
+      for (const sessionId of sessionIds) {
+        const rootTasks = await this.taskRepo.findRootsBySession(sessionId);
+        for (const rootTask of rootTasks) {
+          if (rootTask.status !== 'archived') {
+            this.registerTask(rootTask);
+          }
+        }
+      }
+      recorder.info(`[TaskService] Memory-First logic ready. ${this.activeTasks.size} tasks hydrated.`, { type: 'SYSTEM' });
+    } catch (error) {
+      recorder.error(`[TaskService] Hydration failed: ${error}`, { type: 'SYSTEM' });
+    }
   }
 
   async start(): Promise<void> {}
   async stop(): Promise<void> {}
 
+  // --- 記憶體管理 (L1 Core) ---
+
   /**
-   * 建立一個新任務並初始化其狀態機
-   * 根據 templateType 直接 new 出對應的領域類別
+   * 註冊任務入 L1。此後所有操作均基於此物件引用。
+   */
+  public registerTask(task: Task, visited: Set<string> = new Set()): void {
+    if (visited.has(task.id)) return;
+    visited.add(task.id);
+    
+    this.activeTasks.set(task.id, task);
+    
+    if (task.isParent && task.subGraph) {
+      task.subGraph.getAllTasks().forEach(sub => {
+        sub.metadata.parentTaskId = task.id;
+        this.registerTask(sub, visited);
+      });
+    }
+  }
+
+  /**
+   * 結案處理：從 L1 移除
+   */
+  public unregisterTask(taskId: string): void {
+    this.activeTasks.delete(taskId);
+  }
+
+  /**
+   * 獲取快取中的所有活躍物件
+   */
+  public getActiveTasks(): Task[] {
+    return Array.from(this.activeTasks.values());
+  }
+
+  /**
+   * 獲取任務 (快取優先)
+   */
+  async getTask(taskId: string): Promise<Task | null> {
+    // 1. 先查快取
+    const cached = this.activeTasks.get(taskId);
+    if (cached) return cached;
+
+    // 2. 查Repo
+    const stored = await this.taskRepo.load(taskId);
+    if (stored) {
+      this.registerTask(stored);
+      return stored;
+    }
+    return null;
+  }
+
+  // --- 狀態更新 (Write-Through 策略) ---
+
+  /**
+   * 更新任務：同步更新 L1，背景更新 L2
+   */
+  async updateTask(task: Task): Promise<void> {
+    // A. 更新 L1 (Map 裡存的是引用，其實這步通常已經在外部修改物件時完成了，這裡確保它被註冊)
+    if (!this.activeTasks.has(task.id)) {
+      this.registerTask(task);
+    }
+
+    // B. 更新 L2 (備份存檔) - 這裡是關鍵，保證數據不丟失
+    await this.taskRepo.save(task);
+  }
+
+  /**
+   * 建立新任務 (初始化入 L1)
    */
   async createTask(params: {
     sessionId: string;
@@ -42,22 +127,47 @@ export class TaskService implements ILifecycle {
     traceId?: string;
     parentTaskId?: string;
   }): Promise<Task> {
-    const taskId = IdGenerator.task();
-    // 錨定策略：若未提供 traceId (代表鏈路起點)，則直接使用 taskId 作為 traceId
-    const traceId = params.traceId || IdGenerator.traceFromTask(taskId);
-
-    const task = new Task(
-      taskId,
-      traceId,
-      params.sessionId,
-      params.goal,
-      params.description,
-      'work',
-      'pending'
+    // 快取優先的重複檢查
+    const duplicate = Array.from(this.activeTasks.values()).find(t => 
+      t.sessionId === params.sessionId && 
+      t.goal === params.goal && 
+      t.status !== 'archived'
     );
+    if (duplicate) return duplicate;
 
-    // 直接根據類型實例化具體的 Flow 對象 (移除舊有的硬編碼映射表)
-    switch (params.templateType) {
+    const taskId = IdGenerator.task();
+    const traceId = params.traceId || IdGenerator.traceFromTask(taskId);
+    const task = new Task(taskId, traceId, params.sessionId, params.goal, params.description, 'work', 'pending');
+
+    this.applyTemplate(task, params.templateType);
+    if (params.parentTaskId) task.metadata.parentTaskId = params.parentTaskId;
+
+    // 同步雙寫
+    await this.updateTask(task);
+    return task;
+  }
+
+  /**
+   * 驅動狀態遷徙 (全記憶體操作)
+   */
+  async transitionTask(taskId: string, result: string): Promise<string> {
+    const task = await this.getTask(taskId);
+    if (!task) throw new Error(`Task ${taskId} not found in L1 or L2`);
+
+    const oldPhase = task.flow.currentPhase;
+    const newPhase = task.nextPhase(result);
+
+    // 更新持久化備份
+    await this.updateTask(task);
+
+    recorder.info(`[TaskService] Transition: ${task.id} (${oldPhase} -> ${newPhase})`, { type: 'SYSTEM' });
+    return newPhase;
+  }
+
+  // --- 私有辅助 ---
+
+  private applyTemplate(task: Task, type: string): void {
+    switch (type) {
       case 'Instant': task.flow = new InstantFlow(); break;
       case 'Simple': task.flow = new SimpleFlow(); break;
       case 'Standard': task.flow = new StandardFlow(); break;
@@ -65,74 +175,21 @@ export class TaskService implements ILifecycle {
       case 'Exploratory': task.flow = new ExploratoryFlow(); break;
       case 'Emergency': task.flow = new EmergencyFlow(); break;
       case 'Recursive': task.flow = new RecursiveFlow(); break;
-      default: 
-        recorder.warn(`[TaskService] Unknown templateType: ${params.templateType}, fallback to Standard`, { type: 'SYSTEM' });
-        task.flow = new StandardFlow(); 
-        break;
+      default: task.flow = new StandardFlow(); break;
     }
-
-    if (params.parentTaskId) {
-      task.metadata.parentTaskId = params.parentTaskId;
-    }
-
-    await this.taskRepo.save(task);
-
-    recorder.info(`[TaskService] Created task ${taskId} with [${task.flow.templateType}Flow]`, {
-      type: 'SYSTEM',
-      session_id: params.sessionId,
-      trace_id: params.traceId
-    });
-
-    return task;
   }
 
-  /**
-   * 獲取單一任務
-   */
-  async getTask(taskId: string): Promise<Task | null> {
-    return await this.taskRepo.load(taskId);
-  }
+  // --- 透傳 Repo 檢索 ---
 
-  /**
-   * 更新任務狀態並持久化
-   */
-  async updateTask(task: Task): Promise<void> {
-    await this.taskRepo.save(task);
-  }
-
-  /**
-   * 按會話獲取所有任務
-   */
   async findBySession(sessionId: string): Promise<Task[]> {
     return await this.taskRepo.findBySession(sessionId);
   }
 
-  /**
-   * 按狀態查找任務
-   */
-  async findTasksByStatus(status: TaskStatus): Promise<Task[]> {
-    return await this.taskRepo.findTasksByStatus(status);
+  async findRootsBySession(sessionId: string): Promise<Task[]> {
+    return await this.taskRepo.findRootsBySession(sessionId);
   }
 
-  /**
-   * 驅動任務前進到下一個 Phase
-   * @param taskId 任務 ID
-   * @param result 當前 Phase 的結果 ('success', 'fail', 'escalate')
-   */
-  async transitionTask(taskId: string, result: string): Promise<string> {
-    const task = await this.getTask(taskId);
-    if (!task) throw new Error(`Task ${taskId} not found`);
-
-    const oldPhase = task.flow.currentPhase;
-    const newPhase = task.nextPhase(result);
-
-    await this.updateTask(task);
-
-    recorder.info(`[TaskService] Task ${taskId} transitioned: ${oldPhase} -> ${newPhase} (Result: ${result})`, {
-      type: 'SYSTEM',
-      session_id: task.sessionId
-    });
-
-    return newPhase;
+  async findTasksByStatus(status: TaskStatus): Promise<Task[]> {
+    return await this.taskRepo.findTasksByStatus(status);
   }
 }

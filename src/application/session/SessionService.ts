@@ -16,7 +16,6 @@ export class SessionService implements ILifecycle {
   private activeSessions = new Map<string, UserSession>();
 
   constructor(
-    private readonly eventBus: IEventBus,
     private readonly sessionRepo: ISessionRepository<any, any>
   ) { }
 
@@ -25,11 +24,6 @@ export class SessionService implements ILifecycle {
    */
   async initialize(): Promise<void> {
     // // 註冊指令處理器
-    // this.eventBus.subscribe(Commands.Session.Start, this.handleStartSession.bind(this));
-    // this.eventBus.subscribe(Commands.Session.SendMessage, this.handleSendMessage.bind(this));
-
-    // // 訂閱「任務完成」事件
-    // this.eventBus.subscribe(Events.Task.Finished, this.onTaskFinished.bind(this));
 
     recorder.info('[SessionService] Initialized', { type: 'SYSTEM' });
   }
@@ -46,19 +40,51 @@ export class SessionService implements ILifecycle {
   }
 
   /**
-   * 處理啟動會話指令 (僅負責環境初始化)
+   * 取得或建立會話實體
+   * 優先從記憶體緩存讀取，若無則從持久層加載或新建
    */
-  private async handleStartSession(){}
+  public async getOrCreateSession(id: string, userId: string = 'default-user'): Promise<UserSession> {
+    // 1. 檢查緩存
+    if (this.activeSessions.has(id)) {
+      return this.activeSessions.get(id)!;
+    }
+
+    // 2. 嘗試從持久層加載
+    const dto = await this.sessionRepo.load(id);
+    if (dto) {
+      const session = new UserSession(dto.id, dto.userId, dto.responsibleAgentId, dto.status);
+      session.setHistory(dto.history || []);
+      session.metadata = dto.metadata || {};
+      this.activeSessions.set(id, session);
+      return session;
+    }
+
+    // 3. 建立新會話
+    const newSession = new UserSession(id, userId, 'Supervisor-01', 'IDLE');
+    this.activeSessions.set(id, newSession);
+    await this.sessionRepo.save(newSession.toDTO());
+    return newSession;
+  }
 
   /**
-   * 處理發送新訊息指令
+   * 儲存會話狀態
    */
-  private async handleSendMessage() {}
+  public async saveSession(session: UserSession): Promise<void> {
+    this.activeSessions.set(session.id, session);
+    await this.sessionRepo.save(session.toDTO());
+  }
 
   /**
    * 取得活躍會話 (供外部查詢)
    */
   public getSession(id: string): UserSession | undefined {
     return this.activeSessions.get(id);
+  }
+
+  /**
+   * 取得所有會話 ID (從持久層)
+   */
+  public async getAllSessionIds(): Promise<string[]> {
+    return await this.sessionRepo.list();
   }
 }

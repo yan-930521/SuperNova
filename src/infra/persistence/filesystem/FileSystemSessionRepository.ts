@@ -150,6 +150,20 @@ export class FileSystemSessionRepository
   }
 
   /**
+   * 重寫列表邏輯：列出所有會話目錄名稱
+   */
+  async list(): Promise<string[]> {
+    try {
+      const dirs = await fs.readdir(this.baseDir, { withFileTypes: true });
+      return dirs
+        .filter(d => d.isDirectory())
+        .map(d => d.name);
+    } catch {
+      return [];
+    }
+  }
+
+  /**
    * 重寫刪除邏輯：刪除整個資料夾
    */
   async delete(id: string): Promise<void> {

@@ -3,7 +3,7 @@ import { MessageDTO } from './session';
 /**
  * 任務執行狀態 Type
  */
-export type TaskStatus = 'pending' | 'ready' | 'running' | 'completed' | 'failed';
+export type TaskStatus = 'pending' | 'ready' | 'running' | 'completed' | 'failed' | 'archived';
 
 /**
  * 任務鏈/流程狀態 Type

@@ -1,8 +1,10 @@
 import { z } from 'zod';
+
+import { TaskService } from '../../application/task/TaskService';
 import { AgentEvents, IAgentExecuteContext } from '../../core/messaging/IBus';
 import { GlobalRuntime } from '../../runtime/GlobalRuntime';
-import { BaseTool } from '../BaseTool';
 import { IdGenerator } from '../../utils/IdGenerator';
+import { BaseTool } from '../BaseTool';
 
 /**
  * DispatchTaskTool
@@ -38,6 +40,21 @@ Must contain:
     const runtime = GlobalRuntime.getInstance();
 
     try {
+      // [優化] 避免重複派遣：檢查該 Session 是否已有相同目標且正在運行的任務
+      const taskService = runtime.container.resolve<TaskService>("TaskService");
+      const existingTasks = await taskService.findBySession(sessionId);
+      const duplicate = existingTasks.find(t => t.goal === goal && (t.status === 'pending' || t.status === 'running'));
+      
+      if (duplicate) {
+        return {
+          status: "ignored",
+          message: `A task with the same goal is already running in this session (TaskId: ${duplicate.id}). No new task created.`,
+          taskId: duplicate.id,
+          sessionId,
+          traceId
+        };
+      }
+
       // 1. 生成新的 Span ID，標識此分派動作
       const spanId = IdGenerator.span('sys');
 

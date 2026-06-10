@@ -18,7 +18,7 @@ export class CodeExecutorTool extends BaseTool {
       required_capabilities: ['coding'],
       schema: z.object({
         code: z.string().describe('The JavaScript code to execute.'),
-        timeout: z.number().optional().default(5000).describe('Execution timeout in milliseconds.')
+        timeout: z.number().describe('Execution timeout in milliseconds (default to 5000).')
       })
     });
   }

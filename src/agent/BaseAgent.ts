@@ -1,6 +1,7 @@
-import { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import { createAgent } from 'langchain';
+import { z } from 'zod';
+
 import { tool as langChainTool } from '@langchain/core/tools';
-import { createReactAgent } from '@langchain/langgraph/prebuilt';
 
 import { ContextService } from '../application/context/ContextService';
 import { MemoryService } from '../application/memory/MemoryService';
@@ -24,86 +25,94 @@ import { PromptLoader } from '../utils/PromptLoader';
  * 4. 引擎初始化支持：提供統一的推理引擎初始化機制。
  */
 export abstract class BaseAgent {
-   protected readonly runtime = GlobalRuntime.getInstance();
-   /** LangChain 原生的 ReAct Agent 執行器 */
-   protected reactAgent: ReturnType<typeof createReactAgent> | null = null;
+  protected readonly runtime = GlobalRuntime.getInstance();
+  /** LangChain 原生的 ReAct Agent 執行器 */
+  protected reactAgent: ReturnType<typeof createAgent> | null = null;
 
-   constructor(
-     public readonly id: string,
-     protected readonly bus: IEventBus<IAgentEventPayload>
-   ) {
-     this.setupSubscriptions();
-     recorder.info(`[BaseAgent] Agent [${this.id}] initialized.`, { 
-       type: 'SYSTEM',
-       agent_id: this.id 
-     });
-   }
+  constructor(
+    public readonly id: string,
+    protected readonly bus: IEventBus<IAgentEventPayload>
+  ) {
+    this.setupSubscriptions();
+    recorder.info(`[BaseAgent] Agent [${this.id}] initialized.`, {
+      type: 'SYSTEM',
+      agent_id: this.id
+    });
+  }
 
-   /**
-    * 子類必須實作，定義其監聽的事件
-    */
-   protected abstract setupSubscriptions(): void;
+  /**
+   * 子類必須實作，定義其監聽的事件
+   */
+  protected abstract setupSubscriptions(): void;
 
-   /**
-    * 統一的推理引擎初始化方法 (用於結構化輸出)
-    * @param preset 模型預設類型 (SMART, FAST, EVAL 等)
-    * @param promptPath 身份或任務專用的 Prompt Markdown 路徑
-    */
-   protected initEngine(preset: ModelPreset, promptPath: string): InferenceEngine {
-     try {
-       const baseEngine = this.runtime.modelRegistry.getModel(preset);
-       const identityPrompt = PromptLoader.load(promptPath);
-       const engine = baseEngine.withSystemPrompt(identityPrompt);
-       this.log(`Engine initialized with [${preset}] using prompt: ${promptPath}`, 'debug');
-       return engine;
-     } catch (error) {
-       this.log(`Engine initialization failed for ${promptPath}: ${error}`, 'error');
-       throw error;
-     }
-   }
+  /**
+   * 統一的推理引擎初始化方法 (用於結構化輸出)
+   * @param preset 模型預設類型 (SMART, FAST, EVAL 等)
+   * @param promptPath 身份或任務專用的 Prompt Markdown 路徑
+   */
+  protected initEngine(preset: ModelPreset, promptPath: string): InferenceEngine {
+    try {
+      const baseEngine = this.runtime.modelRegistry.getModel(preset);
+      const identityPrompt = PromptLoader.load(promptPath);
+      const engine = baseEngine.withSystemPrompt(identityPrompt);
+      this.log(`Engine initialized with [${preset}] using prompt: ${promptPath}`, 'debug');
+      return engine;
+    } catch (error) {
+      this.log(`Engine initialization failed for ${promptPath}: ${error}`, 'error');
+      throw error;
+    }
+  }
 
-   /**
-    * 初始化 LangChain 原生 ReAct Agent 執行器
-    * 動態將系統的 BaseTool 封裝為 LangChain 認識的格式。
-    */
-   public buildExecutionEngine(modelPreset: ModelPreset): void {
-     try {
-       const model = this.runtime.modelRegistry.getRawModel(modelPreset);
-       const allTools = this.runtime.toolRegistry.getAllTools();
+  /**
+   * 初始化 LangChain 原生 ReAct Agent 執行器
+   * 動態將系統的 BaseTool 封裝為 LangChain 認識的格式。
+   */
+  public buildExecutionEngine<T>(modelPreset: ModelPreset, schema?: z.ZodSchema<T>): void {
+    try {
+      const model = this.runtime.modelRegistry.getRawModel(modelPreset);
+      const allTools = this.runtime.toolRegistry.getAllTools();
 
-       // 將 SuperNova BaseTool 包裝為 LangChain 原生工具
-       const nativeTools = allTools.map(t => langChainTool(async (input, config) => {
-         const context = config?.configurable?.toolContext || {
-           sessionId: 'unknown',
-           agentId: this.id,
-           traceId: IdGenerator.trace()
-         };
+      // 將 SuperNova BaseTool 包裝為 LangChain 原生工具
+      const nativeTools = allTools.map(t => langChainTool(async (input, config) => {
+        const context = config?.configurable?.toolContext || {
+          sessionId: 'unknown',
+          agentId: this.id,
+          traceId: IdGenerator.trace()
+        };
 
-         // 確保 context 中包含 agentId
-         const executeContext: IAgentExecuteContext = {
-           ...context,
-           agentId: context.agentId || this.id
-         };
+        // 確保 context 中包含 agentId
+        const executeContext: IAgentExecuteContext = {
+          ...context,
+          agentId: context.agentId || this.id
+        };
 
-         return await (t as any).execute(input, executeContext);
-       }, {
-         name: t.name,
-         description: t.description,
-         schema: t.schema as any
-       }));
+        return await (t as any).execute(input, executeContext);
+      }, {
+        name: t.name,
+        description: t.description,
+        schema: t.schema as any
+      }));
 
-       // 建立預編譯 ReAct Agent
-       // 注意：我們不在這裡固定 messageModifier，而是在 invoke 時動態處理
-       this.reactAgent = createReactAgent({
-         llm: model,
-         tools: nativeTools
-       });
-       
-       recorder.info(`Agent [${this.id}] ReAct Engine built successfully.`, { type: 'SYSTEM' });
-     } catch (error: any) {
-       recorder.error(`Failed to build execution engine for Agent [${this.id}]: ${error.message}`);
-     }
-   }
+      // 建立預編譯 ReAct Agent
+      // 注意：我們不在這裡固定 systemPrompt，而是在 invoke 時動態處理
+      if (schema) {
+        this.reactAgent = createAgent({
+          model: model,
+          tools: nativeTools,
+          responseFormat: schema
+        });
+      } else {
+        this.reactAgent = createAgent({
+          model: model,
+          tools: nativeTools,
+        });
+      }
+
+      recorder.info(`Agent [${this.id}] ReAct Engine built successfully.`, { type: 'SYSTEM' });
+    } catch (error: any) {
+      recorder.error(`Failed to build execution engine for Agent [${this.id}]: ${error.message}`);
+    }
+  }
 
   /**
    * 快捷方法：寫入數據至 L1 共享黑板
@@ -134,7 +143,7 @@ export abstract class BaseAgent {
    * @param memoryService MemoryService 實例 (用於獲取黑板 key)
    */
   protected async getSystemPrompt(
-    identityPrompt: string, 
+    identityPrompt: string,
     eventPayload: IAgentEventPayload
   ): Promise<string> {
     const contextService = this.runtime.container.resolve<ContextService>('ContextService');
@@ -149,7 +158,7 @@ export abstract class BaseAgent {
    */
   protected log(msg: string, level: 'info' | 'error' | 'debug' | 'warn' = 'info', context?: Partial<IAgentEventPayload>): void {
     const formattedMsg = `[Agent:${this.id}] ${msg}`;
-    
+
     // 自動從 context 中提取 trace 資訊，如果未提供則嘗試保持一致性
     const logContext = {
       type: 'AGENT',
@@ -160,7 +169,7 @@ export abstract class BaseAgent {
       parent_span_id: context?.parentSpanId,
       ...context?.metadata
     };
-    
+
     if (level === 'error') {
       recorder.error(formattedMsg, logContext);
     } else if (level === 'warn') {
@@ -185,7 +194,6 @@ export abstract class BaseAgent {
       parentSpanId: trigger.spanId,       // 鏈路貫通：我的父節點是你的 spanId
       spanId: IdGenerator.span(rolePrefix), // 留下足跡：生成我自己的 spanId
       taskId: trigger.taskId,
-      goal: trigger.goal,                 // 業務繼承：保留目標
       content: trigger.content,           // 業務繼承：保留內容
       metadata: trigger.metadata
     };

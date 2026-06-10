@@ -16,13 +16,16 @@ export class EventBus<P = any> implements IEventBus<P> {
    * 發佈事件至系統
    */
   publish<T extends string, PL extends P>(event: IEvent<T, PL>): void {
-    const handlers = this.subscribers.get(event.type);
-    if (!handlers || handlers.size === 0) return;
+    const specificHandlers = this.subscribers.get(event.type) || new Set();
+    const wildcardHandlers = this.subscribers.get('*') || new Set();
+    
+    const allHandlers = new Set([...specificHandlers, ...wildcardHandlers]);
+    if (allHandlers.size === 0) return;
 
     setImmediate(() => {
-      recorder.debug(`[EventBus] Publishing event: ${event.type} to ${handlers.size} subscribers`, { type: 'SYSTEM' });
+      recorder.debug(`[EventBus] Publishing event: ${event.type} to ${allHandlers.size} subscribers`, { type: 'SYSTEM' });
       
-      handlers.forEach(handler => {
+      allHandlers.forEach(handler => {
         try {
           handler(event);
         } catch (error) {

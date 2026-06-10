@@ -17,8 +17,8 @@ export class WebFetchTool extends BaseTool {
       safety_tier: 'TIER_1',
       required_capabilities: ['network'],
       schema: z.object({
-        url: z.string().url().describe('The URL to fetch.'),
-        format: z.enum(['text', 'json', 'html']).optional().default('text').describe('Expected response format.')
+        url: z.string().describe('The URL to fetch.'),
+        format: z.enum(['text', 'json', 'html']).describe('Expected response format (default to text).')
       })
     });
   }

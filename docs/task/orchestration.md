@@ -1,50 +1,51 @@
-# 任務編排與調度協議 (Task Orchestration)
+# 任務編排與分形執行流程 (Task Orchestration & Fractal Execution)
 
-SuperNova 採用「模板驅動的狀態機 (Template-Driven State Machine)」模型進行任務編排，確保在不同場景下具備最優的執行路徑。
+## 1. 核心設計理念
+SuperNova 採用「任務即會話」與「分形架構」設計。一個複雜的母任務 (Parent Task) 可以透過規劃拆解成一個任務圖 (TaskGraph)，其內部的子任務 (Sub-tasks) 獨立執行，並在完成後回報給母任務，驅動母任務的狀態機前進。
 
-## 1. 核心編排模式：TaskFlow 狀態機
-每個 `Task` 實體內部持有一個 **`TaskFlow`** 實例。在 0.4.0 架構中，這不再是簡單的數據結構，而是一套位於 `src/domain/task/flow/` 的 **獨立領域類別體系**。
+## 2. 系統初始化：記憶體水合 (Hydration)
+為了提高效能並確保狀態一致性，系統啟動時會執行以下操作：
+*   **一次性載入**：`TaskScheduler` 啟動時從持久化層讀取母任務狀態不為封存的任務，並且讀取底下子任務。
+*   **記憶體快取 (ActiveTasks)**：將這些任務存放於記憶體中的 `Map`。
+*   **優勢**：後續的 `onTick` 輪詢直接操作記憶體對象，避免重複的磁碟 I/O 導致的依賴狀態（如 In-Degree）丟失。
 
-### 1.1 任務類型類別 (Task Flow Classes)
-每個任務模板對應一個具體的類別，負責封裝該模板特有的狀態遷徙邏輯：
+## 3. 完整執行生命週期
 
-- **`InstantFlow`**: 僅執行單次行動。
-- **`SimpleFlow`**: `READY -> DOING -> FINISH`。
-- **`StandardFlow`**: `READY -> PLANNING -> DOING -> CHECKING -> ACTING -> FINISH`。
-- **`ComplexFlow`**: 強化版 Standard，帶有更深度的驗證路徑。
-- **`ExploratoryFlow`**: 支援多路徑並行執行。
-- **`EmergencyFlow`**: `READY -> DOING (reAct) -> CHECKING -> ACTING -> FINISH`。
-- **`RecursiveFlow`**: 處理任務遞歸拆解。
+### 階段一：任務啟動與路由
+1.  **用戶輸入**：用戶發布目標。
+2.  **Supervisor 決策**：`SupervisorAgent` 判定任務模板（如 `StandardFlow`）。
+3.  **任務建立**：建立根任務 (Root Task)，進入 `PLANNING` 階段。
 
-### 1.2 遷徙行為
-`TaskFlow` 類別定義了 `nextPhase(result)` 方法，根據執行結果決定狀態機的下一個節點，並在切換時觸發對應的系統事件。
+### 階段二：P 階段 - 分形拆解
+1.  **規劃介入**：`PlanningAgent` 執行推理，產出 `TaskGraph` (子圖)。
+2.  **子圖注入**：將 `TaskGraph` 寫入根任務的 `subGraph` 屬性。
+3.  **狀態前進**：根任務進入 `DOING` 階段。
 
-### 1.2 TaskFlow 數據結構 (Domain Schema)
-系統追蹤並維護任務模板類型、當前所處階段、完整的階段序列以及變遷軌跡。同時也包含用於異常處理的換檔標記，確保流程具備可回溯性。
+### 階段三：D 階段 - 分身調度 (The Tick Mechanism)
+當母任務處於 `DOING` 且擁有 `subGraph` 時，`TaskScheduler` 的 `onTick` 邏輯會自動運作：
+1.  **就緒檢查**：從 `subGraph` 中尋找入度為 0 (無未完成依賴) 且狀態為 `pending` 的子任務節點。
+2.  **分發執行**：
+    *   實例化子任務。
+    *   **強制連結**：在子任務 `metadata` 中寫入 `parentTaskId` 指向母任務。
+    *   將子任務加入記憶體快取並標記為 `running`。
+    *   發布 `Phase.Start` 事件觸發具體執行。
 
-### 1.3 任務的分形架構 (Fractal Architecture)
-為了支援複雜任務的遞歸拆解（Recursive 模板），每個 `Task` 實體具備「分形」能力：
-- **`Task.flow` (微觀流程)**：由狀態機驅動，決定當前任務處於 PDCA 的哪一個階段。
-- **`Task.subGraph` (宏觀拆解)**：若該任務被進一步拆解為多個子任務，則持有 `TaskGraph` 實體來管理子任務間的依賴關係與就緒狀態。
+### 階段四：結案與遞迴回報
+1.  **子任務完成**：子任務走完其自身的 PDCA 流程（包含其下可能更深層的分形）。
+2.  **母任務更新**：
+    *   `TaskScheduler` 根據 `parentTaskId` 找到母任務。
+    *   調用 `parentTask.subGraph.handleTaskCompletion(subTaskId)` 解鎖後續依賴。
+3.  **自動推進**：下一個 Tick 會自動分發剛被解鎖的子任務。
 
-這種設計允許系統將一個「大任務」視為一個「會話容器」，其內部的執行細節透過子圖與獨立的狀態機進行精確控制。
+### 階段五：母任務終結
+1.  **全數完成**：當 `subGraph` 內所有節點均為 `completed`。
+2.  **回標母任務**：發布母任務的 `Phase.Finish` 事件。並且封存任務
+3.  **最終審核**：母任務進入 `CHECKING` 與 `ACTING`，最終產出回報給用戶。
 
-## 2. 目標模板 (Goal Template)
-模板定義了任務的「骨架」，存放在 **L3 SOP** 中或由用戶啟動時指定。
+## 4. 異常處理與自癒 (Self-Healing)
+*   **Retry (重試)**：若子任務失敗，`CheckingAgent` 可發布 `Fail` 事件，讓 `TaskScheduler` 重啟該子任務。
+*   **Escalation (上報)**：若子任務遇到無法解決的障礙，上報至 `SupervisorAgent` 進行高層次換檔 (Shift)。
 
-### 2.1 模板包含內容:
-- **執行路徑**: 定義狀態遷徙的順序。
-- **角色權限**: 指定哪些 Agent 角色參與本任務。
-- **門禁標準**: 定義進入下一個狀態的硬性條件（例如：必須通過 Unit Test 才能從 DOING 轉到 CHECKING）。
-- **超時策略**: 每個狀態的生命預期 (TTL)。
-
-## 3. 調度與生命週期
-- **初始化**: `SupervisorAgent` 接收指令後，匹配對應模板，初始化狀態機。
-- **事件驅動狀態遷徙**: 
-    - 當 `Supervisor` 監聽到 `Planning.Finish` 時，根據模板指向下一個狀態（如 `Doing.Start`）。
-    - 若收到 `Checking.Fail`，根據模板回跳至 `Doing` 或 `Planning`。
-- **自癒掛接**: 當狀態執行發生失敗，優先觸發 [3x3 自癒機制](self_healing.md)。
-
-## 4. 併發與分層
-- **多任務併發**: 系統支持同時啟動多個獨立的 Session，每個 Session 擁有自己的狀態機實例與隔離的黑板。
-- **子任務拆解**: `PlanningAgent` 產出的 `TaskGraph` 可以在一個 `DOING` 狀態內啟動更細粒度的並行子任務鏈。
+---
+*更新日期：2026-06-10*
+*版本：0.5.0*
