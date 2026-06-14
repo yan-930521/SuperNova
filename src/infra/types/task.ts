@@ -71,7 +71,7 @@ export interface TaskDTO {
     isCritical?: boolean;
   };
   /** 執行產出的結果數據 */
-  result?: string;
+  output?: string;
   /** 當前已重試次數 */
   retryCount?: number;
   /** 任務相關的額外元數據 */
