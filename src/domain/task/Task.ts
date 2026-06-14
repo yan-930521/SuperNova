@@ -110,8 +110,8 @@ export class Task extends BaseSession {
         this.history.push(...aeResult.result.history);
       }
       // 確保執行結果摘要同步到 output
-      if (aeResult.result.summary) {
-        this.output = aeResult.result.summary;
+      if (aeResult.summary) {
+        this.output = aeResult.summary;
       }
     }
     
