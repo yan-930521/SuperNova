@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import { ActingAgent } from '../agent/roles/ActingAgent';
 import { CheckingAgent } from '../agent/roles/CheckingAgent';
 import { DoingAgent } from '../agent/roles/DoingAgent';
+import { PersonaAgent } from '../agent/roles/PersonaAgent';
 import { PlanningAgent } from '../agent/roles/PlanningAgent';
 // Agent Roles
 import { SupervisorAgent } from '../agent/roles/SupervisorAgent';
@@ -53,6 +54,7 @@ export class GlobalRuntime {
   public config!: Config;
 
   // --- 內建核心 Agents ---
+  public personaAgent!: PersonaAgent;
   public supervisorAgent!: SupervisorAgent;
   public planningAgent!: PlanningAgent;
   public doingAgent!: DoingAgent;
@@ -140,13 +142,14 @@ export class GlobalRuntime {
     const sessionService = new SessionService(sessionRepo);
     this.container.register('SessionService', sessionService);
 
-    const taskService = new TaskService(taskRepo);
+    const taskService = new TaskService(taskRepo, this.systemBus, this.agentBus, this.config);
     this.container.register('TaskService', taskService);
 
     // 6. 啟動所有組件生命週期
     await this.container.boot();
 
     // 7. 初始化核心無狀態 Agent 單例 (只傳入 agentBus)
+    this.personaAgent = new PersonaAgent('Persona-Xiamo', this.agentBus);
     this.supervisorAgent = new SupervisorAgent('Supervisor-01', this.agentBus);
     this.planningAgent = new PlanningAgent('Planner-01', this.agentBus);
     this.doingAgent = new DoingAgent('Doer-01', this.agentBus);

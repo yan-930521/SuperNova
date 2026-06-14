@@ -19,7 +19,13 @@ export const DEFAULT_CONFIG: Config = {
     /** 預設併發設定 */
     concurrency: {
       global_max_running_tasks: 20,
-      task_max_fan_out: 5
+      task_max_fan_out: 5,
+      phase_limits: {
+        PLANNING: 2,
+        DOING: 10,
+        CHECKING: 5,
+        ACTING: 2
+      }
     }
   },
   observability: {

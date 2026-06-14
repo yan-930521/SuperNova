@@ -1,4 +1,6 @@
 import { ILifecycle } from '../../core/lifecycle/ILifecycle';
+import { IEventBus, SystemEvents, AgentEvents } from '../../core/messaging/IBus';
+import { Config } from '../../config/Config';
 import { ComplexFlow } from '../../domain/task/flow/ComplexFlow';
 import { EmergencyFlow } from '../../domain/task/flow/EmergencyFlow';
 import { ExploratoryFlow } from '../../domain/task/flow/ExploratoryFlow';
@@ -13,20 +15,23 @@ import { TaskStatus } from '../../infra/types/task';
 import { IdGenerator } from '../../utils/IdGenerator';
 
 /**
- * TaskService (任務應用層服務) - SuperNova 0.5.0
- * 職責: 負責任務實體的管理、快取與持久化。
- * 核心策略：【記憶體優先】。Cache 是唯一事實來源，Repo 僅作為冷啟動水合與存檔使用。
+ * TaskService (任務應用層服務) - SuperNova 0.7.0
+ * 職責: 負責任務實體的管理、快取與持久化，以及任務調度。
+ * 核心策略：【任務主導】與【記憶體優先】。
  */
 export class TaskService implements ILifecycle {
   /** 記憶體快取 (L1)：所有活躍任務的唯一實例 */
   private activeTasks = new Map<string, Task>();
 
   constructor(
-    private readonly taskRepo: ITaskRepository<Task>
+    private readonly taskRepo: ITaskRepository<Task>,
+    private readonly systemBus: IEventBus,
+    private readonly agentBus: IEventBus,
+    private readonly config: Config
   ) {}
 
   /**
-   * 初始化：執行水合 (Hydration) 將冷數據搬入 L1
+   * 初始化：執行水合 (Hydration) 並訂閱時鐘脈搏
    */
   async initialize(): Promise<void> {
     try {
@@ -42,14 +47,90 @@ export class TaskService implements ILifecycle {
           }
         }
       }
-      recorder.info(`[TaskService] Memory-First logic ready. ${this.activeTasks.size} tasks hydrated.`, { type: 'SYSTEM' });
+
+      // 訂閱系統時鐘，驅動任務調度
+      this.systemBus.subscribe(SystemEvents.Runtime.Tick, () => {
+        this.dispatchReadyTasks();
+      });
+
+      recorder.info(`[TaskService] Task system initialized. ${this.activeTasks.size} tasks hydrated.`, { type: 'SYSTEM' });
     } catch (error) {
-      recorder.error(`[TaskService] Hydration failed: ${error}`, { type: 'SYSTEM' });
+      recorder.error(`[TaskService] Initialization failed: ${error}`, { type: 'SYSTEM' });
     }
   }
 
   async start(): Promise<void> {}
   async stop(): Promise<void> {}
+
+  /**
+   * 核心調度邏輯：掃描並啟動就緒任務
+   */
+  public dispatchReadyTasks(): void {
+    const limits = this.config.runtime.concurrency.phase_limits;
+    const activeTasks = this.getActiveTasks();
+
+    // 1. 統計各階段正在執行的數量
+    const runningCounts: Record<string, number> = {
+      PLANNING: 0,
+      DOING: 0,
+      CHECKING: 0,
+      ACTING: 0
+    };
+
+    activeTasks.forEach(t => {
+      if (t.status === 'running') {
+        const phase = t.flow.currentPhase;
+        if (runningCounts[phase] !== undefined) {
+          runningCounts[phase]++;
+        }
+      }
+    });
+
+    // 2. 對每個有子圖的根任務或活動任務進行掃描
+    activeTasks.forEach(task => {
+      if (task.isParent && task.subGraph) {
+        // 獲取所有就緒任務
+        const readyTasks = task.subGraph.getReadyTasks();
+        
+        for (const subTask of readyTasks) {
+          const phase = subTask.flow.currentPhase;
+          const limit = (limits as any)[phase] || 1;
+          const current = runningCounts[phase] || 0;
+
+          if (current < limit) {
+            // 啟動任務
+            this.startTaskExecution(subTask);
+            runningCounts[phase]++;
+          }
+        }
+      }
+    });
+  }
+
+  /**
+   * 啟動任務執行
+   */
+  private startTaskExecution(task: Task): void {
+    task.updateStatus('running');
+    
+    // 發布任務啟動事件
+    this.agentBus.publish({
+      type: AgentEvents.Phase.Start,
+      timestamp: Date.now(),
+      payload: {
+        sessionId: task.sessionId,
+        traceId: task.traceId,
+        taskId: task.id,
+        phase: task.flow.currentPhase,
+        content: task.goal // 這裡之後會改為組裝好的上下文
+      }
+    });
+
+    recorder.info(`[TaskService] Dispatched Task: ${task.id} (${task.flow.currentPhase})`, { 
+      type: 'SYSTEM',
+      trace_id: task.traceId
+    });
+  }
 
   // --- 記憶體管理 (L1 Core) ---
 

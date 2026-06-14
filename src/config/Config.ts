@@ -55,6 +55,13 @@ export interface ConcurrencyConfig {
   readonly global_max_running_tasks: number;
   /** 單一母任務最大並行子任務數 (防單一任務資源霸佔) */
   readonly task_max_fan_out: number;
+  /** 各階段併發上限設定 */
+  readonly phase_limits: {
+    readonly PLANNING: number;
+    readonly DOING: number;
+    readonly CHECKING: number;
+    readonly ACTING: number;
+  };
 }
 
 /**
