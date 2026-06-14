@@ -38,6 +38,12 @@ export interface TaskDTO {
   type: string;
   /** 任務具體要達成的目標 */
   goal: string;
+  /** 驗證成功的標準 */
+  successCriteria?: string;
+  /** 各階段產出的摘要，用於組裝後續任務的 Context */
+  phaseSummary?: Record<string, string>;
+  /** 最終組裝好的上下文內容 */
+  context?: string;
   /** 執行狀態 */
   status: TaskStatus;
   /** 依賴的前置任務 ID 列表 */

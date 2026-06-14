@@ -23,6 +23,13 @@ export class Task extends BaseSession {
   public assignedAgentId: string | null = null;
   public requiredCapabilities: string[] = [];
   public retryCount: number = 0;
+  
+  /** 驗證成功的標準 */
+  public successCriteria: string = '';
+  /** 各階段產出的摘要 */
+  public phaseSummary: Record<string, string> = {};
+  /** 最終組裝好的上下文內容 */
+  public context: string = '';
 
   /**
    * 獲取母任務 ID
@@ -140,6 +147,11 @@ export class Task extends BaseSession {
     task.retryCount = dto.retryCount || 0;
     task.metadata = dto.metadata || {};
     
+    // 還原新欄位
+    task.successCriteria = dto.successCriteria || '';
+    task.phaseSummary = dto.phaseSummary || {};
+    task.context = dto.context || '';
+    
     // 根據 DTO 的 templateType 還原具體的 Flow 類別實例
     if (dto.flow) {
       const type = dto.flow.templateType;
@@ -178,6 +190,9 @@ export class Task extends BaseSession {
       sessionId: this.sessionId,
       goal: this.goal,
       description: this.description,
+      successCriteria: this.successCriteria,
+      phaseSummary: this.phaseSummary,
+      context: this.context,
       type: this.type,
       status: this.status as TaskStatus,
       dependencies: this.dependencies,
