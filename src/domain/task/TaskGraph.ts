@@ -49,28 +49,40 @@ export class TaskGraph {
       throw new Error(`[TaskGraph] Node ${parentId} or ${childId} not found`);
     }
 
-    if (this.isReachable(childId, parentId)) {
-      throw new Error(`[TaskGraph] Circular dependency detected: ${childId} -> ${parentId}`);
-    }
-
+    // 暫時添加依賴進行檢查
     const children = this.adjList.get(parentId)!;
-    if (!children.has(childId)) {
+    const isNew = !children.has(childId);
+    
+    if (isNew) {
       children.add(childId);
       const currentInDegree = this.inDegreeMap.get(childId) || 0;
       this.inDegreeMap.set(childId, currentInDegree + 1);
+
+      // 檢查是否產生死循環
+      if (this.detectCycle()) {
+        // 回退變更
+        children.delete(childId);
+        this.inDegreeMap.set(childId, currentInDegree);
+        throw new Error(`[TaskGraph] Circular dependency detected: ${parentId} -> ${childId}`);
+      }
     }
   }
 
   /**
    * 獲取目前就緒的任務 (入度為 0)
+   * @param phase 可選的階段過濾 (e.g., 'PLANNING')
    */
-  public getReadyTasks(): Task[] {
+  public getReadyTasks(phase?: string): Task[] {
     const readyTasks: Task[] = [];
     for (const [taskId, inDegree] of this.inDegreeMap.entries()) {
       if (inDegree === 0) {
         const task = this.nodes.get(taskId);
         // 只有處於待命狀態的任務才算 Ready
         if (task && (task.status === 'pending' || task.status === 'ready')) {
+          // 如果提供了 phase，則進行過濾
+          if (phase && task.flow.currentPhase !== phase) {
+            continue;
+          }
           readyTasks.push(task);
         }
       }
@@ -96,18 +108,55 @@ export class TaskGraph {
   }
 
   /**
-   * DFS 循環檢查
+   * 使用 Kahn's Algorithm 偵測死循環
+   * 返回 true 表示存在循環
    */
-  private isReachable(start: string, target: string, visited = new Set<string>()): boolean {
-    if (start === target) return true;
-    visited.add(start);
-    const children = this.adjList.get(start);
-    if (children) {
-      for (const child of children) {
-        if (!visited.has(child) && this.isReachable(child, target, visited)) return true;
+  public detectCycle(): boolean {
+    const tempInDegree = new Map<string, number>();
+    const queue: string[] = [];
+    let count = 0;
+
+    // 1. 初始化臨時入度表
+    for (const taskId of this.nodes.keys()) {
+      const inDegree = this.calculateInitialInDegree(taskId);
+      tempInDegree.set(taskId, inDegree);
+      if (inDegree === 0) {
+        queue.push(taskId);
       }
     }
-    return false;
+
+    // 2. 拓撲排序掃描
+    while (queue.length > 0) {
+      const u = queue.shift()!;
+      count++;
+
+      const children = this.adjList.get(u);
+      if (children) {
+        for (const v of children) {
+          const d = tempInDegree.get(v)! - 1;
+          tempInDegree.set(v, d);
+          if (d === 0) {
+            queue.push(v);
+          }
+        }
+      }
+    }
+
+    // 3. 如果處理過的節點數小於總節點數，說明有環
+    return count < this.nodes.size;
+  }
+
+  /**
+   * 計算初始入度 (僅用於 detectCycle)
+   */
+  private calculateInitialInDegree(taskId: string): number {
+    let count = 0;
+    for (const [parent, children] of this.adjList.entries()) {
+      if (children.has(taskId)) {
+        count++;
+      }
+    }
+    return count;
   }
 
   /**

@@ -83,6 +83,7 @@ export class Task extends BaseSession {
     status: TaskStatus = 'pending'
   ) {
     super(id, status);
+    this.flow = new StandardFlow();
   }
 
   /**
