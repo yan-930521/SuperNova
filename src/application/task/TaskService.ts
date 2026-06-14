@@ -88,31 +88,49 @@ export class TaskService implements ILifecycle {
       }
     });
 
-    // 2. 對每個有子圖的根任務或活動任務進行掃描
-    activeTasks.forEach(task => {
-      if (task.isParent && task.subGraph) {
-        // 獲取所有就緒任務
-        const readyTasks = task.subGraph.getReadyTasks();
-        
-        for (const subTask of readyTasks) {
-          const phase = subTask.flow.currentPhase;
-          const limit = (limits as any)[phase] || 1;
-          const current = runningCounts[phase] || 0;
+    // 2. 獲取所有潛在可執行的任務
+    const candidates: Task[] = [];
 
-          if (current < limit) {
-            // 啟動任務
-            this.startTaskExecution(subTask);
-            runningCounts[phase]++;
-          }
-        }
+    activeTasks.forEach(task => {
+      // 情況 A: 處於 pending 的根任務
+      if (task.isRoot && (task.status === 'pending' || task.status === 'ready')) {
+        candidates.push(task);
+      }
+
+      // 情況 B: 子圖中的就緒任務
+      if (task.isParent && task.subGraph) {
+        const readySubTasks = task.subGraph.getReadyTasks();
+        candidates.push(...readySubTasks);
       }
     });
+
+    // 3. 去重並按階段分派
+    const uniqueCandidates = Array.from(new Set(candidates));
+    
+    for (const task of uniqueCandidates) {
+      const phase = task.flow.currentPhase;
+      const limit = (limits as any)[phase] || 1;
+      const current = runningCounts[phase] || 0;
+
+      if (current < limit) {
+        this.startTaskExecution(task);
+        runningCounts[phase]++;
+      }
+    }
   }
 
   /**
    * 啟動任務執行
    */
   private async startTaskExecution(task: Task): Promise<void> {
+    // 門禁：避免重複啟動
+    if (task.status === 'running') return;
+
+    // 如果任務處於 READY 階段，需先推進到第一個工作階段 (e.g. PLANNING)
+    if (task.flow.currentPhase === 'READY') {
+      await this.transitionTask(task.id, 'success');
+    }
+
     task.updateStatus('running');
 
     // 獲取依賴項實體

@@ -45,7 +45,6 @@ export class SupervisorAgent extends BaseAgent {
   }
 
   protected setupSubscriptions(): void {
-    this.bus.subscribe(AgentEvents.Control.Chat, (e) => this.onChat(e));
     this.bus.subscribe(AgentEvents.Control.Halt, (e) => {});
     this.bus.subscribe(AgentEvents.Control.Dispatch, (e) => this.onDispatch(e));
 
@@ -57,74 +56,7 @@ export class SupervisorAgent extends BaseAgent {
     this.bus.subscribe(AgentEvents.Phase.Finish, (e) => this.onPhaseFinish(e));
     this.bus.subscribe(AgentEvents.Phase.Fail, (e) => this.onPhaseFail(e));
 
-    // 5. 監聽脈搏心跳進行調度
-    this.bus.subscribe(SystemEvents.Runtime.Tick, () => this.onTick());
-  }
-
-  /**
-   * 處理互動式對話：與用戶進行 ReAct 循環以釐清需求
-   */
-  private async onChat(event: AgentEvent): Promise<void> {
-    const { sessionId, content } = event.payload;
-    const traceId = event.payload.traceId || IdGenerator.trace();
-
-    this.log(`[Supervisor] User interaction started. Content: ${content}`, 'info', { traceId, sessionId });
-
-    try {
-      if (!this.reactAgent) throw new Error("Supervisor ReAct Engine is not initialized.");
-
-      const sessionService = this.runtime.container.resolve<SessionService>('SessionService');
-      
-      // 1. 獲取會話實體並同步歷史紀錄
-      const session = await sessionService.getOrCreateSession(sessionId);
-      
-      // 將用戶當前輸入加入歷史
-      session.addMessage('user', MessageRole.USER, content || '');
-
-      // 2. 準備系統提示詞 (包含 Identity 貫通與黑板上下文)
-      const systemPrompt = await this.getSystemPrompt(this.identityPrompt, event.payload);
-
-      // 3. 獲取完整歷史紀錄作為上下文
-      const historyMessages = session.getLangChainMessages();
-
-      this.updateHeartbeat(sessionId);
-
-      // 4. 透過 RunnableConfig 傳遞 context 給底層工具
-      const config = {
-        configurable: {
-          toolContext: {
-            sessionId,
-            traceId,
-            agentId: this.id,
-            metadata: { spanId: event.payload.spanId }
-          }
-        }
-      };
-
-      // 5. 執行 ReAct 迴圈 (注入歷史紀錄)
-      const result = await this.reactAgent.invoke({
-        messages: [
-          new SystemMessage(systemPrompt),
-          ...historyMessages
-        ]
-      }, config);
-
-      const finalAnswer = result.messages[result.messages.length - 1].content;
-      
-      // 6. 將 AI 回覆存回歷史紀錄並持久化
-      session.addMessage(this.id, MessageRole.ASSISTANT, String(finalAnswer));
-      await sessionService.saveSession(session);
-
-      this.log(`[Supervisor] Interaction response: ${String(finalAnswer)}`, 'info', { 
-        traceId, 
-        sessionId,
-        metadata: { finalAnswer }
-      });
-      
-      // 此處可擴充將 finalAnswer 推播給用戶端
-    } catch (error) {
-      this.log(`[Supervisor] Chat interaction failed: ${error}`, 'error', { traceId, sessionId });
-    }
+    // 移除舊有的 onTick 調度邏輯，改由 TaskService 統一驅動
   }
 
   /**
@@ -147,7 +79,7 @@ export class SupervisorAgent extends BaseAgent {
 
       this.log(`[Supervisor] Routing decision: ${decision.templateType}. Rationale: ${decision.rationale}`, 'info', { traceId, sessionId });
 
-      // 1. 建立任務 (此時處於 READY 階段)
+      // 建立任務 (狀態為 pending，待 TaskService 調度)
       const task = await this.taskService.createTask({
         sessionId,
         goal: content || '',
@@ -156,10 +88,7 @@ export class SupervisorAgent extends BaseAgent {
         traceId
       });
 
-      this.log(`[Supervisor] Root task ${task.id} created. Template: ${decision.templateType}`, 'info', { traceId, sessionId });
-
-      // 2. 啟動首個 Phase (從 READY -> PLANNING/DOING)
-      await this.startTask(task.id, event.payload);
+      this.log(`[Supervisor] Root task ${task.id} created and queued. Template: ${decision.templateType}`, 'info', { traceId, sessionId });
 
     } catch (error) {
       this.log(`[Supervisor] Fast-track routing failed: ${error}`, 'error', { traceId, sessionId });
@@ -183,46 +112,44 @@ export class SupervisorAgent extends BaseAgent {
         parentTaskId: event.payload.metadata?.parentTaskId
       });
 
-      this.log(`[Supervisor] Task ${task.id} initialized via Flow event.`, 'info', { traceId, sessionId });
-      
-      await this.startTask(task.id, event.payload);
+      this.log(`[Supervisor] Task ${task.id} initialized and queued.`, 'info', { traceId, sessionId });
     } catch (error) {
       this.log(`[Supervisor] Flow initialization failed: ${error}`, 'error', { traceId, sessionId });
     }
   }
 
   /**
-   * 監聽階段完成事件，推進狀態機並啟動下一階段
+   * 監聽階段完成事件，推進狀態機
    */
   private async onPhaseFinish(event: AgentEvent): Promise<void> {
     const { taskId, sessionId, traceId, result } = event.payload;
     if (!taskId) return;
 
     try {
-      // 1. 獲取新階段
+      // 推進狀態機。注意：TaskService 的 Tick 會在下一個循環啟動 newPhase
       const newPhase = await this.taskService.transitionTask(taskId, result || 'success');
       
       this.log(`[Supervisor] Phase finished for task ${taskId}. Result: ${result || 'success'}. Next: ${newPhase}`, 'info', { traceId, sessionId });
 
-      // 2. 如果不是 FINISH，啟動下一個階段
-      if (newPhase !== 'FINISH') {
-        this.bus.publish({
-          type: AgentEvents.Phase.Start,
-          timestamp: Date.now(),
-          payload: {
-            ...this.inheritPayload(event.payload, 'sa'),
-            taskId,
-            phase: newPhase as any
-          }
-        });
-      } else {
-        // 任務完成
+      if (newPhase === 'FINISH') {
+        // 任務完成處理
         const task = await this.taskService.getTask(taskId);
         if (task) {
           task.updateStatus('completed');
           await this.taskService.updateTask(task);
         }
         this.log(`[Supervisor] Task ${taskId} completed successfully.`, 'info', { traceId, sessionId });
+
+        // 發布任務完成事件
+        this.bus.publish({
+          type: SystemEvents.Task.Finished,
+          timestamp: Date.now(),
+          payload: {
+            ...this.inheritPayload(event.payload, 'sa'),
+            taskId,
+            content: `Task ${taskId} completed successfully.`
+          }
+        });
       }
     } catch (error) {
       this.log(`[Supervisor] Phase transition failed: ${error}`, 'error', { traceId, sessionId });
@@ -249,66 +176,6 @@ export class SupervisorAgent extends BaseAgent {
         content: `Task failed at phase ${event.payload.phase}`
       }
     });
-  }
-
-  /**
-   * Tick 併發調度邏輯：負責掃描並啟動 Ready 的子任務
-   */
-  private async onTick(): Promise<void> {
-    const tasks = this.taskService.getActiveTasks();
-    for (const task of tasks) {
-      // 只處理 pending 狀態的任務 (通常是 PlanningAgent 產出的子任務)
-      if (task.status === 'pending') {
-        const canStart = await this.checkDependencies(task);
-        if (canStart) {
-          this.log(`[Supervisor] Tick: Starting task ${task.id}`, 'info', { traceId: task.traceId, sessionId: task.sessionId });
-          await this.startTask(task.id, {
-            sessionId: task.sessionId,
-            traceId: task.traceId,
-            spanId: IdGenerator.span('sa')
-          } as any);
-        }
-      }
-    }
-  }
-
-  /**
-   * 輔助方法：啟動任務並推進到第一個工作階段
-   */
-  private async startTask(taskId: string, payload: IAgentEventPayload): Promise<void> {
-    const task = await this.taskService.getTask(taskId);
-    if (!task) return;
-
-    // 從 READY 推進到第一個工作階段 (PLANNING/DOING)
-    const firstWorkPhase = await this.taskService.transitionTask(task.id, 'success');
-    task.updateStatus('running');
-    await this.taskService.updateTask(task);
-
-    this.bus.publish({
-      type: AgentEvents.Phase.Start,
-      timestamp: Date.now(),
-      payload: {
-        ...this.inheritPayload(payload, 'sa'),
-        taskId: task.id,
-        phase: firstWorkPhase as any,
-        content: task.goal
-      }
-    });
-  }
-
-  /**
-   * 檢查任務依賴是否已全部完成
-   */
-  private async checkDependencies(task: Task): Promise<boolean> {
-    if (!task.dependencies || task.dependencies.length === 0) return true;
-    
-    for (const depId of task.dependencies) {
-      const depTask = await this.taskService.getTask(depId);
-      if (!depTask || depTask.status !== 'completed') {
-        return false;
-      }
-    }
-    return true;
   }
 
   /**

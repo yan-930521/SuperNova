@@ -23,7 +23,7 @@ async function demoConcurrency() {
     startedCount++;
   });
 
-  // 1. 建立一個包含 5 個並行任務的圖 (DOING 階段)
+  // 1. 建立一個包含 5 個並行子任務的母任務
   const rootTask = new Task('root', 'trace-1', 'session-1', 'Root Goal', 'Root Desc');
   const subGraph = new TaskGraph();
   
@@ -36,9 +36,13 @@ async function demoConcurrency() {
   rootTask.setSubGraph(subGraph);
   taskService.registerTask(rootTask);
 
-  console.log('✅ Task Tree with 5 parallel DOING tasks registered.');
+  // 2. 建立一個獨立的根任務 (PENDING)
+  const standaloneRoot = new Task('standalone-root', 'trace-2', 'session-2', 'Standalone Goal', 'Standalone Desc');
+  taskService.registerTask(standaloneRoot);
 
-  // 2. 觸發調度
+  console.log('✅ Task Tree and Standalone Root registered.');
+
+  // 3. 觸發調度
   console.log('⏱️ Dispatching Ready Tasks...');
   taskService.dispatchReadyTasks();
 
@@ -47,10 +51,11 @@ async function demoConcurrency() {
 
   console.log(`📊 Summary: Started ${startedCount} tasks.`);
   
-  if (startedCount === 5) {
-    console.log('🎉 Concurrency dispatching works!');
+  // 預期：5 個子任務 (DOING) + 1 個獨立根任務 (READY -> PLANNING) + 1 個母根任務 (READY -> PLANNING) = 7 個任務
+  if (startedCount === 7) {
+    console.log('🎉 Integration scheduling works!');
   } else {
-    console.error(`❌ Expected 5 tasks to start, but got ${startedCount}`);
+    console.error(`❌ Expected 7 tasks to start, but got ${startedCount}`);
     process.exit(1);
   }
 }
