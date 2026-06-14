@@ -24,6 +24,8 @@ export class Task extends BaseSession {
   public requiredCapabilities: string[] = [];
   public retryCount: number = 0;
   
+  /** 執行產出的結果數據 */
+  public output: string = '';
   /** 驗證成功的標準 */
   public successCriteria: string = '';
   /** 各階段產出的摘要 */
@@ -103,8 +105,14 @@ export class Task extends BaseSession {
    * 從代理執行結果中吸收歷史軌跡
    */
   public absorbExecuteResult(aeResult: IAgentExecuteResult): void {
-    if (aeResult.result && aeResult.result.history) {
-      this.history.push(...aeResult.result.history);
+    if (aeResult.result) {
+      if (aeResult.result.history) {
+        this.history.push(...aeResult.result.history);
+      }
+      // 確保執行結果摘要同步到 output
+      if (aeResult.result.summary) {
+        this.output = aeResult.result.summary;
+      }
     }
     
     if (aeResult.status === 'success') {
@@ -151,6 +159,7 @@ export class Task extends BaseSession {
     task.successCriteria = dto.successCriteria || '';
     task.phaseSummary = dto.phaseSummary || {};
     task.context = dto.context || '';
+    task.output = dto.output || '';
     
     // 根據 DTO 的 templateType 還原具體的 Flow 類別實例
     if (dto.flow) {
@@ -193,6 +202,7 @@ export class Task extends BaseSession {
       successCriteria: this.successCriteria,
       phaseSummary: this.phaseSummary,
       context: this.context,
+      output: this.output,
       type: this.type,
       status: this.status as TaskStatus,
       dependencies: this.dependencies,
