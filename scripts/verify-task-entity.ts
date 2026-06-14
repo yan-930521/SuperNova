@@ -23,6 +23,7 @@ async function verifyTaskEntity() {
     "DOING": "Core logic implemented"
   };
   task.context = "This is the assembled context content";
+  task.output = "Final task execution output";
 
   console.log("✅ Task entity created and new fields set.");
 
@@ -43,6 +44,10 @@ async function verifyTaskEntity() {
   }
   if (dto.context !== task.context) {
     console.error("❌ Error: DTO context mismatch");
+    errors++;
+  }
+  if (dto.output !== task.output) {
+    console.error("❌ Error: DTO output mismatch");
     errors++;
   }
 
@@ -68,6 +73,10 @@ async function verifyTaskEntity() {
   }
   if (restoredTask.context !== task.context) {
     console.error("❌ Error: Restored context mismatch");
+    errors++;
+  }
+  if (restoredTask.output !== task.output) {
+    console.error("❌ Error: Restored output mismatch");
     errors++;
   }
 
