@@ -14,6 +14,8 @@ import { ITaskRepository } from '../../infra/persistence/IRepository';
 import { TaskStatus } from '../../infra/types/task';
 import { IdGenerator } from '../../utils/IdGenerator';
 
+import { ContextAssembler } from '../context/ContextAssembler';
+
 /**
  * TaskService (任務應用層服務) - SuperNova 0.7.0
  * 職責: 負責任務實體的管理、快取與持久化，以及任務調度。
@@ -110,8 +112,19 @@ export class TaskService implements ILifecycle {
   /**
    * 啟動任務執行
    */
-  private startTaskExecution(task: Task): void {
+  private async startTaskExecution(task: Task): Promise<void> {
     task.updateStatus('running');
+
+    // 獲取依賴項實體
+    const dependencies: Task[] = [];
+    for (const depId of task.dependencies) {
+      const depTask = await this.getTask(depId);
+      if (depTask) dependencies.push(depTask);
+    }
+
+    // 組裝上下文
+    const assembledContext = ContextAssembler.assemble(task, dependencies);
+    task.context = assembledContext;
     
     // 發布任務啟動事件
     this.agentBus.publish({
@@ -122,7 +135,7 @@ export class TaskService implements ILifecycle {
         traceId: task.traceId,
         taskId: task.id,
         phase: task.flow.currentPhase,
-        content: task.goal // 這裡之後會改為組裝好的上下文
+        content: assembledContext
       }
     });
 
