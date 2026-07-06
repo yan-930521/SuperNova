@@ -3,7 +3,7 @@ import { MemoryService } from '../../application/memory/MemoryService';
 import { AgentEvent, AgentEvents, IAgentEventPayload, IEventBus } from '../../core/messaging/IBus';
 import { InferenceEngine } from '../../infra/ModelRegistry';
 import { ModelPreset } from '../../infra/types/agent';
-import { ReflectionSchema } from '../../schemas/agent/AgentOutputSchemas';
+import { ReflectionSchema } from '../../schemas/agent/ActingSchemas';
 import { IdGenerator } from '../../utils/IdGenerator';
 import { PromptLoader } from '../../utils/PromptLoader';
 import { BaseAgent } from '../BaseAgent';
@@ -47,7 +47,7 @@ export class ActingAgent extends BaseAgent {
       const identityPrompt = PromptLoader.load('prompts/identity/acting_agent.md');
       const systemPrompt = await this.getSystemPrompt(identityPrompt, event.payload);
 
-      // 2. 定義結構化沈澱 Schema (已移至 AgentOutputSchemas)
+      // 2. 定義結構化沈澱 Schema (已移至 ActingSchemas)
 
       // 3. 調用預熱引擎進行知識提煉
       const result = await this.actingEngine.withSystemPrompt(systemPrompt).infer({

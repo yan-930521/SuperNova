@@ -54,6 +54,7 @@ SuperNova 是一個基於事件驅動與 PDCA 循環的代理蜂群系統。它�
 - **通用 Payload (`IAgentEventPayload`)**：統一使用 `content` 欄位承載核心內容，移除 `goal` 等冗餘欄位。
 - **通配符監控**：`EventBus` 支援 `*` 訂閱，允許全局監控腳本在不侵入 Agent 邏輯的情況下觀察整個系統的脈動。
 - **Strict Mode 相容**：所有工具 Schema 符合 OpenAI 嚴格驗證規範，確保結構化輸出的高成功率。
+- **模組化 Schema (Modular Schemas)**：Agent 的輸出結構依據角色拆分為 `PlanningSchemas`, `ActingSchemas`, `CheckingSchemas`, `SupervisingSchemas` 等獨立模組，確保職責單一化。
 
 ### 3.4 自主審核機制 (Autonomous Verification)
 `CheckingAgent` 不再僅僅是文本對比器，而升級為具備「實證能力」的 Agent：

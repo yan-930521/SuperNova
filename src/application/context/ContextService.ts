@@ -30,7 +30,7 @@ export class ContextService {
 
     // 1. Task Constraints
     const taskConstraints = [
-      `- Objective: ${payload.goal || 'No objective provided'}`,
+      `- Objective: ${payload.content || 'No objective provided'}`,
       `- Deadline: ${metadata.deadline || 'ASAP'}`,
       `- Scope: ${metadata.scope || 'Current workspace'}`
     ].join('\n');

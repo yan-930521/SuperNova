@@ -6,7 +6,7 @@ import { ContextService } from '../../application/context/ContextService';
 import { AgentEvent, AgentEvents, IAgentEventPayload, IEventBus } from '../../core/messaging/IBus';
 import { InferenceEngine } from '../../infra/ModelRegistry';
 import { ModelPreset } from '../../infra/types/agent';
-import { CheckSchema } from '../../schemas/agent/AgentOutputSchemas';
+import { CheckSchema } from '../../schemas/agent/CheckingSchemas';
 import { IdGenerator } from '../../utils/IdGenerator';
 import { PromptLoader } from '../../utils/PromptLoader';
 import { BaseAgent } from '../BaseAgent';

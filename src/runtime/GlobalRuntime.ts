@@ -1,12 +1,11 @@
 import * as path from 'node:path';
 
-import { ActingAgent } from '../agent/roles/ActingAgent';
-import { CheckingAgent } from '../agent/roles/CheckingAgent';
-import { DoingAgent } from '../agent/roles/DoingAgent';
-import { PersonaAgent } from '../agent/roles/PersonaAgent';
-import { PlanningAgent } from '../agent/roles/PlanningAgent';
-// Agent Roles
-import { SupervisorAgent } from '../agent/roles/SupervisorAgent';
+import type { ActingAgent } from '../agent/roles/ActingAgent';
+import type { CheckingAgent } from '../agent/roles/CheckingAgent';
+import type { DoingAgent } from '../agent/roles/DoingAgent';
+import type { PersonaAgent } from '../agent/roles/PersonaAgent';
+import type { PlanningAgent } from '../agent/roles/PlanningAgent';
+import type { SupervisorAgent } from '../agent/roles/SupervisorAgent';
 import { ContextService } from '../application/context/ContextService';
 import { UserService } from '../application/identity/UserService';
 import { MemoryService } from '../application/memory/MemoryService';
@@ -149,6 +148,13 @@ export class GlobalRuntime {
     await this.container.boot();
 
     // 7. 初始化核心無狀態 Agent 單例 (只傳入 agentBus)
+    const { PersonaAgent } = await import('../agent/roles/PersonaAgent');
+    const { SupervisorAgent } = await import('../agent/roles/SupervisorAgent');
+    const { PlanningAgent } = await import('../agent/roles/PlanningAgent');
+    const { DoingAgent } = await import('../agent/roles/DoingAgent');
+    const { CheckingAgent } = await import('../agent/roles/CheckingAgent');
+    const { ActingAgent } = await import('../agent/roles/ActingAgent');
+
     this.personaAgent = new PersonaAgent('Persona-Xiamo', this.agentBus);
     this.supervisorAgent = new SupervisorAgent('Supervisor-01', this.agentBus);
     this.planningAgent = new PlanningAgent('Planner-01', this.agentBus);

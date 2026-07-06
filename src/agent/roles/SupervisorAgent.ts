@@ -12,7 +12,7 @@ import { MessageRole } from '../../infra/types/session';
 import { GlobalRuntime } from '../../runtime/GlobalRuntime';
 import {
     EscalationDecisionSchema, RoutingDecisionSchema
-} from '../../schemas/agent/AgentOutputSchemas';
+} from '../../schemas/agent/SupervisingSchemas';
 import { IdGenerator } from '../../utils/IdGenerator';
 import { PromptLoader } from '../../utils/PromptLoader';
 import { BaseAgent } from '../BaseAgent';
@@ -122,11 +122,23 @@ export class SupervisorAgent extends BaseAgent {
    * 監聽階段完成事件，推進狀態機
    */
   private async onPhaseFinish(event: AgentEvent): Promise<void> {
-    const { taskId, sessionId, traceId, result } = event.payload;
+    const { taskId, sessionId, traceId, result, metadata } = event.payload;
     if (!taskId) return;
 
     try {
-      // 推進狀態機。注意：TaskService 的 Tick 會在下一個循環啟動 newPhase
+      // 1. 如果是 PLANNING 階段完成，且帶有子圖數據，則注入任務實體
+      if (event.payload.phase === 'PLANNING' && metadata?.subGraph) {
+        const task = await this.taskService.getTask(taskId);
+        if (task) {
+          this.log(`[Supervisor] Injecting subGraph into task ${taskId}`, 'info', { traceId, sessionId });
+          task.setSubGraph(metadata.subGraph);
+          // 重新註冊以水合子任務到 TaskService 的 L1 快取
+          this.taskService.registerTask(task);
+          await this.taskService.updateTask(task);
+        }
+      }
+
+      // 2. 推進狀態機。注意：TaskService 的 Tick 會在下一個循環啟動 newPhase
       const newPhase = await this.taskService.transitionTask(taskId, result || 'success');
       
       this.log(`[Supervisor] Phase finished for task ${taskId}. Result: ${result || 'success'}. Next: ${newPhase}`, 'info', { traceId, sessionId });

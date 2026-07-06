@@ -88,10 +88,12 @@ export class InferenceEngine {
 				messages: state.messages || []
 			};
 			
-			recorder.debug(`[InferenceEngine] Invoking configured inference chain`, { type: 'SYSTEM' });
+			recorder.info(`[InferenceEngine] Invoking configured inference chain: ${config.runName}`, { type: 'SYSTEM' });
 
 			// 5. 執行並回傳結果
-			return await finalChain.invoke(inputVariables) as T;
+			const result = await finalChain.invoke(inputVariables) as T;
+			recorder.info(`[InferenceEngine] Inference completed: ${config.runName}`, { type: 'SYSTEM' });
+			return result;
 
 		} catch (error: any) {
 			recorder.error(`[InferenceEngine] Inference execution failed`, {

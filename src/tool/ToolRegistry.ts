@@ -59,6 +59,7 @@ export class ToolRegistry {
     // 使用 require 避開加載時的循環引用
     const { DispatchTaskTool } = require('./core/DispatchTaskTool');
     const { TaskInfoTool } = require('./core/TaskInfoTool');
+    const { RefinePlanTool } = require('./core/RefinePlanTool');
     
     const { DeepThinkingTool } = require('./common/DeepThinkingTool');
     const { TavilySearchTool } = require('./common/TavilySearchTool');
@@ -80,7 +81,7 @@ export class ToolRegistry {
 
     this.register([
       new DeepThinkingTool(),
-      new DispatchTaskTool(), new TaskInfoTool(),
+      new DispatchTaskTool(), new TaskInfoTool(), new RefinePlanTool(),
       new TavilySearchTool(), new WebFetchTool(),
       new TimeTool(), new SystemInfoTool(), new MathTool(),
       new UnitConverterTool(), new CodeExecutorTool(), new TextSummarizerTool(),

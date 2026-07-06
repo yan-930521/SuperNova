@@ -1,11 +1,11 @@
 import { TaskGraphData, TaskStatus } from '../../infra/types/task';
 import { IdGenerator } from '../../utils/IdGenerator';
+import { GraphValidator, IGraphEdge } from '../../utils/GraphValidator';
 import { Task } from './Task';
 
 /**
  * TaskGraph (任務圖) - 領域實體
  * 負責管理一組任務間的依賴關係 (Directed Acyclic Graph)。
- * 在 0.4.0 架構中，它是「分形架構」的核心，一個 Task 可以持有一個 TaskGraph 作為其 subGraph。
  */
 export class TaskGraph {
   /** 節點存儲：taskId -> Task Entity */
@@ -58,28 +58,26 @@ export class TaskGraph {
       const currentInDegree = this.inDegreeMap.get(childId) || 0;
       this.inDegreeMap.set(childId, currentInDegree + 1);
 
-      // 檢查是否產生死循環
-      if (this.detectCycle()) {
+      // 使用統一的驗證器檢查物理合法性
+      const report = this.validate();
+      if (!report.isValid) {
         // 回退變更
         children.delete(childId);
         this.inDegreeMap.set(childId, currentInDegree);
-        throw new Error(`[TaskGraph] Circular dependency detected: ${parentId} -> ${childId}`);
+        throw new Error(`[TaskGraph] Dependency rejected: ${report.errors.join('; ')}`);
       }
     }
   }
 
   /**
    * 獲取目前就緒的任務 (入度為 0)
-   * @param phase 可選的階段過濾 (e.g., 'PLANNING')
    */
   public getReadyTasks(phase?: string): Task[] {
     const readyTasks: Task[] = [];
     for (const [taskId, inDegree] of this.inDegreeMap.entries()) {
       if (inDegree === 0) {
         const task = this.nodes.get(taskId);
-        // 只有處於待命狀態的任務才算 Ready
         if (task && (task.status === 'pending' || task.status === 'ready')) {
-          // 如果提供了 phase，則進行過濾
           if (phase && task.flow.currentPhase !== phase) {
             continue;
           }
@@ -103,60 +101,22 @@ export class TaskGraph {
         }
       }
     }
-    // 從入度表中移除已完成節點
     this.inDegreeMap.delete(taskId);
   }
 
   /**
-   * 使用 Kahn's Algorithm 偵測死循環
-   * 返回 true 表示存在循環
+   * 調用統一驗證器進行物理檢查
    */
-  public detectCycle(): boolean {
-    const tempInDegree = new Map<string, number>();
-    const queue: string[] = [];
-    let count = 0;
-
-    // 1. 初始化臨時入度表
-    for (const taskId of this.nodes.keys()) {
-      const inDegree = this.calculateInitialInDegree(taskId);
-      tempInDegree.set(taskId, inDegree);
-      if (inDegree === 0) {
-        queue.push(taskId);
-      }
+  public validate() {
+    const edges: IGraphEdge[] = [];
+    for (const [parentId, children] of this.adjList.entries()) {
+      children.forEach(childId => {
+        // 在 GraphValidator 中，sourceId 是依賴者，targetId 是被依賴者
+        // 而在 TaskGraph 的邏輯中，parent 是被依賴者，child 是依賴者
+        edges.push({ sourceId: childId, targetId: parentId });
+      });
     }
-
-    // 2. 拓撲排序掃描
-    while (queue.length > 0) {
-      const u = queue.shift()!;
-      count++;
-
-      const children = this.adjList.get(u);
-      if (children) {
-        for (const v of children) {
-          const d = tempInDegree.get(v)! - 1;
-          tempInDegree.set(v, d);
-          if (d === 0) {
-            queue.push(v);
-          }
-        }
-      }
-    }
-
-    // 3. 如果處理過的節點數小於總節點數，說明有環
-    return count < this.nodes.size;
-  }
-
-  /**
-   * 計算初始入度 (僅用於 detectCycle)
-   */
-  private calculateInitialInDegree(taskId: string): number {
-    let count = 0;
-    for (const [parent, children] of this.adjList.entries()) {
-      if (children.has(taskId)) {
-        count++;
-      }
-    }
-    return count;
+    return GraphValidator.validate(Array.from(this.nodes.values()), edges);
   }
 
   /**
