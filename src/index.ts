@@ -1,2 +1,1 @@
-import '../scripts/task-demo';
-
+console.log("index.ts")

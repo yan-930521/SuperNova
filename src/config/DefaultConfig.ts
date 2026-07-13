@@ -6,36 +6,7 @@ import { Config } from './Config';
  * 提供合理的預設值確保系統即便在沒有設定檔的情況下也能正常啟動。
  */
 export const DEFAULT_CONFIG: Config = {
-  version: "v0.4.0",
-  runtime: {
-    /** 預設 Tick 頻率為 100ms */
-    tick_rate_ms: 100,
-    /** 預設最大並行會話數為 10 */
-    max_active_sessions: 10,
-    /** 預設 Agent 目錄 */
-    agents_dir: './agents',
-    /** 預設保底 Agent ID */
-    default_fallback_agent_id: 'default-worker',
-    /** 預設併發設定 */
-    concurrency: {
-      global_max_running_tasks: 20,
-      task_max_fan_out: 5,
-      phase_limits: {
-        PLANNING: 2,
-        DOING: 10,
-        CHECKING: 5,
-        ACTING: 2
-      }
-    }
-  },
-  observability: {
-    /** 預設運行於開發模式 */
-    mode: 'DEVELOPMENT',
-    /** 預設啟用分散式追蹤 */
-    enable_tracing: true,
-    /** 預設操作日誌壓縮閾值為 100 */
-    oplog_compression_threshold: 100,
-  },
+  version: "v0.1.0",
   security: {
     /** 工具執行超時預設為 30 秒 (30000ms) */
     default_tool_timeout_ms: 30000,
@@ -46,7 +17,6 @@ export const DEFAULT_CONFIG: Config = {
     base_dir: './workspace',
     sessions_dir: 'sessions',
     memory_dir: 'memory',
-    global_facts_dir: 'L2_global',
-    sops_dir: 'L3_sops',
+    agent_dir: 'agent',
   },
 };

@@ -1,6 +1,6 @@
 {
   "name": "supernova",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "SuperNova AI Runtime",
   "main": "index.js",
   "scripts": {
@@ -24,6 +24,7 @@
     "axios": "^1.16.0",
     "handlebars": "^4.7.9",
     "langchain": "^1.4.4",
+    "memfs": "^4.64.0",
     "uuid": "^9.0.1",
     "zod": "^4.4.3"
   },

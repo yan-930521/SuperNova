@@ -1,10 +1,12 @@
-import { recorder } from '../../infra/LogManager';
+import { LogManager } from '../infra/LogManager';
 import { ILifecycle } from '../lifecycle/ILifecycle';
 
 /**
  * 組件容器，負責管理組件的註冊、解析以及生命週期調度
  */
 export class ComponentContainer {
+  private logger = new LogManager({ type: 'SYSTEM', agent_id: 'ComponentContainer' });
+
   /**
    * 存儲所有註冊的組件實例
    */
@@ -66,11 +68,10 @@ export class ComponentContainer {
         }
       }
 
-      recorder.info('[ComponentContainer] Container booted successfully', { type: 'SYSTEM' });
+      this.logger.info('[ComponentContainer] Container booted successfully');
     } catch (error) {
       // 啟動失敗時，記錄錯誤並重新拋出
-      recorder.error('[ComponentContainer] Container boot failed', {
-        type: 'SYSTEM',
+      this.logger.error('[ComponentContainer] Container boot failed', {
         payload: { error: error instanceof Error ? error.message : String(error) }
       });
       throw error;
@@ -90,11 +91,10 @@ export class ComponentContainer {
         }
       }
 
-      recorder.info('[ComponentContainer] Container stopped successfully', { type: 'SYSTEM' });
+      this.logger.info('[ComponentContainer] Container stopped successfully');
     } catch (error) {
       // 停止失敗時，記錄錯誤並重新拋出
-      recorder.error('[ComponentContainer] Container shutdown failed', {
-        type: 'SYSTEM',
+      this.logger.error('[ComponentContainer] Container shutdown failed', {
         payload: { error: error instanceof Error ? error.message : String(error) }
       });
       throw error;

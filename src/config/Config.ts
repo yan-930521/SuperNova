@@ -5,10 +5,6 @@
 export interface Config {
   /** 版本號碼 */
   readonly version: string;
-  /** 運行時相關配置 */
-  readonly runtime: RuntimeConfig;
-  /** 可觀測性相關配置 (日誌、追蹤等) */
-  readonly observability: ObservabilityConfig;
   /** 安全性相關配置 */
   readonly security: SecurityConfig;
   /** 儲存路徑相關配置 */
@@ -25,59 +21,9 @@ export interface StorageConfig {
   readonly sessions_dir: string;
   /** 記憶體根目錄 */
   readonly memory_dir: string;
-  /** 全局事實子目錄 */
-  readonly global_facts_dir: string;
-  /** SOP 子目錄 */
-  readonly sops_dir: string;
+  /** Agent 專屬實體工作區子目錄 */
+  readonly agent_dir: string;
 }
-
-/**
- * 運行時配置子介面
- */
-export interface RuntimeConfig {
-  /** 全局 Tick 頻率 (ms)，控制系統邏輯循環的步進間隔 */
-  readonly tick_rate_ms: number;
-  /** 系統允許同時存在的最大活動會話數 (接案上限) */
-  readonly max_active_sessions: number;
-  /** Agent 設定存放目錄 (相對路徑) */
-  readonly agents_dir: string;
-  /** 預設的保底 Worker Agent ID */
-  readonly default_fallback_agent_id: string;
-  /** 併發控制設定 */
-  readonly concurrency: ConcurrencyConfig;
-}
-
-/**
- * 併發控制配置子介面
- */
-export interface ConcurrencyConfig {
-  /** 全局最大並行執行任務數 (防 LLM Rate Limit 爆掉) */
-  readonly global_max_running_tasks: number;
-  /** 單一母任務最大並行子任務數 (防單一任務資源霸佔) */
-  readonly task_max_fan_out: number;
-  /** 各階段併發上限設定 */
-  readonly phase_limits: {
-    readonly PLANNING: number;
-    readonly DOING: number;
-    readonly CHECKING: number;
-    readonly ACTING: number;
-  };
-}
-
-/**
- * 可觀測性配置子介面
- */
-export interface IObservabilityConfig {
-  /** 運行模式：生產、開發或調試 */
-  readonly mode: 'PRODUCTION' | 'DEVELOPMENT' | 'DEBUG';
-  /** 是否啟用分散式追蹤 (Tracing) */
-  readonly enable_tracing: boolean;
-  /** 操作日誌 (OpLog) 壓縮閾值，當記錄超過此數量時觸發壓縮 */
-  readonly oplog_compression_threshold: number;
-}
-
-// 別名以相容舊名稱 (如果需要)
-export type ObservabilityConfig = IObservabilityConfig;
 
 /**
  * 安全性配置子介面
