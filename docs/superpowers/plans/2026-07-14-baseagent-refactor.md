@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Rewrite `BaseAgent.ts` as pure infrastructure, export all core components via `src/core/index.ts`, and ensure future business logic agents reside in `src/package/agent`.
+**Goal:** Move `BaseAgent` to `src/package/agent/` and rewrite it as pure infrastructure with lifecycle management, token tracking, and state persistence. Establish `src/core/index.ts` as the export boundary for core dependencies.
 
-**Architecture:** We replace the current PDCA-based `AgentState` with a pure lifecycle enum. `BaseAgent` will bind to `EventBus` and `InboxBuffer`, direct logs to a dedicated physical directory, track token usage, and serialize its state. All core dependencies are exported via `src/core/index.ts` to enforce a clean boundary for `src/package`.
+**Architecture:** We strictly enforce that all agent logic (including `BaseAgent`) resides in `src/package/agent`. The core infrastructure (`DataBlock`, `IEventBus`, `Config`, `LogManager`) remains in `src/core` and is exported via `src/core/index.ts`. `BaseAgent` will bind to `EventBus` and `InboxBuffer`, direct logs to a dedicated physical directory, track token usage, and serialize its state. 
 
 **Tech Stack:** TypeScript, Jest, Node.js `fs/promises`
 
@@ -20,8 +20,10 @@
 ```typescript
 // src/core/index.ts
 // Export all necessary infrastructure modules for the package to use.
-export * from './agent/BaseAgent';
 // Note: Additional exports (like DataBlock, IBus) should be added here as they are developed
+export * from './config/Config';
+export * from './messaging/DataBlock';
+export * from './messaging/IBus';
 ```
 
 - [ ] **Step 2: Commit**
@@ -33,17 +35,18 @@ git commit -m "feat(core): establish index.ts export boundary for core module"
 
 ---
 
-### Task 2: Update Enums and Interfaces
+### Task 2: Move and Update BaseAgent Enums and Interfaces
 
 **Files:**
-- Modify: `src/core/agent/BaseAgent.ts`
-- Modify: `tests/core/agent/BaseAgent.test.ts`
+- Move: `src/core/agent/BaseAgent.ts` -> `src/package/agent/BaseAgent.ts` (We will just overwrite and create the new file)
+- Create: `tests/package/agent/BaseAgent.test.ts`
+- Modify: `src/package/agent/BaseAgent.ts`
 
 - [ ] **Step 1: Write the failing test**
 
 ```typescript
-// tests/core/agent/BaseAgent.test.ts
-import { AgentState, UsageStats } from '../../../src/core/agent/BaseAgent';
+// tests/package/agent/BaseAgent.test.ts
+import { AgentState, UsageStats } from '../../../src/package/agent/BaseAgent';
 
 describe('BaseAgent Types', () => {
   it('should define lifecycle AgentState', () => {
@@ -60,13 +63,20 @@ describe('BaseAgent Types', () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `npx jest tests/core/agent/BaseAgent.test.ts`
-Expected: FAIL due to missing `BUSY` state and presence of old `PLAN` state in `AgentState`.
+Run: `npx jest tests/package/agent/BaseAgent.test.ts`
+Expected: FAIL due to missing file.
 
-- [ ] **Step 3: Write minimal implementation**
+- [ ] **Step 3: Move file and write minimal implementation**
+
+Move the file and clear out old content:
+```bash
+mkdir -p src/package/agent
+mkdir -p tests/package/agent
+rm -f src/core/agent/BaseAgent.ts
+```
 
 ```typescript
-// src/core/agent/BaseAgent.ts (Replace AgentState enum and add UsageStats)
+// src/package/agent/BaseAgent.ts
 export enum AgentState {
   INITIALIZING = 'INITIALIZING',
   IDLE = 'IDLE',
@@ -84,14 +94,15 @@ export interface UsageStats {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `npx jest tests/core/agent/BaseAgent.test.ts`
+Run: `npx jest tests/package/agent/BaseAgent.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/core/agent/BaseAgent.ts tests/core/agent/BaseAgent.test.ts
-git commit -m "refactor(agent): update AgentState to pure lifecycle and add UsageStats"
+git rm -f src/core/agent/BaseAgent.ts
+git add src/package/agent/BaseAgent.ts tests/package/agent/BaseAgent.test.ts
+git commit -m "refactor(agent): move BaseAgent to package and update AgentState"
 ```
 
 ---
@@ -99,20 +110,20 @@ git commit -m "refactor(agent): update AgentState to pure lifecycle and add Usag
 ### Task 3: Implement Core Initialization and Infrastructure Binding
 
 **Files:**
-- Modify: `src/core/agent/BaseAgent.ts`
-- Modify: `tests/core/agent/BaseAgent.test.ts`
+- Modify: `src/package/agent/BaseAgent.ts`
+- Modify: `tests/package/agent/BaseAgent.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
 ```typescript
-// tests/core/agent/BaseAgent.test.ts
-import { BaseAgent, AgentState } from '../../../src/core/agent/BaseAgent';
+// tests/package/agent/BaseAgent.test.ts
+import { BaseAgent, AgentState } from '../../../src/package/agent/BaseAgent';
 import { IEventBus } from '../../../src/core/messaging/IBus';
-import { Config } from '../../../src/config/Config';
+import { Config } from '../../../src/core/config/Config';
 import { DataBlock } from '../../../src/core/messaging/DataBlock';
 
 class TestAgent extends BaseAgent {
-  // Mock class to instantiate abstract BaseAgent
+  // Mock class
 }
 
 describe('BaseAgent Initialization', () => {
@@ -132,21 +143,22 @@ describe('BaseAgent Initialization', () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `npx jest tests/core/agent/BaseAgent.test.ts`
+Run: `npx jest tests/package/agent/BaseAgent.test.ts`
 Expected: FAIL
 
 - [ ] **Step 3: Write minimal implementation**
 
 ```typescript
-// src/core/agent/BaseAgent.ts
+// src/package/agent/BaseAgent.ts
 import * as path from 'path';
 import * as fs from 'fs/promises';
-import { Config } from '../../config/Config';
-import { LogManager } from '../infra/LogManager';
-import { ConsoleTransport } from '../infra/transports/ConsoleTransport';
-import { FileTransport } from '../infra/transports/FileTransport';
-import { DataBlock } from '../messaging/DataBlock';
-import { IEventBus } from '../messaging/IBus';
+// We import from core/index.ts where possible, assuming they are exported or using direct path
+import { Config } from '../../core/config/Config';
+import { LogManager } from '../../core/infra/LogManager';
+import { ConsoleTransport } from '../../core/infra/transports/ConsoleTransport';
+import { FileTransport } from '../../core/infra/transports/FileTransport';
+import { DataBlock } from '../../core/messaging/DataBlock';
+import { IEventBus } from '../../core/messaging/IBus';
 
 export class InboxBuffer {
   private buffer: DataBlock[] = [];
@@ -215,13 +227,13 @@ export abstract class BaseAgent {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `npx jest tests/core/agent/BaseAgent.test.ts`
+Run: `npx jest tests/package/agent/BaseAgent.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/core/agent/BaseAgent.ts tests/core/agent/BaseAgent.test.ts
+git add src/package/agent/BaseAgent.ts tests/package/agent/BaseAgent.test.ts
 git commit -m "feat(agent): implement infrastructure binding and event subscription"
 ```
 
@@ -230,13 +242,13 @@ git commit -m "feat(agent): implement infrastructure binding and event subscript
 ### Task 4: Implement Lifecycle Methods
 
 **Files:**
-- Modify: `src/core/agent/BaseAgent.ts`
-- Modify: `tests/core/agent/BaseAgent.test.ts`
+- Modify: `src/package/agent/BaseAgent.ts`
+- Modify: `tests/package/agent/BaseAgent.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
 ```typescript
-// tests/core/agent/BaseAgent.test.ts
+// tests/package/agent/BaseAgent.test.ts
 describe('BaseAgent Lifecycle', () => {
   it('should handle suspend, resume and destroy correctly', async () => {
     const mockEventBus = { subscribe: jest.fn(), unsubscribe: jest.fn() } as unknown as IEventBus;
@@ -262,13 +274,13 @@ describe('BaseAgent Lifecycle', () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `npx jest tests/core/agent/BaseAgent.test.ts`
+Run: `npx jest tests/package/agent/BaseAgent.test.ts`
 Expected: FAIL
 
 - [ ] **Step 3: Write minimal implementation**
 
 ```typescript
-// src/core/agent/BaseAgent.ts
+// src/package/agent/BaseAgent.ts
   // Inside BaseAgent class:
 
   protected async saveState(): Promise<void> {}
@@ -301,13 +313,13 @@ Expected: FAIL
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `npx jest tests/core/agent/BaseAgent.test.ts`
+Run: `npx jest tests/package/agent/BaseAgent.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/core/agent/BaseAgent.ts tests/core/agent/BaseAgent.test.ts
+git add src/package/agent/BaseAgent.ts tests/package/agent/BaseAgent.test.ts
 git commit -m "feat(agent): implement suspend, resume and destroy lifecycle logic"
 ```
 
@@ -316,13 +328,13 @@ git commit -m "feat(agent): implement suspend, resume and destroy lifecycle logi
 ### Task 5: Implement Token Tracking
 
 **Files:**
-- Modify: `src/core/agent/BaseAgent.ts`
-- Modify: `tests/core/agent/BaseAgent.test.ts`
+- Modify: `src/package/agent/BaseAgent.ts`
+- Modify: `tests/package/agent/BaseAgent.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
 ```typescript
-// tests/core/agent/BaseAgent.test.ts
+// tests/package/agent/BaseAgent.test.ts
 describe('BaseAgent Token Tracking', () => {
   it('should accurately track token usage', () => {
     const mockEventBus = { subscribe: jest.fn(), unsubscribe: jest.fn() } as unknown as IEventBus;
@@ -342,13 +354,13 @@ describe('BaseAgent Token Tracking', () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `npx jest tests/core/agent/BaseAgent.test.ts`
+Run: `npx jest tests/package/agent/BaseAgent.test.ts`
 Expected: FAIL (recordUsage is not a function)
 
 - [ ] **Step 3: Write minimal implementation**
 
 ```typescript
-// src/core/agent/BaseAgent.ts
+// src/package/agent/BaseAgent.ts
   // Inside BaseAgent class:
   protected recordUsage(promptTokens: number, completionTokens: number, durationMs: number): void {
     this.usageStats.promptTokens += promptTokens;
@@ -364,13 +376,13 @@ Expected: FAIL (recordUsage is not a function)
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `npx jest tests/core/agent/BaseAgent.test.ts`
+Run: `npx jest tests/package/agent/BaseAgent.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/core/agent/BaseAgent.ts tests/core/agent/BaseAgent.test.ts
+git add src/package/agent/BaseAgent.ts tests/package/agent/BaseAgent.test.ts
 git commit -m "feat(agent): implement usage and token tracking"
 ```
 
@@ -379,13 +391,13 @@ git commit -m "feat(agent): implement usage and token tracking"
 ### Task 6: Implement State Persistence
 
 **Files:**
-- Modify: `src/core/agent/BaseAgent.ts`
-- Modify: `tests/core/agent/BaseAgent.test.ts`
+- Modify: `src/package/agent/BaseAgent.ts`
+- Modify: `tests/package/agent/BaseAgent.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
 ```typescript
-// tests/core/agent/BaseAgent.test.ts
+// tests/package/agent/BaseAgent.test.ts
 import * as fs from 'fs/promises';
 
 describe('BaseAgent Persistence', () => {
@@ -423,13 +435,13 @@ describe('BaseAgent Persistence', () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `npx jest tests/core/agent/BaseAgent.test.ts`
+Run: `npx jest tests/package/agent/BaseAgent.test.ts`
 Expected: FAIL
 
 - [ ] **Step 3: Write minimal implementation**
 
 ```typescript
-// src/core/agent/BaseAgent.ts
+// src/package/agent/BaseAgent.ts
   // Inside BaseAgent class:
   protected async saveState(): Promise<void> {
     const data = {
@@ -464,12 +476,12 @@ Expected: FAIL
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `npx jest tests/core/agent/BaseAgent.test.ts`
+Run: `npx jest tests/package/agent/BaseAgent.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/core/agent/BaseAgent.ts tests/core/agent/BaseAgent.test.ts
+git add src/package/agent/BaseAgent.ts tests/package/agent/BaseAgent.test.ts
 git commit -m "feat(agent): implement state persistence mechanism"
 ```
