@@ -23,7 +23,7 @@
         1. **`LogManager.recorder` (Static Global)**：全域共用的系統預設 Recorder，專供底層基礎設施 (如 EventBus, WorkspaceManager) 發生「共用層級錯誤」時使用，避免直接 throw 導致進程崩潰。
         2. **上下文綁定 (Contextual Logger)**：每個 Agent 在初始化時會獲得專屬的 `LogManager` 實例，預先注入 `agent_id` 等上下文，精確追蹤來源。
     *   **Oplog 即 Transport (架構收斂)**：系統廢棄了獨立的 `IOplogStorage` 介面。Oplog 本質上只是 `LogManager` 的一種 Transport 實作。
-    *   **控制反轉 (IoC) 的路徑管理**：拋棄了複雜的 `WorkspaceOplogTransport`。底層只保留純粹寫檔的 `FileTransport`，而 Agent 日誌（Oplog）的儲存路徑，統一由 `BaseAgent` 根據 `Config`（如 `agents_workspace_dir`）動態組合並注入，完美解耦了業務邏輯與底層 I/O。
+    *   **控制反轉 (IoC) 的路徑管理**：拋棄了複雜的 `WorkspaceOplogTransport`。底層只保留純粹寫檔的 `FileTransport`。Agent 內部的運行日誌與 Oplog，統一由 `BaseAgent` 配置寫入專屬的**實體日誌目錄**（如 `{log_dir}/agents/{agent_id}/`），**完全與 `WorkspaceManager` 解耦**，不再受限於任務虛擬檔案系統或分支狀態。
     *   *(依據開發規範：系統層級日誌內容強制使用英文，以利後續與外部監控系統整合。)*
 *   **全局 ID 生成器 (`IdGenerator.ts`)**：
     *   **語義化前綴 (Semantic Prefixes)**：為了在 Oplog 與除錯時具備極高的辨識度，系統揚棄了純 UUID，所有實體 ID 必須帶有語義前綴。例如：`block_3c7a` (DataBlock)、`agt_sub_64af` (SubAgent)、`wkr_f8e7` (Worker)。

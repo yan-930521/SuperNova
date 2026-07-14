@@ -16,7 +16,7 @@
 ### `ContextManager & Oplog` (上下文與操作日誌管理器)
 *   **職責**：維護 Agent 的操作歷史與上下文視窗，防止 Context Drift (上下文漂移)。
 *   **行為**：
-    1. **去中心化儲存 (Decentralized Storage)**：Oplog **不再依賴統一的全局資料庫**。每個 Agent 的操作日誌將直接被實體化（例如寫入 `.oplog.jsonl`），強制儲存於 `WorkspaceManager` 為該 Agent 分配的**專屬隔離目錄**中。
+    1. **去中心化儲存 (Decentralized Storage)**：Oplog **不再依賴統一的全局資料庫**。每個 Agent 的操作日誌與內部運行日誌將直接被實體化（例如寫入 `.oplog.jsonl` 與 `agent.log`），強制儲存於**專屬的實體日誌目錄**中，**完全獨立於 `WorkspaceManager`** 的任務隔離區。
     2. **滾動截斷**：維護專屬目錄內日誌檔案的頭尾滾動更新。
     3. **Hot-Lock (防幻覺鎖定)**：採用**事件驅動**或**主動鎖定**。當 `DataBlock` 包含錯誤狀態，或 Agent 顯式調用 `lock_context()` 時，立刻鎖定當前上下文免於截斷，確保 Agent 在反思排錯時擁有 100% 完整的錯誤現場資訊。
 
