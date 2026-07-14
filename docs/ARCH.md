@@ -23,3 +23,10 @@
 
 ## 5. 綜合模擬場景 (Scenarios)
 *   [HackerNews 抓取與 Discord 轉發 (`docs/examples/scenario_hn_discord.md`)](./examples/scenario_hn_discord.md)：透過具體案例展示 MainAgent、SubAgent、EmbodiedAgent、Worker 與 EventBus 的完整協同資料流。
+
+---
+
+## 6. 目錄架構與依賴邊界 (Directory Structure & Boundaries)
+系統程式碼嚴格劃分基礎設施與業務邏輯的邊界：
+*   **`src/core/` (基礎設施層)**：包含 `BaseAgent` (純粹生命週期與資源綁定)、`EventBus`、`DataBlock` 等。`core` 目錄下的所有對外公開模組必須統一透過 `src/core/index.ts` 匯出 (Export Boundary)。
+*   **`src/package/` (業務邏輯層)**：包含具體的 Agent 實作 (如負責 PDCA 的 `SubAgent` 或 `MainAgent`)。業務邏輯層**必須**透過 `src/core/index.ts` 引用基礎設施，嚴禁繞過 index 進行深層耦合。
