@@ -20,7 +20,14 @@
 * **記錄介面**：提供 `recordUsage(promptTokens, completionTokens, durationMs)` 讓子類別呼叫。
 * **安全告警**：若累積使用量超出安全設定，會觸發 `logger.warn` 進行系統告警。
 
-### C. 純粹的生命週期管理 (Pure Lifecycle Management)
+### C. 狀態持久化與存檔 (State Persistence)
+`BaseAgent` 將內建狀態快照機制，確保系統中斷或重啟時能無縫還原，防止記憶遺失。
+* **存檔方法**：提供 `saveState()` 與 `loadState()` 介面。
+* **存檔內容**：包含當前的生命週期狀態 (`AgentState`)、Token 消耗量 (`UsageStats`)，以及允許子類別擴充的額外 Context 欄位。
+* **自動存檔觸發點**：在狀態切換 (特別是進入 `SUSPENDED` 狀態) 前，自動呼叫 `saveState()` 寫入實體磁碟。
+* **存檔位置**：與日誌目錄共用，直接寫入 `{log_dir}/agents/{agent_id}/state.json`。
+
+### D. 純粹的生命週期管理 (Pure Lifecycle Management)
 徹底拔除錯誤的 PDCA (`PLAN`, `DO`, `CHECK`, `ACT`) 狀態，回歸系統資源生命週期。
 * **`AgentState` 枚舉**：
   * `INITIALIZING`: 建構與綁定基礎設施中。
