@@ -5,7 +5,7 @@
 詳細的組件設計與規格，請參閱各子文件：
 
 ## 1. 代理層與執行層 (Agent & Execution Layer)
-*   [Agent 系統設計 (`docs/agent/agent.md`)](./agent/agent.md)：包含 `MainAgent` 與 `SubAgent` 的職責、PDCA 循環資料流，以及驅動 Agent 的 Prompt 指令集規範。
+*   [Agent 系統設計 (`docs/agent/agent.md`)](./agent/agent.md)：包含 `BaseAgent` 的底層基礎設施綁定與純粹生命週期管理，以及 `MainAgent` 與 `SubAgent` 的職責、PDCA 循環資料流，與驅動 Agent 的 Prompt 指令集規範。
 *   [Worker 執行單元 (`docs/agent/worker.md`)](./agent/worker.md)：定義無狀態原子執行單元的行為模式。
 *   [Task 任務系統 (`docs/agent/task.md`)](./agent/task.md)：定義系統最小排程單位 `Task` 的資料結構，包含計畫、進度、評測標準與排程控制。
 
@@ -28,5 +28,5 @@
 
 ## 6. 目錄架構與依賴邊界 (Directory Structure & Boundaries)
 系統程式碼嚴格劃分基礎設施與業務邏輯的邊界：
-*   **`src/core/` (基礎設施層)**：包含 `BaseAgent` (純粹生命週期與資源綁定)、`EventBus`、`DataBlock` 等。`core` 目錄下的所有對外公開模組必須統一透過 `src/core/index.ts` 匯出 (Export Boundary)。
-*   **`src/package/` (業務邏輯層)**：包含具體的 Agent 實作 (如負責 PDCA 的 `SubAgent` 或 `MainAgent`)。業務邏輯層**必須**透過 `src/core/index.ts` 引用基礎設施，嚴禁繞過 index 進行深層耦合。
+*   **`src/core/` (基礎設施層)**：包含底層通用組件如 `EventBus`、`DataBlock`、`LogManager` 等。`core` 目錄下的所有對外公開模組已統一透過 `src/core/index.ts` 匯出 (Export Boundary)。
+*   **`src/package/` (業務邏輯層)**：包含**所有 Agent 相關的程式碼** (包含抽象的 `BaseAgent` 以及具體的 `SubAgent`、`MainAgent` 等)。業務邏輯層**必須**透過 `src/core/index.ts` 引用底層基礎設施，嚴禁繞過 index 進行深層耦合。
