@@ -14,7 +14,7 @@ SuperNova 是一個專為長期任務設計的 **AI Runtime (執行時)**。它�
 *   **三層 Agent 體系**：
     *   `MainAgent`：全局統籌與大腦，擁有上帝視角，負責拆解總體目標。
     *   `SubAgent`：負責單一目標的 PDCA 迴圈，完成後即被系統 GC 回收 (隨用隨拋)。
-    *   `EmbodiedAgent`：常駐型實體，可動態注入 `Body` (環境 Prompt 與 ActionTools) 與外部環境 (如 Discord, Shell) 互動。
+    *   `EmbodiedAgent`：常駐型實體，能動態注入 `Body` (環境 Prompt 與 ActionTools) 並與外部環境 (如 Discord、Shell 甚至遊戲環境) 進行互動。
 *   **非同步事件總線 (EventBus) 與排程 (DAGScheduler)**：
     *   全面捨棄同步等待。Agent 規劃出任務 DAG 後即主動掛起休眠，由排程器依賴關係自動流轉與分發，節省 Token 與 CPU。
     *   **高可靠與安全隔離**：EventBus 支援 `sessionId` 會話租戶隔離、異步 Promise 錯誤安全邊界（阻斷 reject 崩潰）、`publishAsync` 並發等待協調，以及支持 Agent 休眠喚醒的宣告式訂閱。
