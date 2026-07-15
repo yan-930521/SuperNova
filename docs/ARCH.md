@@ -14,7 +14,6 @@ related_docs:
 
 本文件是 SuperNova 系統的架構入口點。基於「非同步並發、事件驅動」的設計哲學，我們將系統依據職責劃分為不同的核心組件。
 
-*   [系統設計與需求說明書 (`docs/sdd.md`)](./sdd.md)：合併並提煉了全系統的需求分析（SRS）與系統設計（SDD），是全專案開發的總體規範。
 *   [系統文件規範 (`docs/doc_standards.md`)](./doc_standards.md)：定義 SuperNova 專案所有 Markdown 文件的目錄結構與統一 YAML Frontmatter 標頭規範。
 
 詳細的組件設計與規格，請參閱各子文件：
@@ -25,15 +24,15 @@ related_docs:
 *   [Task 任務系統 (`docs/architecture/agent/task.md`)](./architecture/agent/task.md)：定義系統最小排程與執行單位 `Task` 及拓撲結構 `TaskDAG` 的資料模型，包含排程控制、去硬編碼配置與 `DataBlock` 資料流。
 
 ## 2. 調度與事件層 (Scheduling & Event Layer)
-*   [EventBus 與排程器 (`docs/core/event_bus.md`)](./core/event_bus.md)：包含 `EventBus` (會話安全隔離、publishAsync 異步等待與宣告式訂閱)、`DAGScheduler` (任務依賴解析與 TTL 監控)，以及底層提供給 Agent 的系統工具 API 邊界。
+*   [EventBus 與排程器 (`docs/architecture/core/event_bus.md`)](./architecture/core/event_bus.md)：包含 `EventBus` (會話安全隔離、publishAsync 異步等待與宣告式訂閱)、`DAGScheduler` (任務依賴解析與 TTL 監控)，以及底層提供給 Agent 的系統工具 API 邊界。
 
 ## 3. 狀態與記憶層 (State & Memory Layer)
 *   [記憶與狀態管理 (docs/architecture/core/memory.md)](./architecture/core/memory.md)：包含 `DataBlock` (資料載體)、`InboxBuffer` (收件箱)、`ContextManager` (Oplog 日誌)、`WorkspaceManager` (工作空間控制面，Session 獨佔且多驅動擴充)，以及系統安全熔斷機制 (Circuit Breaker)。
-*   [會話與工作階段管理 (`docs/core/session.md`)](./core/session.md)：定義 `Session` 與 `Thread` 的生命週期狀態機、基於 `ISessionRepository` 與 `IDataBlockRepository` (JSONL/Agent 隔離) 的持久化儲存、時空旅行重播與人機協同審批閘道。
+*   [會話與工作階段管理 (`docs/architecture/core/session.md`)](./architecture/core/session.md)：定義 `Session` 與 `Thread` 的生命週期狀態機、基於 `ISessionRepository` 與 `IDataBlockRepository` (JSONL/Agent 隔離) 的持久化儲存、時空旅行重播與人機協同審批閘道。
 
 ## 4. 系統基礎建設與安全 (Infrastructure & Security)
-*   [基礎建設與配置 (`docs/core/base.md`)](./core/base.md)：包含配置管理、系統日誌與監控 (Telemetry)、儲存層抽象 (Storage) 以及外掛註冊機制 (Registry)。
-*   [零信任安全架構 (`docs/core/security.md`)](./core/security.md)：定義防止 Prompt 注入、Worker 隔離沙盒與高危操作的人工審批 (HITL) 權限閘道。
+*   [基礎建設與配置 (`docs/architecture/core/base.md`)](./architecture/core/base.md)：包含配置管理、系統日誌與監控 (Telemetry)、儲存層抽象 (Storage) 以及外掛註冊機制 (Registry)。
+*   [零信任安全架構 (`docs/architecture/core/security.md`)](./architecture/core/security.md)：定義防止 Prompt 注入、Worker 隔離沙盒與高危操作的人工審批 (HITL) 權限閘道。
 
 ---
 
