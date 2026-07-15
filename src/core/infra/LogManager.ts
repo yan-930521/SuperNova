@@ -54,7 +54,7 @@ export class LogManager {
      * 供基礎設施 (如 EventBus, WorkspaceManager) 在遭遇共用層級錯誤時使用，避免直接 throw 導致進程崩潰
      */
     public static readonly recorder: LogManager = (() => {
-        const logger = new LogManager({ type: 'SYSTEM_GLOBAL' });
+        const logger = new LogManager({ type: 'SYSTEM' });
         logger.addTransport(new ConsoleTransport('INFO'));
         return logger;
     })();

@@ -1,3 +1,15 @@
+---
+title: 綜合模擬場景：HackerNews 抓取與 Discord 轉發
+version: 0.1.0
+status: APPROVED
+last_updated: 2026-07-14
+author: Antigravity & User
+related_codes: []
+related_docs:
+  - ../architecture/agent/agent.md
+  - ../architecture/core/event_bus.md
+---
+
 # 綜合模擬場景：HackerNews 抓取與 Discord 轉發
 
 本文件透過一個具體的模擬場景，展示 SuperNova 系統中各個組件（`MainAgent`、`SubAgent`、`Worker`、`EmbodiedAgent`、`EventBus` 等）如何協同運作。

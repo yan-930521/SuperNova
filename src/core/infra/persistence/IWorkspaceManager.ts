@@ -2,38 +2,85 @@ export type WorkspaceType = 'VOLATILE' | 'PERSISTENT';
 
 /**
  * 工作區與版本控制管理器介面 (WorkspaceManager)
- * 負責為每個 Agent 或 Task 建立專屬目錄。
- * 支援「分級工作區 (Tiered Workspace)」架構，整合虛擬檔案系統 (VFS) 與實體 Git 追蹤，以解決高併發下的 I/O 瓶頸。
+ * 負責為每個 Session 建立、管理隔離的雙層工作區。
  */
 export interface IWorkspaceManager {
   /**
-   * 初始化一個全新或已存在的工作區
-   * @param id Agent ID 或 Task ID
-   * @param type 工作區類型。預設為 VOLATILE (記憶體虛擬檔案系統)，以極速處理無狀態任務。若需修改專案原始碼，需明確指定為 PERSISTENT (實體 Git 分支)。
-   * @returns 該專屬工作區的絕對路徑 (VFS 路徑或實體路徑)
+   * 初始化工作區
+   * @param sessionId 會話 ID (Session 中央倉庫)
+   * @param agentId 代理/任務 ID (若為 Session 根倉庫，可與 sessionId 相同或省略)
+   * @param type 工作區類型
+   * @returns 該專屬工作區的絕對路徑
    */
-  initWorkspace(id: string, type?: WorkspaceType): Promise<string>;
+  initWorkspace(sessionId: string, agentId?: string, type?: WorkspaceType): Promise<string>;
+
+  /**
+   * 檢查該 Session 的工作空間是否存在且完整
+   * @param sessionId 會話 ID
+   * @param type 工作區類型
+   */
+  hasWorkspace(sessionId: string, type: WorkspaceType): Promise<boolean>;
 
   /**
    * 提交工作區內的變更至版本控制 (Commit)
-   * 這為 Oplog 回滾提供了實體檔案層級的依據
-   * @param id Agent ID 或 Task ID
+   * @param sessionId 會話 ID
+   * @param agentId 代理/任務 ID
    * @param message Commit 訊息
    */
-  commitChanges(id: string, message: string): Promise<void>;
+  commitChanges(sessionId: string, agentId: string, message: string): Promise<void>;
 
   /**
    * 將分支變更合併回主分支 (Merge)
-   * 適用於 Task 狀態為 SUCCESS 時，系統會先進行 Dry-Run 與基礎 CI 測試。
-   * 若發生 Git 衝突或 CI 失敗，不自行修復，而是回傳錯誤細節，交由上層 Agent 作為任務 (Task) 處理。
-   * @param id Agent ID 或 Task ID
+   * @param sessionId 會話 ID
+   * @param agentId 代理/任務 ID
    */
-  mergeWorkspace(id: string): Promise<{ success: boolean; conflictDetails?: string; ciLogs?: string }>;
+  mergeWorkspace(sessionId: string, agentId: string): Promise<{ success: boolean; conflictDetails?: string; ciLogs?: string }>;
 
   /**
-   * 銷毀並清理工作區 (GC)
-   * 適用於暫時型 SubAgent 完成任務後
-   * @param id Agent ID 或 Task ID
+   * 銷毀並清理工作區
+   * @param sessionId 會話 ID
+   * @param agentId 代理/任務 ID
    */
-  destroyWorkspace(id: string): Promise<void>;
+  destroyWorkspace(sessionId: string, agentId: string): Promise<void>;
+
+  /**
+   * 讀取工作區內的檔案 (安全限幅在相對路徑內)
+   * @param sessionId 會話 ID
+   * @param agentId 代理/任務 ID
+   * @param relativePath 相對工作區的相對路徑
+   */
+  readFile(sessionId: string, agentId: string, relativePath: string): Promise<string>;
+
+  /**
+   * 寫入/修改工作區內的檔案
+   * @param sessionId 會話 ID
+   * @param agentId 代理/任務 ID
+   * @param relativePath 相對工作區的相對路徑
+   * @param content 寫入的內容
+   */
+  writeFile(sessionId: string, agentId: string, relativePath: string, content: string): Promise<void>;
+
+  /**
+   * 列出工作區內特定目錄的檔案
+   * @param sessionId 會話 ID
+   * @param agentId 代理/任務 ID
+   * @param relativePath 相對目錄路徑
+   */
+  listFiles(sessionId: string, agentId: string, relativePath?: string): Promise<string[]>;
+
+  /**
+   * 在工作區的上下文環境下執行 Bash 命令
+   * @param sessionId 會話 ID
+   * @param agentId 代理/任務 ID
+   * @param command 執行的指令
+   * @param options 執行參數
+   */
+  runBash(
+    sessionId: string,
+    agentId: string,
+    command: string,
+    options?: { timeoutMs?: number }
+  ): Promise<{ stdout: string; stderr: string; exitCode: number }>;
 }
+
+

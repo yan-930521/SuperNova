@@ -5,3 +5,9 @@ GEMINI.md
 workspace/*
 src_bk/*
 web/*
+docs/superpowers/*
+docs/review/*
+.agents/*
+.agent/*
+.dev/*
+.worktrees/*

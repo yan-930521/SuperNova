@@ -7,7 +7,10 @@ import { ILogEntry, ILogTransport, LogLevel } from '../LogManager';
 export class ConsoleTransport implements ILogTransport {
   public name = 'ConsoleTransport';
   
-  constructor(public level: LogLevel = 'INFO') {}
+  constructor(
+    public level: LogLevel = 'INFO',
+    public prefix: string = ''
+  ) {}
 
   send(entry: ILogEntry): void {
     const timestamp = entry.timestamp.split('T')[1].split('.')[0]; // 簡化時間顯示
@@ -15,8 +18,9 @@ export class ConsoleTransport implements ILogTransport {
     const traceInfo = entry.trace_id ? ` [Trace: ${entry.trace_id}]` : '';
     const spanInfo = entry.span_id ? ` [Span: ${entry.span_id}]` : '';
     const typeInfo = `[${entry.type}]`;
+    const prefixStr = this.prefix ? `${this.prefix} ` : '';
     
-    const formattedMessage = `[${timestamp}] [${entry.level}] ${typeInfo}${sessionInfo}${traceInfo}${spanInfo} ${entry.message}`;
+    const formattedMessage = `[${timestamp}] [${entry.level}] ${typeInfo}${sessionInfo}${traceInfo}${spanInfo} ${prefixStr}${entry.message}`;
 
     switch (entry.level) {
       case 'DEBUG':

@@ -1,24 +1,2 @@
 {
-  "runtime": {
-    "tick_rate_ms": 100,
-    "max_active_sessions": 10,
-    "agents_dir": "./agents",
-    "default_fallback_agent_id": "default-worker"
-  },
-  "observability": {
-    "mode": "DEVELOPMENT",
-    "enable_tracing": true,
-    "oplog_compression_threshold": 100
-  },
-  "security": {
-    "default_tool_timeout_ms": 30000,
-    "allow_tier_3_tools": false
-  },
-  "storage": {
-    "base_dir": "./workspace",
-    "sessions_dir": "sessions",
-    "memory_dir": "memory",
-    "global_facts_dir": "L2_global",
-    "sops_dir": "L3_sops"
-  }
 }
