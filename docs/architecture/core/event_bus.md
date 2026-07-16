@@ -62,3 +62,29 @@ related_docs:
 
 ### E. 全局通配符型別安全
 *   為 `subscribe('*')` 提供了專屬的強型別簽名，保證全域 Logger、Metrics 收集器在不使用 `as any` 強轉的情況下，順利通過嚴格的 TypeScript 編譯校驗。
+
+### F. 預定義事件分類與標籤 (Predefined Event Types & Labels)
+為了提高型別安全性與程式碼可讀性，系統將事件劃分為兩大列舉：
+1. **`SystemEvent` (系統事件)**：描述全域或 Session 級別的宏觀生命週期變化（如 Session 啟動/關閉、Task 最終完成/失敗、系統 Tick 等）。
+2. **`HookEvent` (鉤子事件)**：描述 Agent、Task、Tool 在執行生命週期中的細粒度切面監聽點（Before / After / Error 鉤子）。
+
+#### 預定義事件一覽表
+
+| 事件分類 | 事件標籤 (Enum Value) | 說明與觸發時機 |
+| :--- | :--- | :--- |
+| **SystemEvent** | `SESSION_STARTED` | 新 Session 被成功建立並啟動時 |
+| | `SESSION_CLOSED` | Session 被關閉或銷毀時 |
+| | `SESSION_UPDATED` | Session 配置或狀態更新時 |
+| | `TASK_CREATED` | 新任務被註冊到排程器時 |
+| | `TASK_FINISHED` | 任務成功執行完畢時 |
+| | `TASK_FAILED` | 任務執行失敗或逾時時 |
+| | `SYSTEM_TICK` | 系統運行時心跳信號 |
+| **HookEvent** | `BEFORE_TOOL_CALL` | Agent/Worker 準備呼叫特定的工具前 |
+| | `AFTER_TOOL_CALL` | 工具成功執行並返還結果時 |
+| | `ON_TOOL_ERROR` | 工具呼叫失敗並拋出異常時 |
+| | `BEFORE_AGENT_STEP` | Agent 即將進入單步決策循環（PDCA）前 |
+| | `AFTER_AGENT_STEP` | Agent 完成單步決策並更新狀態後 |
+| | `ON_AGENT_ERROR` | Agent 內部決策或執行發生未捕獲錯誤時 |
+| | `BEFORE_TASK_EXECUTE` | 任務即將發派給指定 Worker/Agent 執行前 |
+| | `AFTER_TASK_EXECUTE` | 任務執行成功且結果已寫入快取時 |
+| | `ON_TASK_ERROR` | 任務在 Worker 執行層面拋錯時 |
