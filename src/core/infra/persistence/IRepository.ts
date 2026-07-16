@@ -1,4 +1,8 @@
 import { ILifecycle } from '../../../core/lifecycle/ILifecycle';
+import { AgentState } from '../../../package/agent/BaseAgent';
+import { DataBlock } from '../../messaging/DataBlock';
+// --- 專屬儲存庫介面定義 ---
+import { Session } from '../../session/Session';
 
 /**
  * 基礎實體介面，所有需持久化的對象必須具備唯一識別碼
@@ -43,10 +47,6 @@ export interface IRepository<T extends IEntity> extends ILifecycle {
   exists(id: string): Promise<boolean>;
 }
 
-// --- 專屬儲存庫介面定義 ---
-import { Session } from '../../session/Session';
-import { DataBlock } from '../../messaging/DataBlock';
-
 /**
  * 會話儲存庫介面
  */
@@ -70,4 +70,46 @@ export interface IDataBlockRepository extends IRepository<DataBlock> {
    * 讀取並還原特定 Agent 的所有 DataBlock 歷史
    */
   findByAgent(sessionId: string, agentId: string): Promise<DataBlock[]>;
+}
+
+/**
+ * 代理人狀態實體數據結構 (DTO)
+ */
+export interface BaseAgentData extends IEntity {
+  /** 唯一識別碼 (即 agentId) */
+  readonly id: string;
+  readonly sessionId: string;
+  readonly state: string;           // AgentState enum 的字串表示
+  readonly usageStats: {
+    promptTokens: number;
+    completionTokens: number;
+    durationMs: number;
+  };
+  readonly timestamp: number;
+  readonly isClone?: boolean;
+  readonly parentAgentId?: string;
+}
+
+/**
+ * 代理人狀態儲存庫介面
+ */
+export interface IAgentStateRepository extends IRepository<BaseAgentData> {
+  /**
+   * 保存 Agent 的狀態快照資料
+   */
+  saveAgentState(
+    sessionId: string,
+    agentId: string,
+    state: BaseAgentData,
+    options?: { isClone?: boolean; parentAgentId?: string }
+  ): Promise<void>;
+
+  /**
+   * 讀取並還原 Agent 的狀態快照資料
+   */
+  loadAgentState(
+    sessionId: string,
+    agentId: string,
+    options?: { isClone?: boolean; parentAgentId?: string }
+  ): Promise<BaseAgentData | null>;
 }

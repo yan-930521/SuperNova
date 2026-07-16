@@ -6,3 +6,4 @@ export * from './storagedriver/MemoryVfsStorageDriver';
 export * from './storagedriver/GitLocalStorageDriver';
 export * from './repository/FileSystemSessionRepository';
 export * from './repository/FileSystemDataBlockRepository';
+export * from './repository/FileSystemAgentStateRepository';

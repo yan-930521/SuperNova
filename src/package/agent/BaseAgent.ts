@@ -1,5 +1,5 @@
 import * as path from 'path';
-import * as fs from 'fs';
+import { infra } from '../../core';
 
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { BaseMessage } from '@langchain/core/messages';
@@ -47,20 +47,29 @@ export abstract class BaseAgent {
   /** 上下文綁定的專屬 Logger (不會污染全局) */
   protected readonly logger: LogManager;
   
-  /** 訊息收件箱 */
-  protected inbox: DataBlock[] = [];
   /** 資源消耗累積統計 */
   protected usageStats: UsageStats = { promptTokens: 0, completionTokens: 0, durationMs: 0 };
   
+  /** 物理工作空間的絕對路徑 */
+  public readonly workspacePath: string;
   protected readonly oplogDir: string;
-  protected readonly stateFilePath: string;
+  protected readonly stateFilePath: string; // 為了與原先代碼相容保留
+  protected readonly isClone: boolean;
+  protected readonly parentAgentId?: string;
+  protected readonly stateRepo: infra.persistence.IAgentStateRepository;
   private readonly eventHandler: (event: IEvent<string, DataBlock>) => void;
 
   constructor(
     public readonly id: string,
     public readonly sessionId: string, // 強制綁定會話 ID，所有衍生 Agent/Worker 均依附於此會話
     protected readonly eventBus: IEventBus,
-    protected readonly config: Config
+    protected readonly config: Config,
+    options?: {
+      workspacePath?: string;
+      parentAgent?: BaseAgent;
+      isClone?: boolean;
+      stateRepo?: infra.persistence.IAgentStateRepository;
+    }
   ) {
     this.state = AgentState.INITIALIZING;
     
@@ -69,18 +78,31 @@ export abstract class BaseAgent {
     // 安裝 Console 傳輸器，並使用 [Agent:<id>] 作為前綴標籤，以避免日誌調用時重複添加前綴
     this.logger.addTransport(new ConsoleTransport('DEBUG', `[Agent:${this.id}]`));
     
-    // 根據 Session ID 與 Agent ID，自動掛載實體的 Oplog 檔案傳輸器，實作會話級別的物理隔離
-    this.oplogDir = path.join(
-      process.cwd(), 
-      this.config.storage.base_dir, 
-      'sessions',
-      this.sessionId,
-      this.config.storage.agent_dir || 'agents', 
-      this.id
-    );
-    this.logger.addTransport(new FileTransport('DEBUG', this.oplogDir, '.oplog.jsonl'));
-    this.stateFilePath = path.join(this.oplogDir, 'state.json');
+    // 物理工作空間路徑指派
+    this.workspacePath = options?.workspacePath || '';
+    this.isClone = options?.isClone || false;
+    this.parentAgentId = options?.parentAgent?.id;
+
+    // 記憶共享與隔離邏輯 (僅用於 Oplog 檔案日誌傳輸器定址)
+    if (this.isClone && options?.parentAgent) {
+      this.oplogDir = options.parentAgent.oplogDir;
+      this.stateFilePath = path.join(this.oplogDir, `state_${this.id}.json`);
+    } else {
+      this.oplogDir = path.join(
+        process.cwd(), 
+        this.config.storage.base_dir, 
+        'sessions',
+        this.sessionId,
+        this.config.storage.agent_dir || 'agents', 
+        this.id
+      );
+      this.stateFilePath = path.join(this.oplogDir, 'state.json');
+    }
     
+    const sessionBaseDir = path.join(process.cwd(), this.config.storage.base_dir, this.config.storage.session_dir || 'session');
+    this.stateRepo = options?.stateRepo || new infra.persistence.FileSystemAgentStateRepository(sessionBaseDir);
+
+    this.logger.addTransport(new FileTransport('DEBUG', this.oplogDir, '.oplog.jsonl'));
     this.logger.info(`Initializing agent: ${this.id} under session: ${this.sessionId}`);
 
     // 事件訂閱：自動向 EventBus 註冊監聽自己 id 的事件
@@ -214,12 +236,11 @@ export abstract class BaseAgent {
         return;
       }
 
-      this.inbox.push(dataBlock);
-      this.logger.debug(`Received DataBlock in inbox. Queue length: ${this.inbox.length}`);
+      this.logger.debug(`Received DataBlock ${dataBlock.id}. Triggering agent resume.`);
       
-      // 自動喚醒
+      // 自動喚醒並將訊息直接投遞處理
       if (this.state === AgentState.SUSPENDED || this.state === AgentState.IDLE) {
-        this.resume().catch(err => {
+        this.resume(dataBlock).catch(err => {
           this.logger.error(`Failed to resume agent ${this.id}: ${err}`);
         });
       }
@@ -268,72 +289,46 @@ export abstract class BaseAgent {
   // ==========================================
 
   /**
-   * 將當前狀態、消耗資訊與收件箱快照寫入實體磁碟
+   * 將當前狀態、消耗資訊與快照寫入儲存庫
    */
-  public saveState(): void {
+  public async saveState(): Promise<void> {
     try {
-      const stateData = {
-        state: this.state,
+      const stateData: BaseAgentData = {
+        id: this.id,
         sessionId: this.sessionId,
+        state: this.state,
         usageStats: this.usageStats,
-        inbox: this.inbox.map(msg => ({
-          id: msg.id,
-          sessionId: msg.sessionId,
-          threadId: msg.threadId,
-          senderId: msg.senderId,
-          targetId: msg.targetId,
-          type: msg.type,
-          timestamp: msg.timestamp,
-          controlPayload: msg.controlPayload,
-          dataPointers: msg.dataPointers
-        })),
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        isClone: this.isClone,
+        parentAgentId: this.parentAgentId
       };
       
-      if (!fs.existsSync(this.oplogDir)) {
-        fs.mkdirSync(this.oplogDir, { recursive: true });
-      }
-      fs.writeFileSync(this.stateFilePath, JSON.stringify(stateData, null, 2), 'utf-8');
-      this.logger.debug(`State and inbox saved successfully to ${this.stateFilePath}`);
-    } catch (err) {
-      this.logger.error(`Failed to save state: ${err}`);
+      await this.stateRepo.saveAgentState(this.sessionId, this.id, stateData, {
+        isClone: this.isClone,
+        parentAgentId: this.parentAgentId
+      });
+      this.logger.debug(`State saved successfully via Repository`);
+    } catch (err: any) {
+      this.logger.error(`Failed to save state via Repository: ${err.message}`);
     }
   }
 
   /**
-   * 從磁碟還原狀態、消耗資訊與收件箱快照
+   * 從儲存庫還原狀態與消耗資訊
    */
-  public loadState(): void {
+  public async loadState(): Promise<void> {
     try {
-      if (fs.existsSync(this.stateFilePath)) {
-        const data = fs.readFileSync(this.stateFilePath, 'utf-8');
-        const stateData = JSON.parse(data);
-        this.state = stateData.state ?? AgentState.INITIALIZING;
+      const stateData = await this.stateRepo.loadAgentState(this.sessionId, this.id, {
+        isClone: this.isClone,
+        parentAgentId: this.parentAgentId
+      });
+      if (stateData) {
+        this.state = (stateData.state as AgentState) ?? AgentState.INITIALIZING;
         this.usageStats = stateData.usageStats ?? { promptTokens: 0, completionTokens: 0, durationMs: 0 };
-        
-        // 還原收件箱中的 DataBlock 物件
-        if (stateData.inbox && Array.isArray(stateData.inbox)) {
-          this.inbox = stateData.inbox.map((msg: any) => {
-            const db = new DataBlock({
-              sessionId: msg.sessionId,
-              threadId: msg.threadId,
-              senderId: msg.senderId,
-              targetId: msg.targetId,
-              type: msg.type,
-              controlPayload: msg.controlPayload,
-              dataPointers: msg.dataPointers
-            });
-            // 強制復原其原始生成的 UUID 與發送時間戳
-            (db as any).id = msg.id;
-            (db as any).timestamp = msg.timestamp;
-            return db;
-          });
-        }
-        
-        this.logger.info(`State loaded successfully from disk. Pending inbox messages: ${this.inbox.length}`);
+        this.logger.info(`State loaded successfully via Repository.`);
       }
-    } catch (err) {
-      this.logger.error(`Failed to load state: ${err}`);
+    } catch (err: any) {
+      this.logger.error(`Failed to load state via Repository: ${err.message}`);
     }
   }
 
@@ -347,31 +342,29 @@ export abstract class BaseAgent {
    */
   public async suspend(): Promise<void> {
     this.setState(AgentState.SUSPENDED);
-    this.saveState();
+    await this.saveState();
     this.logger.info(`Agent suspended. Waiting for events...`);
   }
   
   /**
    * 被動喚醒 (由 EventBus 呼叫)
-   * 喚醒後切換至 BUSY，並處理收件箱中的訊息
+   * 喚醒後切換至 BUSY，並處理收到的事件訊息
    */
-  public async resume(): Promise<void> {
+  public async resume(message?: DataBlock): Promise<void> {
     if (this.state !== AgentState.SUSPENDED && this.state !== AgentState.IDLE && this.state !== AgentState.INITIALIZING) {
       this.logger.warn(`Resume ignored. Current state is ${this.state}`);
       return;
     }
     
     this.setState(AgentState.BUSY);
-    this.logger.info(`Agent resumed with ${this.inbox.length} messages.`);
+    this.logger.info(`Agent resumed. Incoming message: ${message ? message.id : 'none'}`);
     
-    // 獲取當前信箱內容，隨後清空收件箱並交給子類別處理
-    const messagesToProcess = [...this.inbox];
-    this.inbox = [];
+    const messagesToProcess = message ? [message] : [];
     
     try {
       await this.processInbox(messagesToProcess);
     } catch (err) {
-      this.logger.error(`Failed to process inbox: ${err}`);
+      this.logger.error(`Failed to process incoming message: ${err}`);
       throw err;
     }
   }

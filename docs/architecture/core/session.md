@@ -105,16 +105,22 @@ related_docs:
 為了解耦高層業務控制面與底層物理檔案系統，系統引入了 **Repository（倉儲）模式**，規範了會話狀態與事件歷史的物理存檔拓撲。
 
 ### A. 物理存檔目錄結構
-所有與特定 `sessionId` 關聯的元數據與對話/事件歷史，一律物理收攏在會話的專屬目錄下，實現徹底的多租戶物理隔離：
+所有與特定 `sessionId` 關聯的元數據、對話歷史與代理人快照，一律物理收攏在會話的專屬目錄下，實現徹底的多租戶物理隔離：
 
 ```text
 workspace/
 └── session/
     └── <sessionId>/
         ├── session.json                   # ISessionRepository 儲存的會話元數據 (SessionData)
-        └── history/                       # IDataBlockRepository 儲存的事件與對話歷史
-            ├── <agentId_A>.jsonl          # Agent A 參與的所有 DataBlock 歷史 (JSONL)
-            └── <agentId_B>.jsonl          # Agent B 參與的所有 DataBlock 歷史 (JSONL)
+        ├── history/                       # IDataBlockRepository 儲存的事件與對話歷史 (JSONL)
+        │   ├── <agentId_A>.jsonl          
+        │   └── <agentId_B>.jsonl          
+        └── agents/                        # IAgentStateRepository 儲存的代理人狀態快照 (JSON)
+            ├── <agentId_A>/
+            │   └── state.json             
+            └── <parentAgentId>/           
+                ├── state.json             # 獨立模式狀態快照
+                └── state_<cloneId>.json   # 分身模式下的隔離狀態快照
 ```
 
 ### B. 會話元數據儲存 (`ISessionRepository`)
@@ -135,3 +141,14 @@ workspace/
     3.  `findByAgent(sessionId, agentId)`：讀取並逐行反序列化解析 `{agentId}.jsonl`，還原為強型別 `DataBlock[]`。
 *   **事件監聽直接存檔 (Event-Driven Save)**：
     不進行複雜的發送者解析與多寫。當 `EventBus` 觸發接收事件（目標 Agent 聽到該 `DataBlock`）的那一刻，直接在事件監聽器中調用 `saveForAgent(agentId, block)`。只有 Agent 真正經歷與接收到的事件，才會客觀地寫入其歷史中。
+
+### D. 代理人狀態儲存 (`IAgentStateRepository`)
+*   **介面特點**：繼承自通用 `IRepository<BaseAgentData>` 介面。
+*   **無狀態與去贅肉設計 (No Inbox inside Agent)**：
+    Agent 內部**不維護任何 inbox 記憶體陣列**。收件箱資料的流轉與持久化完全交給 `SessionManager` 與 `EventBus` 協同維護。這使得 `BaseAgentData` 無須序列化緩存 inbox，極大地減輕了 Agent 掛起與溫啟動的磁碟 I/O 開銷，保證了 Agent 的輕量與高可用性。
+*   **二階定址強語意 API**：
+    1.  `saveAgentState(sessionId, agentId, state, options)`：將 Agent 狀態（`BaseAgentData`）保存至 `{sessionId}/agents/{parentAgentId}/` 目錄下。若為分身（isClone），則自動命名為 `state_${cloneId}.json`，防止併發快照互相覆蓋。
+    2.  `loadAgentState(sessionId, agentId, options)`：讀取並反序列化該 Agent 的狀態數據。
+*   **Repository 物理細節封裝**：
+    `BaseAgent` 本身僅傳入 `sessionId` 與 `agentId` 進行狀態存取，不再涉及任何本機 `fs` 或路徑拼接代碼，完美達成了高低層依賴解耦。
+

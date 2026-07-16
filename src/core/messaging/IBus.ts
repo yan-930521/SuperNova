@@ -1,31 +1,47 @@
 /**
- * 系統級事件命名空間 (SystemEvents)
+ * 系統級事件 (SystemEvent)
+ * 用於描述系統核心組件的生命週期與關鍵狀態變化
  */
-export namespace SystemEvents {
-  export enum Runtime {
-    Tick = "SYSTEM_TICK",
-  }
+export enum SystemEvent {
+  // Session 相關
+  SessionStarted = "SESSION_STARTED",
+  SessionClosed = "SESSION_CLOSED",
+  SessionUpdated = "SESSION_UPDATED",
 
-  export enum Session {
-    Started = "SESSION_STARTED",
-    Closed = "SESSION_CLOSED",
-    Updated = "SESSION_UPDATED",
-  }
+  // Task 全局狀態相關
+  TaskCreated = "TASK_CREATED",
+  TaskFinished = "TASK_FINISHED",
+  TaskFailed = "TASK_FAILED",
 
-  export enum Task {
-    Created = "TASK_CREATED",
-    Finished = "TASK_FINISHED",
-    Failed = "TASK_FAILED",
-  }
+  // 運行時
+  Tick = "SYSTEM_TICK",
+}
+
+/**
+ * 鉤子事件 (HookEvent)
+ * 用於描述 Agent、Task、Tool 在執行生命週期中的切面監聽點
+ */
+export enum HookEvent {
+  // Tool 執行切面
+  BeforeToolCall = "BEFORE_TOOL_CALL",
+  AfterToolCall = "AFTER_TOOL_CALL",
+  OnToolError = "ON_TOOL_ERROR",
+
+  // Agent 決策步驟切面
+  BeforeAgentStep = "BEFORE_AGENT_STEP",
+  AfterAgentStep = "AFTER_AGENT_STEP",
+  OnAgentError = "ON_AGENT_ERROR",
+
+  // Task 調度與執行切面
+  BeforeTaskExecute = "BEFORE_TASK_EXECUTE",
+  AfterTaskExecute = "AFTER_TASK_EXECUTE",
+  OnTaskError = "ON_TASK_ERROR",
 }
 
 /**
  * 彙整所有事件型別
  */
-export type AllEventTypes =
-  | SystemEvents.Runtime
-  | SystemEvents.Session
-  | SystemEvents.Task;
+export type AllEventTypes = SystemEvent | HookEvent;
 
 /**
  * 基礎事件介面

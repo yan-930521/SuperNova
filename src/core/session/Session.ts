@@ -1,5 +1,5 @@
 import { IEntity } from '../infra/persistence/IRepository';
-import { DataBlock } from '../messaging/DataBlock';
+import { DataBlock, DataBlockData } from '../messaging/DataBlock';
 
 /**
  * SessionState
@@ -57,7 +57,7 @@ export class Session implements IEntity {
     registeredAgentIds?: string[];
     createdAt?: number;
     updatedAt?: number;
-    inboxBuffer?: Record<string, any[]>;
+    inboxBuffer?: Record<string, DataBlockData[]>;
   }) {
     this.id = params.id;
     this.mainAgentId = params.mainAgentId;

@@ -28,7 +28,7 @@ related_docs:
 
 ## 3. 狀態與記憶層 (State & Memory Layer)
 *   [記憶與狀態管理 (docs/architecture/core/memory.md)](./architecture/core/memory.md)：包含 `DataBlock` (資料載體)、`InboxBuffer` (收件箱)、`ContextManager` (Oplog 日誌)、`WorkspaceManager` (工作空間控制面，Session 獨佔且多驅動擴充)，以及系統安全熔斷機制 (Circuit Breaker)。
-*   [會話與工作階段管理 (`docs/architecture/core/session.md`)](./architecture/core/session.md)：定義 `Session` 與 `Thread` 的生命週期狀態機、基於 `ISessionRepository` 與 `IDataBlockRepository` (JSONL/Agent 隔離) 的持久化儲存、時空旅行重播與人機協同審批閘道。
+*   [會話與工作階段管理 (`docs/architecture/core/session.md`)](./architecture/core/session.md)：定義 `Session` 與 `Thread` 的生命週期狀態機、基於 `ISessionRepository`、`IDataBlockRepository` (JSONL/Agent 隔離) 與 `IAgentStateRepository` (BaseAgentData) 的持久化儲存、時空旅行重播與人機協同審批閘道。
 
 ## 4. 系統基礎建設與安全 (Infrastructure & Security)
 *   [基礎建設與配置 (`docs/architecture/core/base.md`)](./architecture/core/base.md)：包含配置管理、系統日誌與監控 (Telemetry)、儲存層抽象 (Storage) 以及外掛註冊機制 (Registry)。
