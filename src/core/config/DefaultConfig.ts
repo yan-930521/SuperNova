@@ -12,6 +12,8 @@ export const DEFAULT_CONFIG: Config = {
     default_tool_timeout_ms: 30000,
     /** 預設不允許執行 TIER_3 級別的高風險工具 */
     allow_tier_3_tools: false,
+    /** 預設安全 token 上限預警值 */
+    max_safe_tokens: 100000,
   },
   storage: {
     base_dir: './workspace',

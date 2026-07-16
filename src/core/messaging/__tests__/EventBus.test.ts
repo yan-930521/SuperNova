@@ -10,15 +10,15 @@ describe('EventBus High-Level Features Test', () => {
     let globalCount = 0;
 
     // 1. 訂閱
-    bus.subscribe('TEST_EVENT', (event) => {
+    bus.subscribe('TEST_EVENT', (event: any) => {
       session1Count++;
     }, { sessionId: 'session-1' });
 
-    bus.subscribe('TEST_EVENT', (event) => {
+    bus.subscribe('TEST_EVENT', (event: any) => {
       session2Count++;
     }, { sessionId: 'session-2' });
 
-    bus.subscribe('TEST_EVENT', (event) => {
+    bus.subscribe('TEST_EVENT', (event: any) => {
       globalCount++;
     }); // 全局監聽
 
@@ -45,7 +45,7 @@ describe('EventBus High-Level Features Test', () => {
     const bus = new EventBus();
     let val = 0;
 
-    bus.subscribe('ASYNC_EVENT', async (event) => {
+    bus.subscribe('ASYNC_EVENT', async (event: any) => {
       await new Promise(resolve => setTimeout(resolve, 50));
       val = 42;
     });
@@ -67,7 +67,7 @@ describe('EventBus High-Level Features Test', () => {
   it('should defend against async promise rejections in publish without crashing', async () => {
     const bus = new EventBus();
     
-    bus.subscribe('FAIL_EVENT', async (event) => {
+    bus.subscribe('FAIL_EVENT', async (event: any) => {
       throw new Error('intentional async failure');
     });
 

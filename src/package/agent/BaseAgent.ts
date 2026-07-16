@@ -260,7 +260,7 @@ export abstract class BaseAgent {
     this.usageStats.durationMs += durationMs;
 
     // 安全告警：檢查是否超過臨界值
-    const MAX_SAFE_TOKENS = this.config.storage.max_safe_tokens ?? 100000;
+    const MAX_SAFE_TOKENS = this.config.security.max_safe_tokens ?? 100000;
     const totalTokens = this.usageStats.promptTokens + this.usageStats.completionTokens;
     if (totalTokens > MAX_SAFE_TOKENS) {
       this.logger.warn(`SECURITY WARNING: Token usage exceeded safe threshold (${totalTokens} > ${MAX_SAFE_TOKENS})`);
@@ -293,7 +293,7 @@ export abstract class BaseAgent {
    */
   public async saveState(): Promise<void> {
     try {
-      const stateData: BaseAgentData = {
+      const stateData: infra.persistence.BaseAgentData = {
         id: this.id,
         sessionId: this.sessionId,
         state: this.state,

@@ -36,7 +36,7 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
    * 保存或更新實體 (通用 IRepository 介面)
    * 內部會自動依據 targetId 或 senderId 追加至對應 Agent 歷史檔案中。
    */
-  public async save(entity: DataBlock): Promise<void> {
+  public async save(entity: DataBlock<any>): Promise<void> {
     const agentId = entity.targetId || entity.senderId;
     await this.appendForAgent(entity.sessionId, agentId, entity);
   }
@@ -45,7 +45,7 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
    * 根據 ID 載入實體
    * 全域搜尋所有會話與 Agent 的歷史 jsonl 檔案，直到找到該 ID。
    */
-  public async load(id: string): Promise<DataBlock | null> {
+  public async load(id: string): Promise<DataBlock<any> | null> {
     const files = await this.getAllHistoryFiles();
     for (const filePath of files) {
       try {
@@ -141,7 +141,7 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
   /**
    * 覆寫特定 Agent 的事件與對話歷史 (以 JSONL 覆寫)
    */
-  public async saveForAgent(sessionId: string, agentId: string, blocks: DataBlock[]): Promise<void> {
+  public async saveForAgent(sessionId: string, agentId: string, blocks: DataBlock<any>[]): Promise<void> {
     const historyDir = await this.ensureHistoryDir(sessionId);
     const historyFilePath = path.join(historyDir, `${agentId}.jsonl`);
 
@@ -160,7 +160,7 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
   /**
    * 追加單筆 DataBlock 至特定 Agent 的歷史末尾 (JSONLine 追加)
    */
-  public async appendForAgent(sessionId: string, agentId: string, block: DataBlock): Promise<void> {
+  public async appendForAgent(sessionId: string, agentId: string, block: DataBlock<any>): Promise<void> {
     const historyDir = await this.ensureHistoryDir(sessionId);
     const historyFilePath = path.join(historyDir, `${agentId}.jsonl`);
 
@@ -179,7 +179,7 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
   /**
    * 讀取並還原特定 Agent 的所有 DataBlock 歷史 (逐行解析 JSONL)
    */
-  public async findByAgent(sessionId: string, agentId: string): Promise<DataBlock[]> {
+  public async findByAgent(sessionId: string, agentId: string): Promise<DataBlock<any>[]> {
     const historyFilePath = path.join(this.baseDir, sessionId, 'history', `${agentId}.jsonl`);
 
     if (!existsSync(historyFilePath)) {
@@ -190,7 +190,7 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
     try {
       const content = await fs.readFile(historyFilePath, 'utf-8');
       const lines = content.split('\n');
-      const blocks: DataBlock[] = [];
+      const blocks: DataBlock<any>[] = [];
 
       for (const line of lines) {
         const trimmed = line.trim();

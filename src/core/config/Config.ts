@@ -33,6 +33,8 @@ export interface SecurityConfig {
   readonly default_tool_timeout_ms: number;
   /** 是否允許執行 TIER_3 (高風險/外部) 工具 */
   readonly allow_tier_3_tools: boolean;
+  /** 安全 token 上限預警值 */
+  readonly max_safe_tokens?: number;
 }
 
 /**

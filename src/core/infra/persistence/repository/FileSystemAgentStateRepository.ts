@@ -109,7 +109,7 @@ export class FileSystemAgentStateRepository implements IAgentStateRepository {
     }
   }
 
-  public async list(): Promise<BaseAgentData[]> {
+  public async list(): Promise<string[]> {
     this.logger.warn('[AgentStateRepository] list() operation is not supported on agent state snapshots');
     return [];
   }

@@ -55,21 +55,21 @@ export interface ISessionRepository extends IRepository<Session> {}
 /**
  * 訊息與事件歷史儲存庫介面
  */
-export interface IDataBlockRepository extends IRepository<DataBlock> {
+export interface IDataBlockRepository extends IRepository<DataBlock<any>> {
   /**
    * 覆寫特定 Agent 的歷史記錄
    */
-  saveForAgent(sessionId: string, agentId: string, blocks: DataBlock[]): Promise<void>;
+  saveForAgent(sessionId: string, agentId: string, blocks: DataBlock<any>[]): Promise<void>;
 
   /**
    * 追加單筆 DataBlock 至特定 Agent 的歷史末尾 (JSONLine 追加)
    */
-  appendForAgent(sessionId: string, agentId: string, block: DataBlock): Promise<void>;
+  appendForAgent(sessionId: string, agentId: string, block: DataBlock<any>): Promise<void>;
 
   /**
    * 讀取並還原特定 Agent 的所有 DataBlock 歷史
    */
-  findByAgent(sessionId: string, agentId: string): Promise<DataBlock[]>;
+  findByAgent(sessionId: string, agentId: string): Promise<DataBlock<any>[]>;
 }
 
 /**
