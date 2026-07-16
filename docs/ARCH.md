@@ -43,5 +43,5 @@ related_docs:
 
 ## 6. 目錄架構與依賴邊界 (Directory Structure & Boundaries)
 系統程式碼嚴格劃分基礎設施與業務邏輯的邊界：
-*   **`src/core/` (基礎設施層)**：包含底層通用組件如 `EventBus`、`DataBlock`、`LogManager` 等。`core` 目錄下的所有對外公開模組已統一透過 `src/core/index.ts` 匯出 (Export Boundary)。
-*   **`src/package/` (業務邏輯層)**：包含**所有 Agent 相關的程式碼** (包含抽象的 `BaseAgent` 以及具體的 `SubAgent`、`MainAgent` 等)。業務邏輯層**必須**透過 `src/core/index.ts` 引用底層基礎設施，嚴禁繞過 index 進行深層耦合。
+*   **`src/core/` (核心與基礎設施層)**：包含底層通用組件與內核骨架（如 `EventBus`、`DataBlock`、`LogManager`、以及核心的 `BaseAgent` 及其狀態儲存庫 `FileSystemAgentStateRepository`）。`core` 目錄下的所有對外公開模組已統一透過 `src/core/index.ts` 匯出 (Export Boundary)。
+*   **`src/package/` (業務應用與大腦層)**：包含具體的大腦與應用代理人實現（如 `SubAgent`、`MainAgent` 等業務類別）。業務邏輯層**必須**透過 `src/core/index.ts` 引用內核與基礎設施，嚴禁繞過 index 進行深層耦合。
