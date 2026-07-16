@@ -1,11 +1,13 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
-import { BaseAgent, AgentState } from '../BaseAgent';
-import { BaseAgentData } from '../../../core/infra/persistence/IRepository';
-import { EventBus } from '../../../core/messaging/EventBus';
-import { Config } from '../../../core/config/Config';
-import { FileSystemAgentStateRepository } from '../../../core/infra/persistence/repository/FileSystemAgentStateRepository';
+
+import { Config } from '../../config/Config';
+import {
+    FileSystemAgentStateRepository
+} from '../../infra/persistence/repository/FileSystemAgentStateRepository';
+import { EventBus } from '../../messaging/EventBus';
+import { AgentState, BaseAgent, BaseAgentData } from '../BaseAgent';
 
 // 建立一個 Mock 子類別用於測試 BaseAgent
 class MockTestAgent extends BaseAgent {
@@ -59,7 +61,7 @@ describe('BaseAgent Memory Sharing & Clone Test with Repository Decoupling', () 
 
     // 驗證獨立目錄定址與狀態 Repository 解耦
     expect(parentAgent.workspacePath).toBe(workspacePath);
-    expect(parentAgent['oplogDir']).toContain(path.join(mockConfig.storage.base_dir, 'sessions', sessionId, 'agents', parentId));
+    expect(parentAgent['oplogDir']).toContain(path.join(mockConfig.storage.base_dir, mockConfig.storage.session_dir, sessionId, mockConfig.storage.agent_dir, parentId));
     expect(parentAgent['stateFilePath']).toContain('state.json');
   });
 

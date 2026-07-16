@@ -1,5 +1,5 @@
 import { ILifecycle } from '../../../core/lifecycle/ILifecycle';
-import { AgentState } from '../../../package/agent/BaseAgent';
+import { BaseAgentData } from '../../agent/BaseAgent';
 import { DataBlock } from '../../messaging/DataBlock';
 // --- 專屬儲存庫介面定義 ---
 import { Session } from '../../session/Session';
@@ -72,23 +72,7 @@ export interface IDataBlockRepository extends IRepository<DataBlock<any>> {
   findByAgent(sessionId: string, agentId: string): Promise<DataBlock<any>[]>;
 }
 
-/**
- * 代理人狀態實體數據結構 (DTO)
- */
-export interface BaseAgentData extends IEntity {
-  /** 唯一識別碼 (即 agentId) */
-  readonly id: string;
-  readonly sessionId: string;
-  readonly state: string;           // AgentState enum 的字串表示
-  readonly usageStats: {
-    promptTokens: number;
-    completionTokens: number;
-    durationMs: number;
-  };
-  readonly timestamp: number;
-  readonly isClone?: boolean;
-  readonly parentAgentId?: string;
-}
+
 
 /**
  * 代理人狀態儲存庫介面

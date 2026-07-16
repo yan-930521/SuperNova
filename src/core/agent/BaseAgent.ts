@@ -1,16 +1,37 @@
 import * as path from 'path';
-import { infra } from '../../core';
 
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { BaseMessage } from '@langchain/core/messages';
 import { ChatPromptTemplate } from '@langchain/core/prompts';
 
-import { Config } from '../../core/config/Config';
-import { LogManager } from '../../core/infra/LogManager';
-import { ConsoleTransport } from '../../core/infra/transports/ConsoleTransport';
-import { FileTransport } from '../../core/infra/transports/FileTransport';
-import { DataBlock } from '../../core/messaging/DataBlock';
-import { IEventBus, IEvent } from '../../core/messaging/IBus';
+import { Config } from '../config/Config';
+import { LogManager } from '../infra/LogManager';
+import { IAgentStateRepository, IEntity } from '../infra/persistence/IRepository';
+import {
+    FileSystemAgentStateRepository
+} from '../infra/persistence/repository/FileSystemAgentStateRepository';
+import { ConsoleTransport } from '../infra/transports/ConsoleTransport';
+import { FileTransport } from '../infra/transports/FileTransport';
+import { DataBlock } from '../messaging/DataBlock';
+import { IEvent, IEventBus } from '../messaging/IBus';
+
+/**
+ * 代理人狀態實體數據結構 (DTO)
+ */
+export interface BaseAgentData extends IEntity {
+  /** 唯一識別碼 (即 agentId) */
+  readonly id: string;
+  readonly sessionId: string;
+  readonly state: string;           // AgentState enum 的字串表示
+  readonly usageStats: {
+    promptTokens: number;
+    completionTokens: number;
+    durationMs: number;
+  };
+  readonly timestamp: number;
+  readonly isClone?: boolean;
+  readonly parentAgentId?: string;
+}
 
 /**
  * Agent 的純粹生命週期狀態
@@ -56,7 +77,7 @@ export abstract class BaseAgent {
   protected readonly stateFilePath: string; // 為了與原先代碼相容保留
   protected readonly isClone: boolean;
   protected readonly parentAgentId?: string;
-  protected readonly stateRepo: infra.persistence.IAgentStateRepository;
+  protected readonly stateRepo: IAgentStateRepository;
   private readonly eventHandler: (event: IEvent<string, DataBlock>) => void;
 
   constructor(
@@ -68,7 +89,7 @@ export abstract class BaseAgent {
       workspacePath?: string;
       parentAgent?: BaseAgent;
       isClone?: boolean;
-      stateRepo?: infra.persistence.IAgentStateRepository;
+      stateRepo?: IAgentStateRepository;
     }
   ) {
     this.state = AgentState.INITIALIZING;
@@ -91,16 +112,16 @@ export abstract class BaseAgent {
       this.oplogDir = path.join(
         process.cwd(), 
         this.config.storage.base_dir, 
-        'sessions',
+        this.config.storage.session_dir,
         this.sessionId,
-        this.config.storage.agent_dir || 'agents', 
+        this.config.storage.agent_dir,
         this.id
       );
       this.stateFilePath = path.join(this.oplogDir, 'state.json');
     }
     
-    const sessionBaseDir = path.join(process.cwd(), this.config.storage.base_dir, this.config.storage.session_dir || 'session');
-    this.stateRepo = options?.stateRepo || new infra.persistence.FileSystemAgentStateRepository(sessionBaseDir);
+    const sessionBaseDir = path.join(process.cwd(), this.config.storage.base_dir, this.config.storage.session_dir);
+    this.stateRepo = options?.stateRepo || new FileSystemAgentStateRepository(sessionBaseDir);
 
     this.logger.addTransport(new FileTransport('DEBUG', this.oplogDir, '.oplog.jsonl'));
     this.logger.info(`Initializing agent: ${this.id} under session: ${this.sessionId}`);
@@ -293,7 +314,7 @@ export abstract class BaseAgent {
    */
   public async saveState(): Promise<void> {
     try {
-      const stateData: infra.persistence.BaseAgentData = {
+      const stateData: BaseAgentData = {
         id: this.id,
         sessionId: this.sessionId,
         state: this.state,

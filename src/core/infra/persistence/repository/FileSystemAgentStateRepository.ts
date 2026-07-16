@@ -1,8 +1,10 @@
 import { existsSync } from 'fs';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { IAgentStateRepository, BaseAgentData } from '../IRepository';
+
+import { BaseAgentData } from '../../../agent/BaseAgent';
 import { LogManager } from '../../LogManager';
+import { IAgentStateRepository } from '../IRepository';
 
 /**
  * FileSystemAgentStateRepository
