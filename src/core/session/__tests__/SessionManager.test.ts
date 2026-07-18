@@ -3,6 +3,7 @@ import { SessionManager } from '../SessionManager';
 import { SessionState } from '../Session';
 import { DEFAULT_CONFIG } from '../../config/DefaultConfig';
 import { WorkspaceManager } from '../../infra/persistence/WorkspaceManager';
+import { FileSystemSessionRepository } from '../../infra/persistence/repository/FileSystemSessionRepository';
 import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
 import * as path from 'path';
@@ -21,8 +22,9 @@ describe('SessionManager Recovery and Freeze Test', () => {
     const sessionRoot = path.join(process.cwd(), testConfig.storage.base_dir, testConfig.storage.session_dir);
     const workspaceRoot = path.join(process.cwd(), '.dev_test_workspace_root');
 
-    const wm = new WorkspaceManager(workspaceRoot, testConfig.storage.session_dir, testConfig.storage.agent_dir);
-    const sm = new SessionManager(testConfig, wm);
+    const wm = new WorkspaceManager(testConfig, workspaceRoot);
+    const sessionRepo = new FileSystemSessionRepository(testConfig, sessionRoot);
+    const sm = new SessionManager(testConfig, sessionRepo, wm);
 
     try {
       await sm.initialize();
@@ -50,7 +52,7 @@ describe('SessionManager Recovery and Freeze Test', () => {
       expect(sessionPData.status).toBe(SessionState.SUSPENDED);
 
       // 3. 測試會話恢復：執行 start() 自動還原
-      const smRecovery = new SessionManager(testConfig, wm);
+      const smRecovery = new SessionManager(testConfig, sessionRepo, wm);
       await smRecovery.initialize();
       await smRecovery.start();
 
@@ -69,7 +71,7 @@ describe('SessionManager Recovery and Freeze Test', () => {
       // 停止並寫回 SUSPENDED
       await smRecovery.stop();
 
-      const smFaultTolerance = new SessionManager(testConfig, wm);
+      const smFaultTolerance = new SessionManager(testConfig, sessionRepo, wm);
       await smFaultTolerance.initialize();
       await smFaultTolerance.start();
 
@@ -101,7 +103,10 @@ describe('SessionManager Recovery and Freeze Test', () => {
       }
     };
 
-    const sm = new SessionManager(testConfig);
+    const sessionRoot = path.join(process.cwd(), testConfig.storage.base_dir, testConfig.storage.session_dir);
+    const sessionRepo = new FileSystemSessionRepository(testConfig, sessionRoot);
+    const wm = new WorkspaceManager(testConfig, process.cwd());
+    const sm = new SessionManager(testConfig, sessionRepo, wm);
     await sm.initialize();
 
     try {
@@ -127,7 +132,7 @@ describe('SessionManager Recovery and Freeze Test', () => {
       await sm.saveSession('session-msg');
 
       // 5. 重新加載並驗證
-      const smReload = new SessionManager(testConfig);
+      const smReload = new SessionManager(testConfig, sessionRepo, wm);
       await smReload.initialize();
       const loadedSession = await smReload.loadSession('session-msg');
 

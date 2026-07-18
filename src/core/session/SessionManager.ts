@@ -1,8 +1,6 @@
-import * as path from 'path';
-
 import { Config } from '../config/Config';
 import { LogManager } from '../infra/LogManager';
-import { FileSystemSessionRepository, ISessionRepository } from '../infra/persistence';
+import { ISessionRepository } from '../infra/persistence';
 import { IWorkspaceManager } from '../infra/persistence/IWorkspaceManager';
 import { ILifecycle } from '../lifecycle/ILifecycle';
 import { IdGenerator } from '../utils/IdGenerator';
@@ -17,15 +15,11 @@ import { Session, SessionState } from './Session';
 export class SessionManager implements ILifecycle {
     private readonly logger = LogManager.recorder;
     private activeSessions: Map<string, Session> = new Map();
-    private readonly sessionRepo: ISessionRepository;
-
     constructor(
         private readonly config: Config,
+        private readonly sessionRepo: ISessionRepository,
         private readonly workspaceManager?: IWorkspaceManager
-    ) {
-        const sessionBaseDir = path.join(process.cwd(), this.config.storage.base_dir, this.config.storage.session_dir);
-        this.sessionRepo = new FileSystemSessionRepository(sessionBaseDir);
-    }
+    ) {}
 
     /**
      * 實作 ILifecycle 初始化方法

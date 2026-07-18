@@ -7,10 +7,13 @@ import {
     FileSystemAgentStateRepository
 } from '../../infra/persistence/repository/FileSystemAgentStateRepository';
 import { EventBus } from '../../messaging/EventBus';
-import { AgentState, BaseAgent, BaseAgentData } from '../BaseAgent';
+import { AgentState, AgentType, BaseAgent, BaseAgentData } from '../BaseAgent';
 
 // 建立一個 Mock 子類別用於測試 BaseAgent
 class MockTestAgent extends BaseAgent {
+  public readonly type = AgentType.SUB;
+  public readonly canClone = true;
+
   protected getModel() {
     return {} as any; // 單元測試中不實際呼叫 LLM
   }
@@ -29,14 +32,18 @@ class MockTestAgent extends BaseAgent {
   }
 }
 
-describe('BaseAgent Memory Sharing & Clone Test with Repository Decoupling', () => {
+describe('BaseAgent Memory Sharing & Serialization Test', () => {
   const eventBus = new EventBus();
   const testStorageDir = path.join(process.cwd(), '.dev_temp_agent_test');
   const mockConfig: Config = {
     storage: {
       base_dir: '.dev_temp_agent_test',
       session_dir: 'session',
-      agent_dir: 'agents'
+      agent_dir: 'agents',
+      agent_state_file: 'state.json'
+    },
+    security: {
+      max_safe_tokens: 100000
     }
   } as any;
 
@@ -59,13 +66,12 @@ describe('BaseAgent Memory Sharing & Clone Test with Repository Decoupling', () 
       workspacePath
     });
 
-    // 驗證獨立目錄定址與狀態 Repository 解耦
+    // 驗證獨立目錄定址
     expect(parentAgent.workspacePath).toBe(workspacePath);
     expect(parentAgent['oplogDir']).toContain(path.join(mockConfig.storage.base_dir, mockConfig.storage.session_dir, sessionId, mockConfig.storage.agent_dir, parentId));
-    expect(parentAgent['stateFilePath']).toContain('state.json');
   });
 
-  it('should support clone mode with isolated storage directories but marked parent references', async () => {
+  it('should support clone mode with shared memory', async () => {
     const parentId = 'parent-agent';
     const cloneId = 'clone-agent';
     const sessionId = 'session-123';
@@ -76,119 +82,86 @@ describe('BaseAgent Memory Sharing & Clone Test with Repository Decoupling', () 
     });
 
     const cloneAgent = new MockTestAgent(cloneId, sessionId, eventBus, mockConfig, {
-      workspacePath: path.join(testStorageDir, 'workspace-clone'),
+      workspacePath,
       parentAgent,
       isClone: true
     });
 
-    // 1. 驗證 canClone 預設是 true
-    expect(parentAgent.canClone).toBe(true);
+    // 1. 驗證分身與父級記憶物理共享路徑
+    expect(cloneAgent.workspacePath).toBe(parentAgent.workspacePath); // 工作區共享
+    expect(cloneAgent['oplogDir']).toBe(parentAgent['oplogDir']); // 記憶共享
 
-    // 2. 驗證分身與父級記憶物理目錄徹底隔離 (由於 ID 不同，物理路徑不共享)
-    expect(cloneAgent['oplogDir']).not.toBe(parentAgent['oplogDir']);
-
-    // 3. 驗證二者分別寫入各自獨立的 oplog 檔案中
+    // 2. 驗證日誌共享寫入同一個實體 oplog 檔案
     parentAgent.triggerLog('Parent log entry');
     cloneAgent.triggerLog('Clone log entry');
 
     // 由於 LogManager 檔案寫入是非同步的，等待短暫延遲後讀取
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    const parentOplogFilePath = path.join(parentAgent['oplogDir'], '.oplog.jsonl');
-    const cloneOplogFilePath = path.join(cloneAgent['oplogDir'], '.oplog.jsonl');
+    const oplogFilePath = path.join(parentAgent['oplogDir'], '.oplog.jsonl');
+    expect(fs.existsSync(oplogFilePath)).toBe(true);
 
-    expect(fs.existsSync(parentOplogFilePath)).toBe(true);
-    expect(fs.existsSync(cloneOplogFilePath)).toBe(true);
-
-    const parentContent = fs.readFileSync(parentOplogFilePath, 'utf-8');
-    const cloneContent = fs.readFileSync(cloneOplogFilePath, 'utf-8');
-
-    expect(parentContent).toContain('Parent log entry');
-    expect(parentContent).not.toContain('Clone log entry');
-    expect(cloneContent).toContain('Clone log entry');
-    expect(cloneContent).not.toContain('Parent log entry');
+    const content = fs.readFileSync(oplogFilePath, 'utf-8');
+    expect(content).toContain('Parent log entry');
+    expect(content).toContain('Clone log entry');
   });
 
-  it('should support saveState and loadState via Decoupled AgentStateRepository', async () => {
-    const parentId = 'parent-agent-repo';
-    const cloneId = 'clone-agent-repo';
+  it('should serialize and hydrate state without repository', () => {
+    const agentId = 'agent-serialization';
     const sessionId = 'session-999';
     const workspacePath = path.join(testStorageDir, 'workspace-parent');
 
-    // 顯式宣告與注入 Repository
-    const sessionBaseDir = path.join(testStorageDir, 'session');
-    const stateRepo = new FileSystemAgentStateRepository(sessionBaseDir);
-
-    const parentAgent = new MockTestAgent(parentId, sessionId, eventBus, mockConfig, {
-      workspacePath,
-      stateRepo
+    const agent = new MockTestAgent(agentId, sessionId, eventBus, mockConfig, {
+      workspacePath
     });
 
-    const cloneAgent = new MockTestAgent(cloneId, sessionId, eventBus, mockConfig, {
-      workspacePath,
-      parentAgent,
-      isClone: true,
-      stateRepo
+    // 1. 初始狀態變更
+    agent.setAgentState(AgentState.IDLE);
+    agent.recordUsage(10, 20, 30);
+
+    // 2. 導出狀態
+    const data = agent.serialize();
+    expect(data.id).toBe(agentId);
+    expect(data.sessionId).toBe(sessionId);
+    expect(data.type).toBe(AgentType.SUB);
+    expect(data.canClone).toBe(true);
+    expect(data.state).toBe(AgentState.IDLE);
+    expect(data.usageStats.promptTokens).toBe(10);
+
+    // 3. 建立一個新的 Agent 實例，並用 data 還原
+    const restoredAgent = new MockTestAgent(agentId, sessionId, eventBus, mockConfig, {
+      workspacePath
     });
+    restoredAgent.hydrate(data);
 
-    // 1. 初始狀態變更並保存
-    parentAgent.setAgentState(AgentState.IDLE);
-    cloneAgent.setAgentState(AgentState.BUSY);
-
-    await parentAgent.saveState();
-    await cloneAgent.saveState();
-
-    // 2. 驗證實體物理檔案已生成在 Repository 指定的位置
-    const parentStateFilePath = path.join(sessionBaseDir, sessionId, 'agents', parentId, 'state.json');
-    const cloneStateFilePath = path.join(sessionBaseDir, sessionId, 'agents', cloneId, 'state.json'); // 分身位於自己獨立的資料夾下
-
-    expect(fs.existsSync(parentStateFilePath)).toBe(true);
-    expect(fs.existsSync(cloneStateFilePath)).toBe(true);
-
-    // 3. 變更狀態並透過 loadState 還原
-    parentAgent.setAgentState(AgentState.TERMINATED);
-    cloneAgent.setAgentState(AgentState.TERMINATED);
-
-    expect(parentAgent.getState()).toBe(AgentState.TERMINATED);
-    expect(cloneAgent.getState()).toBe(AgentState.TERMINATED);
-
-    await parentAgent.loadState();
-    await cloneAgent.loadState();
-
-    // 還原成功驗證
-    expect(parentAgent.getState()).toBe(AgentState.IDLE);
-    expect(cloneAgent.getState()).toBe(AgentState.BUSY);
+    expect(restoredAgent.getState()).toBe(AgentState.IDLE);
+    expect(restoredAgent['usageStats'].promptTokens).toBe(10);
+    expect(restoredAgent['usageStats'].completionTokens).toBe(20);
   });
 
-  it('should support generic IRepository CRUD operations via composite ID', async () => {
+  it('should support AgentStateRepository save/load operations', async () => {
     const parentId = 'parent-agent-crud';
     const sessionId = 'session-888';
     const sessionBaseDir = path.join(testStorageDir, 'session');
-    const stateRepo = new FileSystemAgentStateRepository(sessionBaseDir);
+    const stateRepo = new FileSystemAgentStateRepository(mockConfig, sessionBaseDir);
 
     const entity: BaseAgentData = {
       id: parentId,
       sessionId,
+      type: AgentType.SUB,
+      canClone: true,
       state: AgentState.IDLE,
       usageStats: { promptTokens: 10, completionTokens: 20, durationMs: 30 },
       timestamp: Date.now()
     };
 
-    // 1. 通用 save
-    await stateRepo.save(entity);
+    // 1. saveAgentState
+    await stateRepo.saveAgentState(sessionId, parentId, entity);
 
-    // 2. 通用 exists (複合 ID)
-    const compositeId = `${sessionId}:${parentId}`;
-    expect(await stateRepo.exists(compositeId)).toBe(true);
-
-    // 3. 通用 load (複合 ID)
-    const loaded = await stateRepo.load(compositeId);
+    // 2. loadAgentState
+    const loaded = await stateRepo.loadAgentState(sessionId, parentId);
     expect(loaded).not.toBeNull();
     expect(loaded!.state).toBe(AgentState.IDLE);
     expect(loaded!.usageStats.promptTokens).toBe(10);
-
-    // 4. 通用 delete (複合 ID)
-    await stateRepo.delete(compositeId);
-    expect(await stateRepo.exists(compositeId)).toBe(false);
   });
 });

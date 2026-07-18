@@ -4,6 +4,7 @@ import { DEFAULT_CONFIG } from '../../config/DefaultConfig';
 import { EventBus } from '../../messaging/EventBus';
 import { WorkspaceManager } from '../../infra/persistence/WorkspaceManager';
 import { SessionManager } from '../../session/SessionManager';
+import { AgentManager } from '../../agent/AgentManager';
 
 describe('RuntimeKernel Lifecycle Test', () => {
   it('should initialize and register core components in correct order', async () => {
@@ -16,10 +17,12 @@ describe('RuntimeKernel Lifecycle Test', () => {
     const eventBus = container.resolve<EventBus>('EventBus');
     const workspaceManager = container.resolve<WorkspaceManager>('WorkspaceManager');
     const sessionManager = container.resolve<SessionManager>('SessionManager');
+    const agentManager = container.resolve<AgentManager>('AgentManager');
 
     expect(eventBus).toBeInstanceOf(EventBus);
     expect(workspaceManager).toBeInstanceOf(WorkspaceManager);
     expect(sessionManager).toBeInstanceOf(SessionManager);
+    expect(agentManager).toBeInstanceOf(AgentManager);
   });
 
   it('should boot and shutdown all registered components successfully', async () => {

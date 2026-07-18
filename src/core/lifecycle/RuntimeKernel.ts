@@ -1,9 +1,15 @@
+import * as path from 'path';
+
 import { Config } from '../config/Config';
 import { ComponentContainer } from '../container/ComponentContainer';
 import { LogManager } from '../infra/LogManager';
+import {
+    FileSystemAgentStateRepository, FileSystemDataBlockRepository, FileSystemSessionRepository
+} from '../infra/persistence';
 import { WorkspaceManager } from '../infra/persistence/WorkspaceManager';
 import { EventBus } from '../messaging/EventBus';
 import { SessionManager } from '../session/SessionManager';
+import { AgentManager } from '../agent/AgentManager';
 import { ILifecycle } from './ILifecycle';
 
 /**
@@ -33,19 +39,33 @@ export class RuntimeKernel implements ILifecycle {
       // EventBus 是系統的神經系統，需最先被註冊
       const eventBus = new EventBus();
 
-      // 2. 實例化底層儲存組件 - WorkspaceManager
+      // 2. 實例化底層儲存庫 (Repositories) - DI 中樞
+      const sessionBaseDir = path.join(process.cwd(), this.config.storage.base_dir, this.config.storage.session_dir);
+      
+      const sessionRepo = new FileSystemSessionRepository(this.config, sessionBaseDir);
+      const dataBlockRepo = new FileSystemDataBlockRepository(this.config, sessionBaseDir);
+      const agentStateRepo = new FileSystemAgentStateRepository(this.config, sessionBaseDir);
+
+      // 3. 實例化底層儲存組件 - WorkspaceManager
       // WorkspaceManager 內部會依據工作區類型動態分配 StorageDriver (VFS/Git)
-      const workspaceManager = new WorkspaceManager(process.cwd(), this.config.storage.session_dir, this.config.storage.agent_dir);
+      const workspaceManager = new WorkspaceManager(this.config, process.cwd());
 
-      // 3. 實例化高階業務邏輯組件 - SessionManager
-      // SessionManager 負責管理會話，依賴 config 配置系統與 Workspace 控制面
-      const sessionManager = new SessionManager(this.config, workspaceManager);
+      // 4. 實例化高階業務邏輯組件 - SessionManager 與 AgentManager
+      // SessionManager 負責管理會話，由 Kernel 注入 SessionRepo 等依賴
+      const sessionManager = new SessionManager(this.config, sessionRepo, workspaceManager);
 
-      // 4. 依照依賴拓撲順序 (EventBus -> Workspace -> Session) 註冊至 IoC 容器
+      // AgentManager 負責所有 Agent 狀態管理與生命週期，注入 agentStateRepo 與 eventBus
+      const agentManager = new AgentManager(this.config, agentStateRepo, eventBus);
+
+      // 5. 依照依賴拓撲順序註冊至 IoC 容器
       // 容器啟動時會按照此註冊順序執行 initialize() 和 start()
       this.container.register('EventBus', eventBus);
       this.container.register('WorkspaceManager', workspaceManager);
       this.container.register('SessionManager', sessionManager);
+      this.container.register('AgentManager', agentManager);
+      this.container.register('SessionRepository', sessionRepo);
+      this.container.register('DataBlockRepository', dataBlockRepo);
+      this.container.register('AgentStateRepository', agentStateRepo);
 
       this.logger.info('[Kernel] Kernel components registered successfully');
     } catch (error: any) {

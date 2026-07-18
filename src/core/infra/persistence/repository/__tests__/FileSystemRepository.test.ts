@@ -5,6 +5,7 @@ import { FileSystemSessionRepository } from '../FileSystemSessionRepository';
 import { FileSystemDataBlockRepository } from '../FileSystemDataBlockRepository';
 import { Session, SessionState } from '../../../../session/Session';
 import { DataBlock } from '../../../../messaging/DataBlock';
+import { DEFAULT_CONFIG } from '../../../../config/DefaultConfig';
 
 describe('FileSystem Repositories Test', () => {
   const tempWorkspaceRoot = path.join(process.cwd(), '.dev_temp_repo_test');
@@ -18,7 +19,7 @@ describe('FileSystem Repositories Test', () => {
   });
 
   it('should support Session CRUD operations via FileSystemSessionRepository', async () => {
-    const repo = new FileSystemSessionRepository(path.join(tempWorkspaceRoot, 'workspace', 'session'));
+    const repo = new FileSystemSessionRepository(DEFAULT_CONFIG, path.join(tempWorkspaceRoot, 'workspace', 'session'));
     await repo.initialize();
 
     const session = new Session({
@@ -50,7 +51,7 @@ describe('FileSystem Repositories Test', () => {
   });
 
   it('should support DataBlock append/save/find via FileSystemDataBlockRepository', async () => {
-    const repo = new FileSystemDataBlockRepository(path.join(tempWorkspaceRoot, 'workspace', 'session'));
+    const repo = new FileSystemDataBlockRepository(DEFAULT_CONFIG, path.join(tempWorkspaceRoot, 'workspace', 'session'));
     const sessionId = 'session-repo-test-2';
     const agentId = 'agent-alice';
 
@@ -101,31 +102,5 @@ describe('FileSystem Repositories Test', () => {
     expect(finalHistory.length).toBe(1);
     expect(finalHistory[0].id).toBe(block3.id);
     expect(finalHistory[0].intent).toBe('finish');
-
-    // 4. 測試通用 IRepository 介面 (save, load, list, exists, delete)
-    // 呼叫 save 將會以 append 模式將 block3 保存
-    const block4 = new DataBlock({
-      sessionId,
-      senderId: 'worker-4',
-      targetId: agentId,
-      type: 'message',
-      intent: 'generic-save',
-      controlPayload: 'Generic Save Works'
-    });
-    
-    await repo.save(block4);
-    expect(await repo.exists(block4.id)).toBe(true);
-
-    const loadedBlock = await repo.load(block4.id);
-    expect(loadedBlock).not.toBeNull();
-    expect(loadedBlock!.id).toBe(block4.id);
-    expect(loadedBlock!.intent).toBe('generic-save');
-
-    const allIds = await repo.list();
-    expect(allIds).toContain(block3.id);
-    expect(allIds).toContain(block4.id);
-
-    await repo.delete(block4.id);
-    expect(await repo.exists(block4.id)).toBe(false);
   });
 });

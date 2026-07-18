@@ -2,7 +2,7 @@
 title: 系統基礎建設
 version: 0.1.0
 status: APPROVED
-last_updated: 2026-07-14
+last_updated: 2026-07-18
 author: Antigravity & User
 related_codes: []
 related_docs:
@@ -34,13 +34,22 @@ related_docs:
 *   `start()`: 啟動非同步監聽、建立連線、開始排程。
 *   `stop()`: 停止新請求、持久化狀態、優雅釋放資源。
 
-### 3.2. 核心系統框架拓撲
-SuperNova Runtime Kernel (運行時內核) 負責協調並管理以下六大管理器（Managers）：
+### 3.2. 核心系統框架拓撲 (Kernel DI Topology)
+SuperNova Runtime Kernel (運行時內核) 作為全局依賴注入 (DI) 的中樞，負責實例化底層儲存庫與協調管理核心管理器。
+
+**底層 Repository (資料倉儲) 統一宣告**
+在 Kernel 初始化階段，系統會依據環境配置，動態宣告並建立所有底層持久化倉儲。這完全解除了 Manager 對實體儲存引擎的耦合：
+*   `ISessionRepository` (e.g., `FileSystemSessionRepository` / `MemorySessionRepository`)
+*   `IDataBlockRepository` (e.g., `JsonlDataBlockRepository`)
+*   `IAgentStateRepository` (e.g., `FileSystemAgentStateRepository`)
+
+**Manager 依賴注入與協調**
+Kernel 將上述生成的 Repositories 透過建構子或 DI 容器，派發並注入至以下五大核心管理器（Managers）：
 1.  **EventBus**：通訊神經系統，負責跨 Session 的非同步事件路由與訂閱。
 2.  **WorkspaceManager**：工作區控制面，與儲存介質解耦，暴露 `readFile/writeFile/runBash` 介面。
-3.  **AgentManager**：管理 Agent 活躍與休眠（Dehydrate/Rehydrate）狀態。
+3.  **AgentManager**：接收 `IAgentStateRepository`，管理 Agent 活躍與休眠（Dehydrate/Rehydrate）狀態。
 4.  **HITLGateway**：人機協同審批閘道，持久化管理審批請求。
-5.  **SessionManager**：維護 Session 與 Thread 生命週期，調度工作區與 Agent。
+5.  **SessionManager**：接收 `ISessionRepository` 與 `IDataBlockRepository`，維護 Session 與 Thread 生命週期，調度工作區與 Agent。
 
 ### 3.3. 系統引導啟動順序 (Bootstrap Sequence)
 當 `Kernel.start()` 被呼叫時，系統按照「**先打通底層基礎設施（通信與儲存），再加載高階業務邏輯（會話與 Agent）**」的依賴順序，**由底向高**依序調用各組件的生命週期方法：

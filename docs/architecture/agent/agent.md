@@ -2,7 +2,7 @@
 title: Agent 系統設計
 version: 0.1.0
 status: APPROVED
-last_updated: 2026-07-14
+last_updated: 2026-07-18
 author: Antigravity & User
 related_codes: []
 related_docs:
@@ -18,10 +18,11 @@ related_docs:
 ## 1. 基礎代理類別 (BaseAgent) 的基礎設施層
 
 所有系統中的 Agent (`MainAgent`, `SubAgent`, `EmbodiedAgent`) 皆繼承自 `BaseAgent`。`BaseAgent` 的職責被嚴格限縮於**「提供穩定的底層基礎設施與資源隔離」**，完全剝離具體的業務邏輯 (如 PDCA 循環或與 LLM 的網路通訊)。
+*   **型態與擴展性聲明**：實體強制聲明其 `type: AgentType` (如 MAIN, SUB, EMBODIED 等) 並聲明 `canClone: boolean` 以決定其是否支援在突發高負載下被「分身併發模式 (Auto-Concurrency)」動態擴展。
 
 *   **會話與基礎設施綁定**：建構時強制要求綁定 `sessionId`。所有由此對話衍生派生出的 `SubAgent` 與 `Worker` 都強制依附於此 Session 中運行。運行日誌與防幻覺操作日誌 (Oplog) 將導向會話級別的實體隔離目錄 (`{log_dir}/sessions/{sessionId}/agents/{agent_id}/`)。同時實例化專屬的訊息收件箱 (`InboxBuffer`) 並透過建構子注入 `EventBus` 自動註冊事件監聽。
 *   **純粹的生命週期管理**：專注於系統資源與執行狀態管理。定義 `AgentState` 枚舉 (`INITIALIZING`, `IDLE`, `BUSY`, `SUSPENDED`, `TERMINATED`)。提供 `suspend()`, `resume()`, `destroy()` 狀態控制與資源清理介面。
-*   **狀態持久化與存檔**：內建快照機制，提供 `saveState()` 與 `loadState()` 介面。在狀態切換 (特別是進入 `SUSPENDED` 前) 會自動寫入磁碟以防記憶遺失。
+*   **純粹的狀態匯出與匯入 (解耦)**：`BaseAgent` **不注入**任何 Repository。它只提供 `serialize(): BaseAgentData` 與 `hydrate(data)` 介面，將自身的狀態（包含 Token 消耗、狀態機）打包，真正的持久化由外部的 `AgentManager` 負責調度。
 *   **資源消耗追蹤**：內部維護 `UsageStats` (Token 與執行時間等消耗)，提供 `recordUsage` 讓子類別回報並具備安全閾值告警機制。
 
 ## 2. Agent 生命週期與型態分類 (Agent Types)
@@ -46,6 +47,17 @@ related_docs:
 *   **定義**：長期存在於特定環境（現實機器人或虛擬世界角色）的具身智能實體。
 *   **職責**：負責與特定環境進行持續性的互動、感知與執行。
 *   **特徵**：長期存在（不會被任務級別的 GC 銷毀），並且**必須被強制注入一個 `Body` (形體)** 組件。
+
+---
+
+## 2.5 AgentManager (代理人管理器)
+為了落實領域驅動設計 (DDD)，將實體與儲存設施解耦，系統引入 `AgentManager` 負責統籌 Agent 的存活與狀態快照。
+
+*   **實例與依賴**：注入 `IAgentStateRepository` 與 `IEventBus`。內部維護 `activeAgents: Map<string, BaseAgent>` 作為活躍池。
+*   **靜態實例化 (Static Instantiation)**：不再依賴手動註冊工廠，而是直接於頂層引入 `MainAgent`, `SubAgent`, `EmbodiedAgent`，根據 `AgentType` 透過 `switch` 判斷並直接 `new` 初始化。架構單純且具備強型別檢查優勢。
+*   **脫水與喚醒 (Dehydrate & Rehydrate)**：
+    *   `dehydrate(agentId)`：從活躍池取出 Agent，呼叫 `serialize()` 取得狀態快照並交由 Repository 存檔，隨後銷毀實體並釋放記憶體。
+    *   `rehydrate(agentId)`：從 Repository 載入狀態，經由 Factory 實例化，並呼叫 `hydrate(data)` 恢復狀態，最後加回活躍池。
 
 ---
 

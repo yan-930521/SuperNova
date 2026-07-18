@@ -19,10 +19,12 @@ export interface StorageConfig {
   readonly base_dir: string;
   /** 會話子目錄 */
   readonly session_dir: string;
-  /** 記憶體根目錄 */
-  readonly memory_dir: string;
   /** Agent 專屬實體工作區子目錄 */
   readonly agent_dir: string;
+
+  readonly session_file: string;
+  readonly agent_state_file: string;
+  readonly history_file: string;
 }
 
 /**

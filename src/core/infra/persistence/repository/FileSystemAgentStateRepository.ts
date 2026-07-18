@@ -1,8 +1,9 @@
-import { existsSync } from 'fs';
+import { existsSync, mkdirSync } from 'fs';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
 import { BaseAgentData } from '../../../agent/BaseAgent';
+import { Config } from '../../../config/Config';
 import { LogManager } from '../../LogManager';
 import { IAgentStateRepository } from '../IRepository';
 
@@ -12,127 +13,78 @@ import { IAgentStateRepository } from '../IRepository';
  * 保存於 `workspace/session/{sessionId}/agents/{agentId}/`
  */
 export class FileSystemAgentStateRepository implements IAgentStateRepository {
-  private readonly logger = LogManager.recorder;
-  private readonly baseDir: string;
+    private readonly logger = LogManager.recorder;
 
-  constructor(baseDir: string) {
-    this.baseDir = baseDir;
-  }
-
-  /**
-   * 保存 Agent 的狀態快照資料
-   */
-  public async saveAgentState(
-    sessionId: string,
-    agentId: string,
-    state: BaseAgentData,
-    options?: { isClone?: boolean; parentAgentId?: string }
-  ): Promise<void> {
-    const agentStateDir = path.join(this.baseDir, sessionId, 'agents', agentId);
-    const filePath = path.join(agentStateDir, 'state.json');
-
-    try {
-      if (!existsSync(agentStateDir)) {
-        await fs.mkdir(agentStateDir, { recursive: true });
-      }
-      const data = JSON.stringify(state, null, 2);
-      await fs.writeFile(filePath, data, 'utf-8');
-      this.logger.debug(`[AgentStateRepository] State saved successfully to ${filePath}`);
-    } catch (err: any) {
-      this.logger.error(`[AgentStateRepository] Failed to save state to ${filePath}: ${err.message}`);
-      throw err;
+    constructor(
+        private readonly config: Config,
+        private readonly baseDir: string
+    ) {
     }
-  }
 
-  /**
-   * 讀取並還原 Agent 的狀態快照資料
-   */
-  public async loadAgentState(
-    sessionId: string,
-    agentId: string,
-    options?: { isClone?: boolean; parentAgentId?: string }
-  ): Promise<BaseAgentData | null> {
-    const agentStateDir = path.join(this.baseDir, sessionId, 'agents', agentId);
-    const filePath = path.join(agentStateDir, 'state.json');
+    // --- ILifecycle 實作 ---
+    public async initialize(): Promise<void> { }
+    public async start(): Promise<void> { }
+    public async stop(): Promise<void> { }
 
-    if (!existsSync(filePath)) {
-      this.logger.debug(`[AgentStateRepository] State file not found: ${filePath}`);
-      return null;
+    /**
+     * 保存 Agent 的狀態快照資料
+     */
+    public async saveAgentState(
+        sessionId: string,
+        agentId: string,
+        state: BaseAgentData
+    ): Promise<void> {
+        const filePath = this.getFileName(sessionId, agentId);
+
+        try {
+            const data = JSON.stringify(state, null, 2);
+            await fs.writeFile(filePath, data, 'utf-8');
+            this.logger.debug(`[AgentStateRepository] State saved successfully to ${filePath}`);
+        } catch (err: any) {
+            this.logger.error(`[AgentStateRepository] Failed to save state to ${filePath}: ${err.message}`);
+            throw err;
+        }
     }
-    try {
-      const content = await fs.readFile(filePath, 'utf-8');
-      return JSON.parse(content) as BaseAgentData;
-    } catch (err: any) {
-      this.logger.error(`[AgentStateRepository] Failed to load state from ${filePath}: ${err.message}`);
-      throw err;
+
+    /**
+     * 讀取並還原 Agent 的狀態快照資料
+     */
+    public async loadAgentState(
+        sessionId: string,
+        agentId: string
+    ): Promise<BaseAgentData | null> {
+        const filePath = this.getFileName(sessionId, agentId);
+
+        if (!existsSync(filePath)) {
+            this.logger.debug(`[AgentStateRepository] State file not found: ${filePath}`);
+            return null;
+        }
+        try {
+            const content = await fs.readFile(filePath, 'utf-8');
+            return JSON.parse(content) as BaseAgentData;
+        } catch (err: any) {
+            this.logger.error(`[AgentStateRepository] Failed to load state from ${filePath}: ${err.message}`);
+            throw err;
+        }
     }
-  }
 
-  // ==========================================
-  // IRepository<BaseAgentData> 通用接口實現
-  // ==========================================
-
-  public async save(entity: BaseAgentData): Promise<void> {
-    await this.saveAgentState(entity.sessionId, entity.id, entity, {
-      isClone: entity.isClone,
-      parentAgentId: entity.parentAgentId
-    });
-  }
-
-  public async load(id: string): Promise<BaseAgentData | null> {
-    const { sessionId, agentId, options } = this.parseCompositeId(id);
-    return await this.loadAgentState(sessionId, agentId, options);
-  }
-
-  public async exists(id: string): Promise<boolean> {
-    try {
-      const { sessionId, agentId, options } = this.parseCompositeId(id);
-      const parentDir = options?.isClone && options.parentAgentId ? options.parentAgentId : agentId;
-      const filename = options?.isClone ? `state_${agentId}.json` : 'state.json';
-      const filePath = path.join(this.baseDir, sessionId, 'agents', parentDir, filename);
-      return existsSync(filePath);
-    } catch {
-      return false;
+    // --- 內部輔助方法 ---
+    private getDirName(
+        sessionId: string,
+        agentId: string
+    ): string {
+        const agentDir = path.join(this.baseDir, sessionId, this.config.storage.agent_dir, agentId);
+        if (!existsSync(agentDir)) {
+            mkdirSync(agentDir, { recursive: true });
+        }
+        return agentDir;
     }
-  }
 
-  public async delete(id: string): Promise<void> {
-    const { sessionId, agentId, options } = this.parseCompositeId(id);
-    const parentDir = options?.isClone && options.parentAgentId ? options.parentAgentId : agentId;
-    const filename = options?.isClone ? `state_${agentId}.json` : 'state.json';
-    const filePath = path.join(this.baseDir, sessionId, 'agents', parentDir, filename);
-
-    if (existsSync(filePath)) {
-      await fs.unlink(filePath);
+    private getFileName(
+        sessionId: string,
+        agentId: string
+    ): string {
+        const filePath = path.join(this.getDirName(sessionId, agentId), this.config.storage.agent_state_file);
+        return filePath;
     }
-  }
-
-  public async list(): Promise<string[]> {
-    this.logger.warn('[AgentStateRepository] list() operation is not supported on agent state snapshots');
-    return [];
-  }
-
-  /**
-   * 解析複合式 ID
-   * 格式:
-   * 1. 獨立模式: "sessionId:agentId"
-   * 2. 分身模式: "sessionId:parentAgentId:cloneId"
-   */
-  private parseCompositeId(id: string): {
-    sessionId: string;
-    agentId: string;
-    options?: { isClone?: boolean; parentAgentId?: string };
-  } {
-    const parts = id.split(':');
-    if (parts.length === 2) {
-      return { sessionId: parts[0], agentId: parts[1] };
-    } else if (parts.length === 3) {
-      return {
-        sessionId: parts[0],
-        agentId: parts[2],
-        options: { isClone: true, parentAgentId: parts[1] }
-      };
-    }
-    throw new Error(`Invalid composite agent state ID: ${id}. Format must be "sessionId:agentId" or "sessionId:parentAgentId:cloneId"`);
-  }
 }

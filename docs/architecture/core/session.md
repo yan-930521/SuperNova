@@ -112,15 +112,14 @@ workspace/
 └── session/
     └── <sessionId>/
         ├── session.json                   # ISessionRepository 儲存的會話元數據 (SessionData)
-        ├── history/                       # IDataBlockRepository 儲存的事件與對話歷史 (JSONL)
-        │   ├── <agentId_A>.jsonl          
-        │   └── <agentId_B>.jsonl          
-        └── agents/                        # IAgentStateRepository 儲存的代理人狀態快照 (JSON)
+        └── agents/                        # Agent 專屬實體隔離目錄
             ├── <agentId_A>/
-            │   └── state.json             
+            │   ├── state.json             # IAgentStateRepository 儲存的狀態快照
+            │   └── history.jsonl          # IDataBlockRepository 儲存的歷史紀錄
             └── <parentAgentId>/           
                 ├── state.json             # 獨立模式狀態快照
-                └── state_<cloneId>.json   # 分身模式下的隔離狀態快照
+                ├── state_<cloneId>.json   # 分身模式下的隔離狀態快照
+                └── history.jsonl          # 歷史紀錄
 ```
 
 ### B. 會話元數據儲存 (`ISessionRepository`)
@@ -134,11 +133,11 @@ workspace/
 *   **物理格式優勢 (JSON Lines / JSONL)**：
     每一行代表一個獨立 JSON 化的 `DataBlock` 記錄。在寫入時無須讀取舊檔，直接以常數時間 $O(1)$ 的 `fs.appendFile` 追加寫入，極大地降低了高頻事件與長對話下的磁碟 I/O 損耗。
 *   **Agent 級別物理隔離**：
-    歷史事件會依據參與的 Agent ID 隔離分檔為 `history/{agentId}.jsonl`。讀取特定 Agent 歷史時，無須掃描其他無關 Agent 的歷史，讀取效能極佳。
+    歷史事件會依據參與的 Agent ID 隔離分檔為 `agents/{agentId}/history.jsonl`。讀取特定 Agent 歷史時，無須掃描其他無關 Agent 的歷史，讀取效能極佳。
 *   **核心介面 API**：
     1.  `saveForAgent(sessionId, agentId, blocks)`：整份覆寫該 Agent 的歷史（用於時空旅行倒帶）。
-    2.  `appendForAgent(sessionId, agentId, block)`：以 $O(1)$ 常數時間向 `{agentId}.jsonl` 追加單筆 DataBlock。
-    3.  `findByAgent(sessionId, agentId)`：讀取並逐行反序列化解析 `{agentId}.jsonl`，還原為強型別 `DataBlock[]`。
+    2.  `appendForAgent(sessionId, agentId, block)`：以 $O(1)$ 常數時間向 `history.jsonl` 追加單筆 DataBlock。
+    3.  `findByAgent(sessionId, agentId)`：讀取並逐行反序列化解析 `history.jsonl`，還原為強型別 `DataBlock[]`。
 *   **事件監聽直接存檔 (Event-Driven Save)**：
     不進行複雜的發送者解析與多寫。當 `EventBus` 觸發接收事件（目標 Agent 聽到該 `DataBlock`）的那一刻，直接在事件監聽器中調用 `saveForAgent(agentId, block)`。只有 Agent 真正經歷與接收到的事件，才會客觀地寫入其歷史中。
 

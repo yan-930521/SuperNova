@@ -16,12 +16,22 @@ import { DataBlock } from '../messaging/DataBlock';
 import { IEvent, IEventBus } from '../messaging/IBus';
 
 /**
+ * 代理人型別枚舉
+ */
+export enum AgentType {
+  MAIN = 'MAIN',
+  SUB = 'SUB',
+  EMBODIED = 'EMBODIED'
+}
+
+/**
  * 代理人狀態實體數據結構 (DTO)
  */
 export interface BaseAgentData extends IEntity {
-  /** 唯一識別碼 (即 agentId) */
   readonly id: string;
   readonly sessionId: string;
+  readonly type: AgentType;
+  readonly canClone: boolean;
   readonly state: string;           // AgentState enum 的字串表示
   readonly usageStats: {
     promptTokens: number;
@@ -31,7 +41,6 @@ export interface BaseAgentData extends IEntity {
   readonly timestamp: number;
   readonly isClone?: boolean;
   readonly parentAgentId?: string;
-  readonly canClone?: boolean;
 }
 
 /**
@@ -64,6 +73,9 @@ export interface UsageStats {
  * 整合了 Session 綁定、上下文綁定日誌 (Contextual Logger)、資源計量、狀態持久化、事件驅動與 LangChain。
  */
 export abstract class BaseAgent {
+  public abstract readonly type: AgentType;
+  public abstract readonly canClone: boolean;
+
   /** 當前生命週期狀態 */
   protected state: AgentState;
   /** 上下文綁定的專屬 Logger (不會污染全局) */
@@ -78,8 +90,6 @@ export abstract class BaseAgent {
   protected readonly stateFilePath: string; // 為了與原先代碼相容保留
   protected readonly isClone: boolean;
   protected readonly parentAgentId?: string;
-  public readonly canClone: boolean;
-  protected readonly stateRepo: IAgentStateRepository;
   private readonly eventHandler: (event: IEvent<string, DataBlock>) => void;
 
   constructor(
@@ -91,8 +101,6 @@ export abstract class BaseAgent {
       workspacePath?: string;
       parentAgent?: BaseAgent;
       isClone?: boolean;
-      stateRepo?: IAgentStateRepository;
-      canClone?: boolean;
     }
   ) {
     this.state = AgentState.INITIALIZING;
@@ -106,21 +114,22 @@ export abstract class BaseAgent {
     this.workspacePath = options?.workspacePath || '';
     this.isClone = options?.isClone || false;
     this.parentAgentId = options?.parentAgent?.id;
-    this.canClone = options?.canClone !== false;
 
-    // oplog 和 workspace 不得共享，每個 Agent (包括分身) 均使用獨立的物理目錄
-    this.oplogDir = path.join(
-      process.cwd(), 
-      this.config.storage.base_dir, 
-      this.config.storage.session_dir,
-      this.sessionId,
-      this.config.storage.agent_dir,
-      this.id
-    );
-    this.stateFilePath = path.join(this.oplogDir, 'state.json');
-    
-    const sessionBaseDir = path.join(process.cwd(), this.config.storage.base_dir, this.config.storage.session_dir);
-    this.stateRepo = options?.stateRepo || new FileSystemAgentStateRepository(sessionBaseDir);
+    // 記憶共享與隔離邏輯 (僅用於 Oplog 檔案日誌傳輸器定址)
+    if (this.isClone && options?.parentAgent) {
+      this.oplogDir = options.parentAgent.oplogDir;
+      this.stateFilePath = path.join(this.oplogDir, `state_${this.id}.json`);
+    } else {
+      this.oplogDir = path.join(
+        process.cwd(), 
+        this.config.storage.base_dir, 
+        this.config.storage.session_dir,
+        this.sessionId,
+        this.config.storage.agent_dir,
+        this.id
+      );
+      this.stateFilePath = path.join(this.oplogDir, 'state.json');
+    }
 
     this.logger.addTransport(new FileTransport('DEBUG', this.oplogDir, '.oplog.jsonl'));
     this.logger.info(`Initializing agent: ${this.id} under session: ${this.sessionId}`);
@@ -309,48 +318,32 @@ export abstract class BaseAgent {
   // ==========================================
 
   /**
-   * 將當前狀態、消耗資訊與快照寫入儲存庫
+   * 將當前狀態、消耗資訊序列化為 DTO
    */
-  public async saveState(): Promise<void> {
-    try {
-      const stateData: BaseAgentData = {
-        id: this.id,
-        sessionId: this.sessionId,
-        state: this.state,
-        usageStats: this.usageStats,
-        timestamp: Date.now(),
-        isClone: this.isClone,
-        parentAgentId: this.parentAgentId,
-        canClone: this.canClone
-      };
-      
-      await this.stateRepo.saveAgentState(this.sessionId, this.id, stateData, {
-        isClone: this.isClone,
-        parentAgentId: this.parentAgentId
-      });
-      this.logger.debug(`State saved successfully via Repository`);
-    } catch (err: any) {
-      this.logger.error(`Failed to save state via Repository: ${err.message}`);
-    }
+  public serialize(): BaseAgentData {
+    return {
+      id: this.id,
+      sessionId: this.sessionId,
+      type: this.type,
+      canClone: this.canClone,
+      state: this.state,
+      usageStats: { ...this.usageStats },
+      timestamp: Date.now(),
+      isClone: this.isClone,
+      parentAgentId: this.parentAgentId
+    };
   }
 
   /**
-   * 從儲存庫還原狀態與消耗資訊
+   * 從 DTO 還原狀態與消耗資訊
    */
-  public async loadState(): Promise<void> {
-    try {
-      const stateData = await this.stateRepo.loadAgentState(this.sessionId, this.id, {
-        isClone: this.isClone,
-        parentAgentId: this.parentAgentId
-      });
-      if (stateData) {
-        this.state = (stateData.state as AgentState) ?? AgentState.INITIALIZING;
-        this.usageStats = stateData.usageStats ?? { promptTokens: 0, completionTokens: 0, durationMs: 0 };
-        this.logger.info(`State loaded successfully via Repository.`);
-      }
-    } catch (err: any) {
-      this.logger.error(`Failed to load state via Repository: ${err.message}`);
+  public hydrate(data: BaseAgentData): void {
+    if (data.id !== this.id || data.sessionId !== this.sessionId) {
+        throw new Error('Hydration data mismatch with current agent identity.');
     }
+    this.state = (data.state as AgentState) ?? AgentState.INITIALIZING;
+    this.usageStats = data.usageStats ? { ...data.usageStats } : { promptTokens: 0, completionTokens: 0, durationMs: 0 };
+    this.logger.debug(`Agent state hydrated from snapshot.`);
   }
 
   // ==========================================
@@ -361,9 +354,8 @@ export abstract class BaseAgent {
    * 主動掛起 (釋放 CPU 與 Token 消耗)
    * 進入 SUSPENDED 前會自動進行狀態存檔
    */
-  public async suspend(): Promise<void> {
+  public suspend(): void {
     this.setState(AgentState.SUSPENDED);
-    await this.saveState();
     this.logger.info(`Agent suspended. Waiting for events...`);
   }
   

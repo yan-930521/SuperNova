@@ -19,11 +19,7 @@ const execAsync = promisify(exec);
 export class GitLocalStorageDriver implements IStorageDriver {
   private activePaths: Map<string, string> = new Map();
 
-  constructor(
-    private readonly basePersistentPath: string = process.cwd(),
-    private readonly sessionDir: string = 'session',
-    private readonly agentDir: string = 'agent'
-  ) {}
+  constructor(private readonly basePersistentPath: string = process.cwd()) {}
 
   /**
    * 初始化獨立的空 Git 倉庫或其內部的 Agent Worktree
@@ -38,7 +34,7 @@ export class GitLocalStorageDriver implements IStorageDriver {
       return this.activePaths.get(key)!;
     }
 
-    const sessionRepoPath = path.join(this.basePersistentPath, this.sessionDir, sessionId);
+    const sessionRepoPath = path.join(this.basePersistentPath, 'workspace', sessionId);
 
     if (agentId === sessionId) {
       // --- 1. 初始化 Session 根倉庫 (Session中央共享倉庫) ---
@@ -62,7 +58,7 @@ export class GitLocalStorageDriver implements IStorageDriver {
       }
     } else {
       // --- 2. 在 Session 倉庫下開闢 Agent 子工作區 (Git Worktree) ---
-      const agentWsPath = path.join(sessionRepoPath, this.agentDir, agentId);
+      const agentWsPath = path.join(sessionRepoPath, '.worktrees', agentId);
       const branchName = `branch_${agentId}`;
 
       try {

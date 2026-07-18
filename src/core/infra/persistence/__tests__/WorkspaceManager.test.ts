@@ -2,10 +2,11 @@ import { describe, it, expect } from 'bun:test';
 import { WorkspaceManager } from '../WorkspaceManager';
 import { existsSync } from 'fs';
 import * as path from 'path';
+import { DEFAULT_CONFIG } from '../../../config/DefaultConfig';
 
 describe('WorkspaceManager Two-Tier Workspace Test', () => {
   it('should support VOLATILE VFS routing for session and agents', async () => {
-    const wm = new WorkspaceManager();
+    const wm = new WorkspaceManager(DEFAULT_CONFIG);
 
     // 1. 初始化 Session 根
     const sessionPath = await wm.initWorkspace('session-vfs', 'session-vfs', 'VOLATILE');
@@ -30,7 +31,7 @@ describe('WorkspaceManager Two-Tier Workspace Test', () => {
   it('should support PERSISTENT Git repository and agent worktrees', async () => {
     // 將測試臨時目錄限制在專案下的 .dev_test_repo (被 gitignore)
     const tempTestPath = path.join(process.cwd(), '.dev_test_repo');
-    const wm = new WorkspaceManager(tempTestPath, 'workspace', '.worktrees');
+    const wm = new WorkspaceManager(DEFAULT_CONFIG, tempTestPath);
 
     const sessionId = `session-${Date.now()}`;
     const agentId = 'agent-bob';
