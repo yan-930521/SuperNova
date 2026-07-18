@@ -65,7 +65,7 @@ describe('BaseAgent Memory Sharing & Clone Test with Repository Decoupling', () 
     expect(parentAgent['stateFilePath']).toContain('state.json');
   });
 
-  it('should support clone mode with shared memory and isolated state snapshot via Repository', async () => {
+  it('should support clone mode with isolated storage directories but marked parent references', async () => {
     const parentId = 'parent-agent';
     const cloneId = 'clone-agent';
     const sessionId = 'session-123';
@@ -76,28 +76,37 @@ describe('BaseAgent Memory Sharing & Clone Test with Repository Decoupling', () 
     });
 
     const cloneAgent = new MockTestAgent(cloneId, sessionId, eventBus, mockConfig, {
-      workspacePath,
+      workspacePath: path.join(testStorageDir, 'workspace-clone'),
       parentAgent,
       isClone: true
     });
 
-    // 1. 驗證分身與父級記憶物理共享路徑
-    expect(cloneAgent.workspacePath).toBe(parentAgent.workspacePath); // 工作區共享
-    expect(cloneAgent['oplogDir']).toBe(parentAgent['oplogDir']); // 記憶共享
+    // 1. 驗證 canClone 預設是 true
+    expect(parentAgent.canClone).toBe(true);
 
-    // 2. 驗證日誌共享寫入同一個實體 oplog 檔案
+    // 2. 驗證分身與父級記憶物理目錄徹底隔離 (由於 ID 不同，物理路徑不共享)
+    expect(cloneAgent['oplogDir']).not.toBe(parentAgent['oplogDir']);
+
+    // 3. 驗證二者分別寫入各自獨立的 oplog 檔案中
     parentAgent.triggerLog('Parent log entry');
     cloneAgent.triggerLog('Clone log entry');
 
     // 由於 LogManager 檔案寫入是非同步的，等待短暫延遲後讀取
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    const oplogFilePath = path.join(parentAgent['oplogDir'], '.oplog.jsonl');
-    expect(fs.existsSync(oplogFilePath)).toBe(true);
+    const parentOplogFilePath = path.join(parentAgent['oplogDir'], '.oplog.jsonl');
+    const cloneOplogFilePath = path.join(cloneAgent['oplogDir'], '.oplog.jsonl');
 
-    const content = fs.readFileSync(oplogFilePath, 'utf-8');
-    expect(content).toContain('Parent log entry');
-    expect(content).toContain('Clone log entry');
+    expect(fs.existsSync(parentOplogFilePath)).toBe(true);
+    expect(fs.existsSync(cloneOplogFilePath)).toBe(true);
+
+    const parentContent = fs.readFileSync(parentOplogFilePath, 'utf-8');
+    const cloneContent = fs.readFileSync(cloneOplogFilePath, 'utf-8');
+
+    expect(parentContent).toContain('Parent log entry');
+    expect(parentContent).not.toContain('Clone log entry');
+    expect(cloneContent).toContain('Clone log entry');
+    expect(cloneContent).not.toContain('Parent log entry');
   });
 
   it('should support saveState and loadState via Decoupled AgentStateRepository', async () => {
@@ -131,7 +140,7 @@ describe('BaseAgent Memory Sharing & Clone Test with Repository Decoupling', () 
 
     // 2. 驗證實體物理檔案已生成在 Repository 指定的位置
     const parentStateFilePath = path.join(sessionBaseDir, sessionId, 'agents', parentId, 'state.json');
-    const cloneStateFilePath = path.join(sessionBaseDir, sessionId, 'agents', parentId, `state_${cloneId}.json`); // 分身位於父級資料夾下
+    const cloneStateFilePath = path.join(sessionBaseDir, sessionId, 'agents', cloneId, 'state.json'); // 分身位於自己獨立的資料夾下
 
     expect(fs.existsSync(parentStateFilePath)).toBe(true);
     expect(fs.existsSync(cloneStateFilePath)).toBe(true);

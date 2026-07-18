@@ -28,14 +28,12 @@ export class FileSystemAgentStateRepository implements IAgentStateRepository {
     state: BaseAgentData,
     options?: { isClone?: boolean; parentAgentId?: string }
   ): Promise<void> {
-    const parentDir = options?.isClone && options.parentAgentId ? options.parentAgentId : agentId;
-    const filename = options?.isClone ? `state_${agentId}.json` : 'state.json';
-    const oplogDir = path.join(this.baseDir, sessionId, 'agents', parentDir);
-    const filePath = path.join(oplogDir, filename);
+    const agentStateDir = path.join(this.baseDir, sessionId, 'agents', agentId);
+    const filePath = path.join(agentStateDir, 'state.json');
 
     try {
-      if (!existsSync(oplogDir)) {
-        await fs.mkdir(oplogDir, { recursive: true });
+      if (!existsSync(agentStateDir)) {
+        await fs.mkdir(agentStateDir, { recursive: true });
       }
       const data = JSON.stringify(state, null, 2);
       await fs.writeFile(filePath, data, 'utf-8');
@@ -54,10 +52,8 @@ export class FileSystemAgentStateRepository implements IAgentStateRepository {
     agentId: string,
     options?: { isClone?: boolean; parentAgentId?: string }
   ): Promise<BaseAgentData | null> {
-    const parentDir = options?.isClone && options.parentAgentId ? options.parentAgentId : agentId;
-    const filename = options?.isClone ? `state_${agentId}.json` : 'state.json';
-    const oplogDir = path.join(this.baseDir, sessionId, 'agents', parentDir);
-    const filePath = path.join(oplogDir, filename);
+    const agentStateDir = path.join(this.baseDir, sessionId, 'agents', agentId);
+    const filePath = path.join(agentStateDir, 'state.json');
 
     if (!existsSync(filePath)) {
       this.logger.debug(`[AgentStateRepository] State file not found: ${filePath}`);

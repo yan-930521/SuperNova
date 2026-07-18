@@ -35,7 +35,7 @@ export class RuntimeKernel implements ILifecycle {
 
       // 2. 實例化底層儲存組件 - WorkspaceManager
       // WorkspaceManager 內部會依據工作區類型動態分配 StorageDriver (VFS/Git)
-      const workspaceManager = new WorkspaceManager(process.cwd());
+      const workspaceManager = new WorkspaceManager(process.cwd(), this.config.storage.session_dir, this.config.storage.agent_dir);
 
       // 3. 實例化高階業務邏輯組件 - SessionManager
       // SessionManager 負責管理會話，依賴 config 配置系統與 Workspace 控制面

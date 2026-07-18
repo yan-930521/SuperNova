@@ -31,6 +31,7 @@ export interface BaseAgentData extends IEntity {
   readonly timestamp: number;
   readonly isClone?: boolean;
   readonly parentAgentId?: string;
+  readonly canClone?: boolean;
 }
 
 /**
@@ -77,6 +78,7 @@ export abstract class BaseAgent {
   protected readonly stateFilePath: string; // 為了與原先代碼相容保留
   protected readonly isClone: boolean;
   protected readonly parentAgentId?: string;
+  public readonly canClone: boolean;
   protected readonly stateRepo: IAgentStateRepository;
   private readonly eventHandler: (event: IEvent<string, DataBlock>) => void;
 
@@ -90,6 +92,7 @@ export abstract class BaseAgent {
       parentAgent?: BaseAgent;
       isClone?: boolean;
       stateRepo?: IAgentStateRepository;
+      canClone?: boolean;
     }
   ) {
     this.state = AgentState.INITIALIZING;
@@ -103,22 +106,18 @@ export abstract class BaseAgent {
     this.workspacePath = options?.workspacePath || '';
     this.isClone = options?.isClone || false;
     this.parentAgentId = options?.parentAgent?.id;
+    this.canClone = options?.canClone !== false;
 
-    // 記憶共享與隔離邏輯 (僅用於 Oplog 檔案日誌傳輸器定址)
-    if (this.isClone && options?.parentAgent) {
-      this.oplogDir = options.parentAgent.oplogDir;
-      this.stateFilePath = path.join(this.oplogDir, `state_${this.id}.json`);
-    } else {
-      this.oplogDir = path.join(
-        process.cwd(), 
-        this.config.storage.base_dir, 
-        this.config.storage.session_dir,
-        this.sessionId,
-        this.config.storage.agent_dir,
-        this.id
-      );
-      this.stateFilePath = path.join(this.oplogDir, 'state.json');
-    }
+    // oplog 和 workspace 不得共享，每個 Agent (包括分身) 均使用獨立的物理目錄
+    this.oplogDir = path.join(
+      process.cwd(), 
+      this.config.storage.base_dir, 
+      this.config.storage.session_dir,
+      this.sessionId,
+      this.config.storage.agent_dir,
+      this.id
+    );
+    this.stateFilePath = path.join(this.oplogDir, 'state.json');
     
     const sessionBaseDir = path.join(process.cwd(), this.config.storage.base_dir, this.config.storage.session_dir);
     this.stateRepo = options?.stateRepo || new FileSystemAgentStateRepository(sessionBaseDir);
@@ -321,7 +320,8 @@ export abstract class BaseAgent {
         usageStats: this.usageStats,
         timestamp: Date.now(),
         isClone: this.isClone,
-        parentAgentId: this.parentAgentId
+        parentAgentId: this.parentAgentId,
+        canClone: this.canClone
       };
       
       await this.stateRepo.saveAgentState(this.sessionId, this.id, stateData, {

@@ -13,6 +13,22 @@ import * as path from 'path';
 export class MainAgent extends BaseAgent {
   private readonly subAgents: Map<string, BaseAgent> = new Map();
 
+  constructor(
+    id: string,
+    sessionId: string,
+    eventBus: any,
+    config: any,
+    options?: {
+      workspacePath?: string;
+      stateRepo?: infra.persistence.IAgentStateRepository;
+    }
+  ) {
+    super(id, sessionId, eventBus, config, {
+      ...options,
+      canClone: false // 強制主代理人不得被 Clone
+    });
+  }
+
   protected getModel(): BaseChatModel {
     return {} as any; // 測試與初期 Stub，不實際調用 LLM
   }
@@ -20,28 +36,42 @@ export class MainAgent extends BaseAgent {
   /**
    * 上帝視角：動態建立一個 SubAgent (子代理人)
    * @param agentId 子代理人唯一 ID
-   * @param options 選擇是否為分身模式、工作區路徑、或是特化注入的 Repository
+   * @param options 選擇是否為分身模式、指定克隆對象、工作區路徑、或是特化注入的 Repository
    */
   public async createSubAgent(
     agentId: string,
     options?: {
       isClone?: boolean;
+      parentAgent?: BaseAgent;
       workspacePath?: string;
       stateRepo?: infra.persistence.IAgentStateRepository;
     }
   ): Promise<BaseAgent> {
     const isClone = options?.isClone || false;
+    const parentAgent = options?.parentAgent || this; // 預設以自己作為克隆母體
     let subAgent: SubAgent;
 
     if (isClone) {
-      // 分身模式：共享記憶 (oplogDir 與 workspacePath 與 MainAgent 共享)
+      // 權限檢查：禁止克隆不允許 Clone 的 Agent
+      if (!parentAgent.canClone) {
+        throw new Error(`Security Violation: Parent agent ${parentAgent.id} does not allow cloning.`);
+      }
+
+      // 分身模式：擁有獨立的工作區與 oplog 目錄，但繼承關鍵大腦記憶 (如 usageStats)
+      const cloneWorkspace = options?.workspacePath || path.join(this.workspacePath, 'clones', agentId);
       subAgent = new SubAgent(agentId, this.sessionId, this.eventBus, this.config, {
-        parentAgent: this,
+        parentAgent,
         isClone: true,
-        workspacePath: this.workspacePath,
+        workspacePath: cloneWorkspace,
         stateRepo: options?.stateRepo || this.stateRepo
       });
-      this.logger.info(`Successfully spawned clone SubAgent: ${agentId} sharing memory with MainAgent: ${this.id}`);
+
+      // 拷貝繼承關鍵大腦記憶
+      const stats = (parentAgent as any).usageStats;
+      if (stats) {
+        subAgent.recordUsage(stats.promptTokens, stats.completionTokens, stats.durationMs);
+      }
+      this.logger.info(`Successfully spawned clone SubAgent: ${agentId} inheriting context from parent: ${parentAgent.id}`);
     } else {
       // 獨立模式：建立獨立的工作空間與隔離目錄
       const subWorkspace = options?.workspacePath || path.join(this.workspacePath, 'subagents', agentId);

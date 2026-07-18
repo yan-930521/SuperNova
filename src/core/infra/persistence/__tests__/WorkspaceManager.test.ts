@@ -30,7 +30,7 @@ describe('WorkspaceManager Two-Tier Workspace Test', () => {
   it('should support PERSISTENT Git repository and agent worktrees', async () => {
     // 將測試臨時目錄限制在專案下的 .dev_test_repo (被 gitignore)
     const tempTestPath = path.join(process.cwd(), '.dev_test_repo');
-    const wm = new WorkspaceManager(tempTestPath);
+    const wm = new WorkspaceManager(tempTestPath, 'workspace', '.worktrees');
 
     const sessionId = `session-${Date.now()}`;
     const agentId = 'agent-bob';

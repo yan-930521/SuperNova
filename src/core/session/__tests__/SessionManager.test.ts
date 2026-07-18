@@ -21,7 +21,7 @@ describe('SessionManager Recovery and Freeze Test', () => {
     const sessionRoot = path.join(process.cwd(), testConfig.storage.base_dir, testConfig.storage.session_dir);
     const workspaceRoot = path.join(process.cwd(), '.dev_test_workspace_root');
 
-    const wm = new WorkspaceManager(workspaceRoot);
+    const wm = new WorkspaceManager(workspaceRoot, testConfig.storage.session_dir, testConfig.storage.agent_dir);
     const sm = new SessionManager(testConfig, wm);
 
     try {

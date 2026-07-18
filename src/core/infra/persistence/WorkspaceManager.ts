@@ -17,7 +17,11 @@ export class WorkspaceManager implements IWorkspaceManager, ILifecycle {
   // 一個 Session 唯一共享一個儲存驅動器實例，Key 為 sessionId
   private activeDrivers: Map<string, IStorageDriver> = new Map();
 
-  constructor(private readonly basePersistentPath: string = process.cwd()) {}
+  constructor(
+    private readonly basePersistentPath: string = process.cwd(),
+    private readonly sessionDir: string = 'session',
+    private readonly agentDir: string = 'agent'
+  ) {}
 
   /**
    * 初始化組件 (ILifecycle)
@@ -53,7 +57,7 @@ export class WorkspaceManager implements IWorkspaceManager, ILifecycle {
     if (type === 'VOLATILE') {
       return true;
     }
-    const expectedWsPath = path.join(this.basePersistentPath, 'workspace', sessionId);
+    const expectedWsPath = path.join(this.basePersistentPath, this.sessionDir, sessionId);
     return existsSync(expectedWsPath);
   }
 
@@ -75,7 +79,7 @@ export class WorkspaceManager implements IWorkspaceManager, ILifecycle {
       driver =
         type === 'VOLATILE'
           ? new MemoryVfsStorageDriver()
-          : new GitLocalStorageDriver(this.basePersistentPath);
+          : new GitLocalStorageDriver(this.basePersistentPath, this.sessionDir, this.agentDir);
       this.activeDrivers.set(sessionId, driver);
     }
 

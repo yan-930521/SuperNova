@@ -53,8 +53,9 @@ describe('MainAgent God Mode and SubAgent Lifecycle Management Test', () => {
     expect(subAgent['oplogDir']).not.toBe(mainAgent['oplogDir']); // 記憶隔離
   });
 
-  it('should support clone sub-agent spawning with shared workspace, oplog directories and states', async () => {
+  it('should support clone sub-agent spawning with memory copy context sharing but isolated path storage', async () => {
     const mainId = 'main-brain';
+    const sourceId = 'sub-source';
     const cloneId = 'sub-worker-clone';
     const sessionId = 'session-main-2';
     const workspacePath = path.join(testStorageDir, 'workspace-main');
@@ -63,25 +64,33 @@ describe('MainAgent God Mode and SubAgent Lifecycle Management Test', () => {
       workspacePath
     });
 
-    // 建立分身模式 SubAgent
-    const cloneAgent = await mainAgent.createSubAgent(cloneId, { isClone: true });
+    // 1. 建立一個可被 Clone 的源 Agent，並模擬大腦記憶消耗
+    const sourceAgent = await mainAgent.createSubAgent(sourceId, { isClone: false });
+    expect(sourceAgent.canClone).toBe(true);
+    sourceAgent.recordUsage(10, 20, 5);
+
+    // 2. 以 sourceAgent 為 parent 建立分身
+    const cloneAgent = await mainAgent.createSubAgent(cloneId, {
+      isClone: true,
+      parentAgent: sourceAgent
+    });
 
     expect(mainAgent.getSubAgent(cloneId)).toBe(cloneAgent);
-    expect(cloneAgent.workspacePath).toBe(mainAgent.workspacePath); // 工作區共享
-    expect(cloneAgent['oplogDir']).toBe(mainAgent['oplogDir']); // 記憶共享
+    
+    // 3. 驗證 oplogDir 與 workspacePath 實體徹底隔離
+    expect(cloneAgent.workspacePath).not.toBe(sourceAgent.workspacePath);
+    expect(cloneAgent['oplogDir']).not.toBe(sourceAgent['oplogDir']);
 
-    // 驗證分身狀態隔離與日誌協作
-    mainAgent.recordUsage(10, 20, 5);
-    cloneAgent.recordUsage(5, 5, 2);
+    // 4. 驗證繼承了關鍵大腦記憶上下文 (usageStats 成功拷貝)
+    expect(cloneAgent['usageStats'].promptTokens).toBe(10);
+    expect(cloneAgent['usageStats'].completionTokens).toBe(20);
+    expect(cloneAgent['usageStats'].durationMs).toBe(5);
 
-    await new Promise(resolve => setTimeout(resolve, 100));
-
-    // 驗證二者是否都成功往共享 oplog 檔案寫入
-    const oplogFilePath = path.join(mainAgent['oplogDir'], '.oplog.jsonl');
-    expect(fs.existsSync(oplogFilePath)).toBe(true);
-
-    const logContent = fs.readFileSync(oplogFilePath, 'utf-8');
-    expect(logContent).toContain('Successfully spawned clone SubAgent');
+    // 5. 驗證安全機制：對 canClone = false 的 Agent (如 mainAgent) 克隆將會失敗拋出異常
+    expect(mainAgent.canClone).toBe(false);
+    expect(
+      mainAgent.createSubAgent('clone-of-main', { isClone: true, parentAgent: mainAgent })
+    ).rejects.toThrow('Security Violation: Parent agent main-brain does not allow cloning.');
   });
 
   it('should support destroySubAgent and clean up subAgents repository map', async () => {
