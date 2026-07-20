@@ -40,25 +40,3 @@ Higher priority overrides lower priority.
 * Use SOPs as guidance unless overridden by higher priority constraints.
 * Stop execution once success criteria are satisfied.
 * Escalate blockers instead of guessing or hallucinating.
-
----
-
-# Memory & Context
-
-## L1 Blackboard
-
-{{L1_BLACKBOARD}}
-
----
-
-## L2 Verified Facts
-
-{{L2_FACTS}}
-
----
-
-## L3 SOP
-
-{{L3_SOP}}
-
----
