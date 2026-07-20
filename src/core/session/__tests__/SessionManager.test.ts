@@ -7,6 +7,7 @@ import { FileSystemSessionRepository } from '../../infra/persistence/repository/
 import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
 import * as path from 'path';
+import { EventBus } from '../../messaging/EventBus';
 
 describe('SessionManager Recovery and Freeze Test', () => {
   it('should suspend ACTIVE sessions on stop() and recover them on start()', async () => {
@@ -24,14 +25,17 @@ describe('SessionManager Recovery and Freeze Test', () => {
 
     const wm = new WorkspaceManager(testConfig, workspaceRoot);
     const sessionRepo = new FileSystemSessionRepository(testConfig, sessionRoot);
-    const sm = new SessionManager(testConfig, sessionRepo, wm);
+    const eventBus = new EventBus();
+    const mockAgentManager = {} as any;
+    const mockDataBlockRepo = {} as any;
+    const sm = new SessionManager(testConfig, sessionRepo, wm, mockAgentManager, mockDataBlockRepo, eventBus);
 
     try {
       await sm.initialize();
 
       // 1. 建立兩個會話：一個 VOLATILE，一個 PERSISTENT
-      const sessionVolatile = sm.createSession('agent-v', 'session-v', 'VOLATILE');
-      const sessionPersistent = sm.createSession('agent-p', 'session-p', 'PERSISTENT');
+      const sessionVolatile = await sm.createSession('agent-v', 'session-v', 'VOLATILE');
+      const sessionPersistent = await sm.createSession('agent-p', 'session-p', 'PERSISTENT');
 
       // 初始化實體 Workspace 讓 PERSISTENT 正常工作
       await wm.initWorkspace(sessionPersistent.id, sessionPersistent.id, 'PERSISTENT');
@@ -52,7 +56,7 @@ describe('SessionManager Recovery and Freeze Test', () => {
       expect(sessionPData.status).toBe(SessionState.SUSPENDED);
 
       // 3. 測試會話恢復：執行 start() 自動還原
-      const smRecovery = new SessionManager(testConfig, sessionRepo, wm);
+      const smRecovery = new SessionManager(testConfig, sessionRepo, wm, mockAgentManager, mockDataBlockRepo, eventBus);
       await smRecovery.initialize();
       await smRecovery.start();
 
@@ -71,7 +75,7 @@ describe('SessionManager Recovery and Freeze Test', () => {
       // 停止並寫回 SUSPENDED
       await smRecovery.stop();
 
-      const smFaultTolerance = new SessionManager(testConfig, sessionRepo, wm);
+      const smFaultTolerance = new SessionManager(testConfig, sessionRepo, wm, mockAgentManager, mockDataBlockRepo, eventBus);
       await smFaultTolerance.initialize();
       await smFaultTolerance.start();
 
@@ -106,12 +110,15 @@ describe('SessionManager Recovery and Freeze Test', () => {
     const sessionRoot = path.join(process.cwd(), testConfig.storage.base_dir, testConfig.storage.session_dir);
     const sessionRepo = new FileSystemSessionRepository(testConfig, sessionRoot);
     const wm = new WorkspaceManager(testConfig, process.cwd());
-    const sm = new SessionManager(testConfig, sessionRepo, wm);
+    const eventBus = new EventBus();
+    const mockAgentManager = {} as any;
+    const mockDataBlockRepo = {} as any;
+    const sm = new SessionManager(testConfig, sessionRepo, wm, mockAgentManager, mockDataBlockRepo, eventBus);
     await sm.initialize();
 
     try {
       // 1. 建立會話
-      const session = sm.createSession('agent-main', 'session-msg', 'VOLATILE');
+      const session = await sm.createSession('agent-main', 'session-msg', 'VOLATILE');
 
       // 2. 構造一個測試 DataBlock
       const { DataBlock } = require('../../messaging/DataBlock');
@@ -132,14 +139,14 @@ describe('SessionManager Recovery and Freeze Test', () => {
       await sm.saveSession('session-msg');
 
       // 5. 重新加載並驗證
-      const smReload = new SessionManager(testConfig, sessionRepo, wm);
+      const smReload = new SessionManager(testConfig, sessionRepo, wm, mockAgentManager, mockDataBlockRepo, eventBus);
       await smReload.initialize();
       const loadedSession = await smReload.loadSession('session-msg');
 
       expect(loadedSession.getInboxSize('agent-sub')).toBe(1);
       
       // 6. 提取暫存訊息
-      const poppedBlocks = loadedSession.popFromInbox('agent-sub');
+      const poppedBlocks = loadedSession.popFromInboxBySender('agent-sub', 'worker-1');
       expect(poppedBlocks.length).toBe(1);
       expect(poppedBlocks[0].senderId).toBe('worker-1');
       expect(poppedBlocks[0].controlPayload.result).toBe('OK');
