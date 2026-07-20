@@ -7,14 +7,15 @@ import {
     FileSystemAgentStateRepository
 } from '../../infra/persistence/repository/FileSystemAgentStateRepository';
 import { EventBus } from '../../messaging/EventBus';
-import { AgentState, AgentType, BaseAgent, BaseAgentData } from '../BaseAgent';
+import { AgentProfile, AgentState, AgentType, BaseAgent, BaseAgentData } from '../BaseAgent';
+import { IDataBlockRepository } from '../../infra/persistence/IRepository';
 
 // 建立一個 Mock 子類別用於測試 BaseAgent
 class MockTestAgent extends BaseAgent {
   public readonly type = AgentType.SUB;
   public readonly canClone = true;
 
-  protected getModel() {
+  protected getModel(presetName?: string) {
     return {} as any; // 單元測試中不實際呼叫 LLM
   }
 
@@ -40,12 +41,28 @@ describe('BaseAgent Memory Sharing & Serialization Test', () => {
       base_dir: '.dev_temp_agent_test',
       session_dir: 'session',
       agent_dir: 'agents',
-      agent_state_file: 'state.json'
+      agent_state_file: 'state.json',
+      oplog_file: '.oplog.jsonl'
     },
     security: {
       max_safe_tokens: 100000
+    },
+    llm: {
+      default_preset: 'SMART',
+      presets: {
+        'SMART': { modelName: 'gpt-4o' }
+      }
     }
   } as any;
+
+  const mockDataBlockRepo: IDataBlockRepository = {
+    appendForAgent: async () => {},
+    findByAgent: async () => [],
+    saveForAgent: async () => {},
+    initialize: async () => {},
+    start: async () => {},
+    stop: async () => {}
+  };
 
   beforeAll(() => {
     if (!fs.existsSync(testStorageDir)) {
@@ -62,7 +79,7 @@ describe('BaseAgent Memory Sharing & Serialization Test', () => {
     const sessionId = 'session-123';
     const workspacePath = path.join(testStorageDir, 'workspace-parent');
 
-    const parentAgent = new MockTestAgent(parentId, sessionId, eventBus, mockConfig, {
+    const parentAgent = new MockTestAgent(parentId, sessionId, eventBus, mockConfig, mockDataBlockRepo, {
       workspacePath
     });
 
@@ -77,11 +94,11 @@ describe('BaseAgent Memory Sharing & Serialization Test', () => {
     const sessionId = 'session-123';
     const workspacePath = path.join(testStorageDir, 'workspace-parent');
 
-    const parentAgent = new MockTestAgent(parentId, sessionId, eventBus, mockConfig, {
+    const parentAgent = new MockTestAgent(parentId, sessionId, eventBus, mockConfig, mockDataBlockRepo, {
       workspacePath
     });
 
-    const cloneAgent = new MockTestAgent(cloneId, sessionId, eventBus, mockConfig, {
+    const cloneAgent = new MockTestAgent(cloneId, sessionId, eventBus, mockConfig, mockDataBlockRepo, {
       workspacePath,
       parentAgent,
       isClone: true
@@ -111,7 +128,7 @@ describe('BaseAgent Memory Sharing & Serialization Test', () => {
     const sessionId = 'session-999';
     const workspacePath = path.join(testStorageDir, 'workspace-parent');
 
-    const agent = new MockTestAgent(agentId, sessionId, eventBus, mockConfig, {
+    const agent = new MockTestAgent(agentId, sessionId, eventBus, mockConfig, mockDataBlockRepo, {
       workspacePath
     });
 
@@ -129,7 +146,7 @@ describe('BaseAgent Memory Sharing & Serialization Test', () => {
     expect(data.usageStats.promptTokens).toBe(10);
 
     // 3. 建立一個新的 Agent 實例，並用 data 還原
-    const restoredAgent = new MockTestAgent(agentId, sessionId, eventBus, mockConfig, {
+    const restoredAgent = new MockTestAgent(agentId, sessionId, eventBus, mockConfig, mockDataBlockRepo, {
       workspacePath
     });
     restoredAgent.hydrate(data);
@@ -137,6 +154,36 @@ describe('BaseAgent Memory Sharing & Serialization Test', () => {
     expect(restoredAgent.getState()).toBe(AgentState.IDLE);
     expect(restoredAgent['usageStats'].promptTokens).toBe(10);
     expect(restoredAgent['usageStats'].completionTokens).toBe(20);
+  });
+
+  it('should manage, format and serialize AgentProfile correctly', () => {
+    const agentId = 'agent-profile-test';
+    const sessionId = 'session-profile';
+    const agent = new MockTestAgent(agentId, sessionId, eventBus, mockConfig, mockDataBlockRepo);
+
+    const profile: AgentProfile = {
+      identity: 'TestBot',
+      mission: 'Test everything',
+      principles: ['Do not fail']
+    };
+
+    agent.setProfile(profile);
+    expect(agent.getProfile()).toEqual(profile);
+
+    // Test formatting (using the protected method via cast)
+    const formatted = (agent as any).formatProfileToSystemPrompt();
+    expect(formatted).toContain('## IDENTITY\nTestBot');
+    expect(formatted).toContain('## MISSION\nTest everything');
+    expect(formatted).toContain('- Do not fail');
+
+    // Test serialization
+    const data = agent.serialize();
+    expect(data.profile).toEqual(profile);
+
+    // Test hydration
+    const restoredAgent = new MockTestAgent(agentId, sessionId, eventBus, mockConfig, mockDataBlockRepo);
+    restoredAgent.hydrate(data);
+    expect(restoredAgent.getProfile()).toEqual(profile);
   });
 
   it('should support AgentStateRepository save/load operations', async () => {
