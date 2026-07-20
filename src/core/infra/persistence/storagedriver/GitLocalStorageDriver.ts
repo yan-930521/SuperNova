@@ -1,6 +1,6 @@
 import { exec } from 'child_process';
-import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
+import * as fs from 'fs/promises';
 import * as path from 'path';
 import { promisify } from 'util';
 
@@ -17,6 +17,7 @@ const execAsync = promisify(exec);
  * 徹底保障用戶主專案的安全與隱私，並提供多 Agent 協作的分支開發與合併。
  */
 export class GitLocalStorageDriver implements IStorageDriver {
+  public readonly supportsCommandExecution = true;
   private activePaths: Map<string, string> = new Map();
 
   constructor(private readonly basePersistentPath: string = process.cwd()) {}
@@ -54,7 +55,7 @@ export class GitLocalStorageDriver implements IStorageDriver {
         this.activePaths.set(key, sessionRepoPath);
         return sessionRepoPath;
       } catch (error: any) {
-        throw new Error(`[GitLocalStorageDriver] Failed to init Session Repo for ${sessionId}: ${error.message}`);
+        throw new Error(`[GitLocalStorageDriver] Failed to init Session Repo for ${sessionId}: ${error.message}\nSTDOUT: ${error.stdout}\nSTDERR: ${error.stderr}`);
       }
     } else {
       // --- 2. 在 Session 倉庫下開闢 Agent 子工作區 (Git Worktree) ---
