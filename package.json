@@ -2,12 +2,13 @@
   "name": "supernova",
   "version": "0.1.0",
   "description": "SuperNova AI Runtime",
-  "main": "index.js",
+  "main": "./demo/v0.1.0.ts",
   "scripts": {
     "test": "bun test",
     "build": "bun x tsc --noEmit",
     "lint": "bun x tsc --noEmit",
-    "start": "bun src/index.ts"
+    "demo": "bun ./demo/v0.1.0.ts",
+    "demo:minecraft": "bun ./demo/minecraft/index.ts"
   },
   "devDependencies": {
     "@types/bun": "^1.3.14",
@@ -22,9 +23,12 @@
     "@langchain/openai": "^1.4.5",
     "@langchain/tavily": "^1.2.0",
     "axios": "^1.16.0",
+    "canvas": "^3.2.3",
     "handlebars": "^4.7.9",
     "langchain": "^1.4.4",
     "memfs": "^4.64.0",
+    "mineflayer": "^4.37.1",
+    "prismarine-viewer": "^1.33.0",
     "uuid": "^9.0.1",
     "zod": "^4.4.3"
   },
