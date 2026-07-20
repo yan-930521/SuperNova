@@ -2,7 +2,7 @@
 title: Agent 系統設計
 version: 0.1.0
 status: APPROVED
-last_updated: 2026-07-18
+last_updated: 2026-07-20
 author: Antigravity & User
 related_codes: []
 related_docs:
@@ -20,9 +20,10 @@ related_docs:
 所有系統中的 Agent (`MainAgent`, `SubAgent`, `EmbodiedAgent`) 皆繼承自 `BaseAgent`。`BaseAgent` 的職責被嚴格限縮於**「提供穩定的底層基礎設施與資源隔離」**，完全剝離具體的業務邏輯 (如 PDCA 循環或與 LLM 的網路通訊)。
 *   **型態與擴展性聲明**：實體強制聲明其 `type: AgentType` (如 MAIN, SUB, EMBODIED 等) 並聲明 `canClone: boolean` 以決定其是否支援在突發高負載下被「分身併發模式 (Auto-Concurrency)」動態擴展。
 
-*   **會話與基礎設施綁定**：建構時強制要求綁定 `sessionId`。所有由此對話衍生派生出的 `SubAgent` 與 `Worker` 都強制依附於此 Session 中運行。運行日誌與防幻覺操作日誌 (Oplog) 將導向會話級別的實體隔離目錄 (`{log_dir}/sessions/{sessionId}/agents/{agent_id}/`)。同時實例化專屬的訊息收件箱 (`InboxBuffer`) 並透過建構子注入 `EventBus` 自動註冊事件監聽。
-*   **純粹的生命週期管理**：專注於系統資源與執行狀態管理。定義 `AgentState` 枚舉 (`INITIALIZING`, `IDLE`, `BUSY`, `SUSPENDED`, `TERMINATED`)。提供 `suspend()`, `resume()`, `destroy()` 狀態控制與資源清理介面。
-*   **純粹的狀態匯出與匯入 (解耦)**：`BaseAgent` **不注入**任何 Repository。它只提供 `serialize(): BaseAgentData` 與 `hydrate(data)` 介面，將自身的狀態（包含 Token 消耗、狀態機）打包，真正的持久化由外部的 `AgentManager` 負責調度。
+*   **會話與基礎設施綁定**：建構時強制要求綁定 `sessionId`。所有由此對話衍生派生出的 `SubAgent` 與 `Worker` 都強制依附於此 Session 中運行。透過設定 `WorkspaceType` 決定 Agent 使用 `VOLATILE` (虛擬/記憶體) 或 `PERSISTENT` (實體/Git) 工作區。運行日誌與防幻覺操作日誌 (Oplog) 將導向會話級別的實體隔離目錄 (`{log_dir}/sessions/{sessionId}/agents/{agent_id}/`)。同時實例化專屬的訊息收件箱 (`InboxBuffer`) 並透過建構子注入 `EventBus` 自動註冊事件監聽。
+*   **純粹的生命週期管理**：專注於系統資源與執行狀態管理。定義 `AgentState` 枚舉 (`INITIALIZING`, `IDLE`, `BUSY`, `SUSPENDED`, `TERMINATED`)。系統設計有嚴謹的狀態遷移，例如 `setReady()` 方法由 `AgentManager` 明確標記初始化完成並切換至 `IDLE`。提供 `suspend()`, `resume()`, `destroy()` 狀態控制與資源清理介面。
+*   **純粹的狀態匯出與匯入 (解耦)**：`BaseAgent` **不注入**任何 Repository。它只提供 `serialize(): BaseAgentData` 與 `hydrate(data)` 介面，將自身的狀態（包含 Token 消耗、狀態機、**結構化身份設定 Profile**）打包，真正的持久化由外部的 `AgentManager` 負責調度。
+*   **結構化大腦設定 (AgentProfile JSON)**：Agent 的核心提示詞不是一段死板的字串，而是一個嚴謹的 JSON 結構 (包含 `roleName`, `objectives`, `constraints`, `contextData` 等)。這讓 Agent 能在執行過程中透過程式化方式動態更新認知，且完美支援脫水序列化。
 *   **資源消耗追蹤**：內部維護 `UsageStats` (Token 與執行時間等消耗)，提供 `recordUsage` 讓子類別回報並具備安全閾值告警機制。
 
 ## 2. Agent 生命週期與型態分類 (Agent Types)
@@ -58,6 +59,16 @@ related_docs:
 *   **脫水與喚醒 (Dehydrate & Rehydrate)**：
     *   `dehydrate(agentId)`：從活躍池取出 Agent，呼叫 `serialize()` 取得狀態快照並交由 Repository 存檔，隨後銷毀實體並釋放記憶體。
     *   `rehydrate(agentId)`：從 Repository 載入狀態，經由 Factory 實例化，並呼叫 `hydrate(data)` 恢復狀態，最後加回活躍池。
+
+---
+
+## 2.8 大腦邏輯與 LLM 串接 (Brain Integration)
+為了快速驗證與推動功能開發，系統目前採用務實的串接策略：
+*   **結構化認知轉譯**：Agent 在處理信件 (`processInbox`) 時，會在記憶體中將 `AgentProfile` JSON 動態渲染為結構化的 LLM 系統提示詞。
+*   **角色認知嚴格劃分**：在組裝給 LLM 的訊息列隊時，嚴格對齊 LangChain 的生態。DataBlock 內部將精準區分角色為 `'human'` (使用者輸入) 或 `'ai'` (系統/代理人回覆)，並自動轉譯為 `HumanMessage` 與 `AIMessage`，徹底解決角色混淆與 LLM 嚴重幻覺問題。
+*   **直接整合 LangChain 生態**：我們暫不實作抽象包裹層，而是直接在 Agent 內部整合 `@langchain/core` 等套件。將 `DataBlock` 歷史轉譯為 `BaseMessage` 陣列後直接呼叫模型。
+*   **純文字決策 (免 Tools)**：為保持初期架構單純，暫不實作 Tool Calling (Function Calling)。Agent 透過純文字回覆進行思考與交流，結果將被封裝為新的 `DataBlock` 儲存或廣播。
+*   *(技術債標記)*：未來待功能驗證穩定後，將會重構抽離出 `ILLMProvider` 包裹層，徹底解除核心對 LangChain 框架的硬耦合。
 
 ---
 
