@@ -66,10 +66,10 @@ describe('FileSystem Repositories Test', () => {
     });
     const block2 = new DataBlock({
       sessionId,
-      senderId: 'worker-2',
-      targetId: agentId,
-      type: 'message',
-      intent: 'chat',
+        senderId: 'agent-1',
+        targetId: 'agent-2',
+        type: 'human',
+        intent: 'TEST',
       controlPayload: 'Hello'
     });
 
@@ -82,7 +82,7 @@ describe('FileSystem Repositories Test', () => {
     expect(history[0].id).toBe(block1.id);
     expect(history[0].intent).toBe('start');
     expect(history[1].id).toBe(block2.id);
-    expect(history[1].type).toBe('message');
+    expect(history[1].type).toBe('human');
     expect(history[1].toMarkdown()).toBe('Hello'); // 驗證 toMarkdown 與 type=message
 
     // 3. 測試 saveForAgent (整份覆寫)

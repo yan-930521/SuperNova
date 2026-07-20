@@ -100,17 +100,45 @@ export class Session implements IEntity {
   }
 
   /**
-   * 拉取並提取特定 Agent 收件箱中的所有暫存訊息 (提取後清空)
+   * 取得特定 Agent 的 Inbox 中有哪些不同的發送者 (SenderId)
    */
-  public popFromInbox(agentId: string): DataBlock[] {
+  public getPendingSenders(agentId: string): string[] {
     const blocks = this.inboxBuffer.get(agentId) || [];
-    this.inboxBuffer.delete(agentId);
-    this.touch();
-    return blocks;
+    const senders = new Set<string>();
+    for (const b of blocks) {
+      senders.add(b.senderId);
+    }
+    return Array.from(senders);
   }
 
   /**
-   * 獲取特定 Agent 收件箱的暫存訊息數量
+   * 拉取特定 Agent 收件箱中，屬於特定發送者 (SenderId) 的暫存訊息 (提取後從緩衝區移除)
+   */
+  public popFromInboxBySender(agentId: string, senderId: string): DataBlock[] {
+    const allBlocks = this.inboxBuffer.get(agentId) || [];
+    const targetBlocks: DataBlock[] = [];
+    const remainingBlocks: DataBlock[] = [];
+
+    for (const b of allBlocks) {
+      if (b.senderId === senderId) {
+        targetBlocks.push(b);
+      } else {
+        remainingBlocks.push(b);
+      }
+    }
+
+    if (remainingBlocks.length === 0) {
+      this.inboxBuffer.delete(agentId);
+    } else {
+      this.inboxBuffer.set(agentId, remainingBlocks);
+    }
+
+    this.touch();
+    return targetBlocks;
+  }
+
+  /**
+   * 獲取特定 Agent 收件箱的暫存訊息總數量
    */
   public getInboxSize(agentId: string): number {
     return (this.inboxBuffer.get(agentId) || []).length;
@@ -135,6 +163,9 @@ export class Session implements IEntity {
         senderId: b.senderId,
         targetId: b.targetId,
         type: b.type,
+        intent: b.intent,
+        priority: b.priority,
+        timestamp: b.timestamp,
         controlPayload: b.controlPayload,
         dataPointers: b.dataPointers
       }));

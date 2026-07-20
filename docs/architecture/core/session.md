@@ -138,8 +138,8 @@ workspace/
     1.  `saveForAgent(sessionId, agentId, blocks)`：整份覆寫該 Agent 的歷史（用於時空旅行倒帶）。
     2.  `appendForAgent(sessionId, agentId, block)`：以 $O(1)$ 常數時間向 `history.jsonl` 追加單筆 DataBlock。
     3.  `findByAgent(sessionId, agentId)`：讀取並逐行反序列化解析 `history.jsonl`，還原為強型別 `DataBlock[]`。
-*   **事件監聽直接存檔 (Event-Driven Save)**：
-    不進行複雜的發送者解析與多寫。當 `EventBus` 觸發接收事件（目標 Agent 聽到該 `DataBlock`）的那一刻，直接在事件監聽器中調用 `saveForAgent(agentId, block)`。只有 Agent 真正經歷與接收到的事件，才會客觀地寫入其歷史中。
+*   **集中式派發與存檔 (Mediator-Driven Save & Dispatch)**：
+    `BaseAgent` 本身不直接訂閱 `EventBus` 的收件匣事件。收發與存檔職責統一收攏至 `SessionManager` (集中式中介者模式)。當 `EventBus` 廣播 `AgentMessage` 時，`SessionManager` 負責攔截，先客觀寫入發送者與接收者的 `history.jsonl` (Oplog)，接著將新訊息推入會話級的 `Session.inboxBuffer` 中。最後，若目標 Agent 處於 `IDLE` 或 `SUSPENDED` 狀態，則主動將信件抽出並呼叫 `agent.resume(messages)` 喚醒它。若為 `BUSY` 則信件保留於 Session 中，絕不漏接。
 
 ### D. 代理人狀態儲存 (`IAgentStateRepository`)
 *   **介面特點**：繼承自通用 `IRepository<BaseAgentData>` 介面。
