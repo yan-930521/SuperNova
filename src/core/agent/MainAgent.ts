@@ -1,23 +1,37 @@
-import { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import { DataBlock } from '../messaging/DataBlock';
-import { AgentType, BaseAgent } from './BaseAgent';
+import { Config } from '../config/Config';
+import { IDataBlockRepository } from '../infra/persistence/IRepository';
+import { IEventBus } from '../messaging/IBus';
+import { PromptLoader } from '../utils/PromptLoader';
+import { AgentOptions, AgentState, AgentType, BaseAgent } from './BaseAgent';
 
 /**
  * MainAgent
  * 系統的中樞大腦與全局管理者，負責高階邏輯路由與長期記憶。
- * 不具備形體 (Body)，且不可被分身複製 (Singleton per session)。
  */
 export class MainAgent extends BaseAgent {
   public readonly type = AgentType.MAIN;
-  public readonly canClone = false;
+  public readonly canClone = true;
 
-  protected getModel(): BaseChatModel {
-    // TODO: 回傳適合 MainAgent 複雜推理能力的大型語言模型實例
-    throw new Error('Method not implemented.');
+  constructor(
+    id: string,
+    sessionId: string,
+    eventBus: IEventBus,
+    config: Config,
+    dataBlockRepo: IDataBlockRepository,
+    options?: AgentOptions
+  ) {
+    super(id, sessionId, eventBus, config, dataBlockRepo, options);
+    
+    // 從 JSON 設定檔載入 MainAgent 專屬身份與認知
+    if (!this.profile) {
+      try {
+        const rawContent = PromptLoader.loadProfile('v1/main_agent', this.config, '{}');
+        const profileData = JSON.parse(rawContent);
+        this.setProfile(profileData);
+      } catch (error) {
+        this.logger.error(`Failed to load main_agent.json: ${error}`);
+      }
+    }
   }
 
-  protected async processInbox(messages: DataBlock<any>[]): Promise<void> {
-    this.logger.info(`MainAgent processing ${messages.length} messages.`);
-    // TODO: 實作 MainAgent 的全局任務分派與 Deep Merge 邏輯
-  }
 }

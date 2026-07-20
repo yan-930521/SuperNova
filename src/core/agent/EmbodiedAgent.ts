@@ -1,6 +1,8 @@
-import { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import { DataBlock } from '../messaging/DataBlock';
-import { AgentType, BaseAgent } from './BaseAgent';
+import { Config } from '../config/Config';
+import { IDataBlockRepository } from '../infra/persistence/IRepository';
+import { IEventBus } from '../messaging/IBus';
+import { PromptLoader } from '../utils/PromptLoader';
+import { AgentType, BaseAgent, AgentOptions } from './BaseAgent';
 
 /**
  * EmbodiedAgent
@@ -11,13 +13,25 @@ export class EmbodiedAgent extends BaseAgent {
   public readonly type = AgentType.EMBODIED;
   public readonly canClone = false;
 
-  protected getModel(): BaseChatModel {
-    // TODO: 回傳適合處理感測器資料與多模態的語言模型實例
-    throw new Error('Method not implemented.');
-  }
-
-  protected async processInbox(messages: DataBlock<any>[]): Promise<void> {
-    this.logger.info(`EmbodiedAgent processing ${messages.length} messages.`);
-    // TODO: 實作與環境互動、ActionTools 調用等邏輯
+  constructor(
+    id: string,
+    sessionId: string,
+    eventBus: IEventBus,
+    config: Config,
+    dataBlockRepo: IDataBlockRepository,
+    options?: AgentOptions
+  ) {
+    super(id, sessionId, eventBus, config, dataBlockRepo, options);
+    
+    // 從 JSON 設定檔載入 EmbodiedAgent 專屬身份與認知
+    if (!this.profile) {
+      try {
+        const rawContent = PromptLoader.loadProfile('v1/embodied_agent', this.config, '{}');
+        const profileData = JSON.parse(rawContent);
+        this.setProfile(profileData);
+      } catch (error) {
+        this.logger.error(`Failed to load embodied_agent.json: ${error}`);
+      }
+    }
   }
 }
