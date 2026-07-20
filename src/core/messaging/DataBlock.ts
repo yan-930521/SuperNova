@@ -1,4 +1,4 @@
-import { BaseMessage, HumanMessage, SystemMessage, ToolMessage } from '@langchain/core/messages';
+import { AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage } from '@langchain/core/messages';
 
 import { IdGenerator } from '../utils/IdGenerator';
 
@@ -19,7 +19,18 @@ export interface IDataPointer {
  * DataBlockRole
  * 定義投遞給 LLM 時的 Message 角色類型
  */
-export type DataBlockRole = 'message' | 'tool' | 'system';
+export type DataBlockRole = 'human' | 'ai' | 'system' | 'tool';
+
+/**
+ * 訊息優先度
+ * 影響 SessionManager 排程與是否觸發分身併發 (Clone Mode)
+ */
+export enum MessagePriority {
+    URGENT = 100, // 緊急中斷 (如 User 停止指令、遭受攻擊)
+    HIGH = 50,    // 高優先 (直接 @提及、任務回報)
+    NORMAL = 0,   // 一般對話或環境訊息
+    LOW = -50     // 背景雜訊
+}
 
 /**
  * 序列化資料訊息塊介面
@@ -32,6 +43,7 @@ export interface DataBlockData {
     targetId: string | null;
     type: DataBlockRole;
     intent: string;
+    priority: MessagePriority;
     timestamp: number;
     controlPayload: any;
     dataPointers: IDataPointer[];
@@ -58,47 +70,48 @@ export class DataBlock<TControlPayload = Record<string, any>> {
      */
     public readonly type: DataBlockRole;
 
-    /**
-     * 業務意圖：記錄具體事件名稱 (e.g. 'TASK_SUCCESS', 'GIT_CONFLICT', 'HITL_APPROVED')
+    /** 
+     * 訊息意圖 (字串標籤，如 'USER_INPUT', 'SENSOR_INPUT' 等)
      */
     public readonly intent: string;
 
-    /** 生成時間戳 */
+    /**
+     * 訊息優先度 (影響排程與併發觸發)
+     */
+    public readonly priority: MessagePriority;
+
+    /** 建立時間戳 */
     public readonly timestamp: number;
 
-    /**
-     * 控制面負載 (Control Plane Payload)
-     * 僅允許存放輕量級的 JSON 狀態、指令參數或簡短文字。
-     */
+    /** 核心控制 Payload (任意 JSON 結構或字串) */
     public readonly controlPayload: TControlPayload;
 
-    /**
-     * 資料面指標 (Data Plane Pointers)
-     * 若任務產生了巨量資料，該資料實體應存於 Workspace，此處僅傳遞指標。
-     */
+    /** 資料指標陣列 (巨型資料隔離) */
     public readonly dataPointers: IDataPointer[];
 
     constructor(params: {
+        id?: string;
         sessionId: string;
         threadId?: string | null;
         senderId: string;
         targetId?: string | null;
-        type: DataBlockRole;
-        intent: string;
-        controlPayload: TControlPayload;
+        type?: DataBlockRole;
+        intent?: string;
+        priority?: MessagePriority;
+        timestamp?: number;
+        controlPayload?: TControlPayload;
         dataPointers?: IDataPointer[];
-        id?: string;        // 支援反序列化載入已有的 ID
-        timestamp?: number; // 支援反序列化載入已有的時間戳
     }) {
         this.id = params.id || IdGenerator.dataBlock();
-        this.timestamp = params.timestamp || Date.now();
         this.sessionId = params.sessionId;
         this.threadId = params.threadId || null;
         this.senderId = params.senderId;
         this.targetId = params.targetId || null;
-        this.type = params.type;
-        this.intent = params.intent;
-        this.controlPayload = params.controlPayload;
+        this.type = params.type || 'system' as DataBlockRole;
+        this.intent = params.intent || 'GENERAL';
+        this.priority = params.priority ?? MessagePriority.NORMAL;
+        this.timestamp = params.timestamp || Date.now();
+        this.controlPayload = params.controlPayload || ({} as TControlPayload);
         this.dataPointers = params.dataPointers || [];
     }
 
@@ -133,6 +146,9 @@ export class DataBlock<TControlPayload = Record<string, any>> {
 
         lines.push(`### [EVENT: ${this.intent.toUpperCase()}]`);
         lines.push(`* **Sender**: \`${this.senderId}\``);
+        if (this.priority > MessagePriority.NORMAL) {
+            lines.push(`* **Priority**: ⚠️ \`URGENT/HIGH\``);
+        }
         lines.push(`* **Time**: \`${dateStr}\``);
 
         // 格式化 Control Payload
@@ -158,16 +174,31 @@ export class DataBlock<TControlPayload = Record<string, any>> {
     /**
      * 將 DataBlock 轉換為 LangChain 規格的 BaseMessage 物件。
      * 自動進行角色對齊與 LangChain 強型別物件實例化。
+     * @param readerId 當前讀取這則訊息的 Agent ID (用於判斷是否為自身發送)
      */
-    public toMessage(): BaseMessage {
+    public toMessage(readerId?: string): BaseMessage {
         const content = this.toMarkdown();
 
         if (this.type === 'system') {
             return new SystemMessage({ content });
         }
 
-        if (this.type === 'message') {
-            return new HumanMessage({ content });
+        let finalContent = content;
+        // 優先度語意注入
+        if (this.priority >= MessagePriority.HIGH) {
+            finalContent = `[⚠️ URGENT PRIORITY]\n${finalContent}`;
+        }
+
+        if (this.type === 'human') {
+            return new HumanMessage({ content: finalContent });
+        }
+
+        if (this.type === 'ai') {
+            // 如果這則 AI 訊息不是讀取者自己發的，代表是來自其他 Agent，轉換為 SystemMessage 傳遞
+            if (readerId && this.senderId !== readerId) {
+                return new SystemMessage({ content: `[Message from ${this.senderId}]:\n${finalContent}` });
+            }
+            return new AIMessage({ content: finalContent });
         }
 
         if (this.type === 'tool') {
@@ -194,6 +225,7 @@ export class DataBlock<TControlPayload = Record<string, any>> {
             targetId: this.targetId,
             type: this.type,
             intent: this.intent,
+            priority: this.priority,
             timestamp: this.timestamp,
             controlPayload: this.controlPayload,
             dataPointers: this.dataPointers

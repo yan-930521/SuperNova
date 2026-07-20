@@ -1,8 +1,8 @@
 import { LogManager } from '../infra/LogManager';
-import { IDeclarativeSubscriber, IEvent, IEventBus } from './IBus';
+import { IDeclarativeSubscriber, IEvent, IEventBus, GlobalEventMap } from './IBus';
 
 interface ICallbackRegistration {
-    handler: (event: IEvent<any, any>) => void | Promise<void>;
+    handler: (event: IEvent<any>) => void | Promise<void>;
     sessionId?: string;
 }
 
@@ -15,7 +15,7 @@ interface ICallbackRegistration {
  * 3. 基於 sessionId 的租戶安全隔離路由。
  * 4. 宣告式訂閱 (Declarative Subscriber) 支持。
  */
-export class EventBus<P = any> implements IEventBus<P> {
+export class EventBus implements IEventBus {
     private readonly logger = LogManager.recorder;
     private readonly callbackSubscribers = new Map<string, Set<ICallbackRegistration>>();
     private readonly declarativeSubscribers = new Map<string, Set<IDeclarativeSubscriber>>();
@@ -23,7 +23,7 @@ export class EventBus<P = any> implements IEventBus<P> {
     /**
      * 發佈事件 (非同步廣播，不等待監聽器結束)
      */
-    public publish<T extends string, PL extends P>(event: IEvent<T, PL>): void {
+    public publish<T extends Extract<keyof GlobalEventMap, string>>(event: IEvent<T>): void {
         const regs = this.getTargetCallbackRegistrations(event.type, event.sessionId);
         const decSubs = this.getTargetDeclarativeSubscribers(event.type, event.sessionId);
 
@@ -63,7 +63,7 @@ export class EventBus<P = any> implements IEventBus<P> {
     /**
      * 發佈事件並追蹤所有監聽器 (等待所有同步/異步 Handler 執行完畢，確保因果鏈同步)
      */
-    public async publishAsync<T extends string, PL extends P>(event: IEvent<T, PL>): Promise<PromiseSettledResult<any>[]> {
+    public async publishAsync<T extends Extract<keyof GlobalEventMap, string>>(event: IEvent<T>): Promise<PromiseSettledResult<any>[]> {
         const regs = this.getTargetCallbackRegistrations(event.type, event.sessionId);
         const decSubs = this.getTargetDeclarativeSubscribers(event.type, event.sessionId);
 
@@ -110,7 +110,7 @@ export class EventBus<P = any> implements IEventBus<P> {
         }
 
         // 2. 回調函數與通配符訂閱
-        const handler = handlerOrSubscriber as (event: IEvent<any, any>) => void;
+        const handler = handlerOrSubscriber as (event: IEvent<any>) => void;
         if (!this.callbackSubscribers.has(type)) {
             this.callbackSubscribers.set(type, new Set());
         }
@@ -149,7 +149,7 @@ export class EventBus<P = any> implements IEventBus<P> {
         }
 
         // 2. 回調式訂閱取消
-        const handler = handlerOrSubscriber as (event: IEvent<any, any>) => void;
+        const handler = handlerOrSubscriber as (event: IEvent<any>) => void;
         const regs = this.callbackSubscribers.get(type);
         if (regs) {
             for (const reg of regs) {

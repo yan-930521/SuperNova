@@ -19,7 +19,7 @@ related_docs:
 
 ### `EventBus` (事件總線)
 *   **職責**：處理非同步通訊、訊息路由 (Message Routing) 與事件中斷喚醒機制 (Interrupt-Driven Wakeup)。
-*   **行為**：接收來自 `Worker` 或 `Agent` 封裝的 `DataBlock`，根據其夾帶的**目標 ID (Target ID)** 進行精準路由，轉發至對應節點的 `InboxBuffer`，並發送中斷信號喚醒目標。支援設定喚醒顆粒度 (如 `WaitMode: ALL / ANY`)，避免目標被頻繁無效喚醒 (Thrashing)。
+*   **行為**：接收來自 `Worker` 或 `Agent` 封裝的 `DataBlock`。系統統一使用 `AgentEvent.AgentMessage` 作為通用的高速公路頻道，EventBus 將根據 `DataBlock` 夾帶的**目標 ID (Target ID)** 進行精準尋址路由 (Addressed Routing)，只有符合的節點才會被喚醒接收（若 Target ID 為 null 則視為全局廣播），徹底解耦通訊頻道與尋址邏輯。
 
 ### `DAGScheduler` (任務拓撲排程器)
 *   **職責**：託管並執行 Agent 生成的 `TaskDAG`。
@@ -63,7 +63,11 @@ related_docs:
 ### E. 全局通配符型別安全
 *   為 `subscribe('*')` 提供了專屬的強型別簽名，保證全域 Logger、Metrics 收集器在不使用 `as any` 強轉的情況下，順利通過嚴格的 TypeScript 編譯校驗。
 
-### F. 預定義事件分類與標籤 (Predefined Event Types & Labels)
+### F. 全局事件對映表 (GlobalEventMap) 與泛型推導
+*   為保證編譯期的極致型別安全，引入了 `GlobalEventMap` 模式，將所有 `SystemEvent`, `HookEvent`, 與 `AgentEvent` 與其專屬的 Payload 型別（如 `DataBlock`）綁定。
+*   發佈或訂閱事件時，只需傳入事件型別 (Type)，TypeScript 會自動推導並鎖定 `event.payload` 的型別，徹底消除了不安全的型別強轉 (Type Assertion)，保障執行期安全。
+
+### G. 預定義事件分類與標籤 (Predefined Event Types & Labels)
 為了提高型別安全性與程式碼可讀性，系統將事件劃分為兩大列舉：
 1. **`SystemEvent` (系統事件)**：描述全域或 Session 級別的宏觀生命週期變化（如 Session 啟動/關閉、Task 最終完成/失敗、系統 Tick 等）。
 2. **`HookEvent` (鉤子事件)**：描述 Agent、Task、Tool 在執行生命週期中的細粒度切面監聽點（Before / After / Error 鉤子）。

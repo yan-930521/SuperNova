@@ -32,7 +32,7 @@ describe('DataBlock toMarkdown and toMessage Test', () => {
     const blockStr = new DataBlock({
       sessionId: 'session-123',
       senderId: 'user-chat',
-      type: 'message',
+      type: 'human',
       intent: 'chat_message',
       controlPayload: 'Hello, this is pure text!'
     });
@@ -52,7 +52,7 @@ describe('DataBlock toMarkdown and toMessage Test', () => {
     const blockMsg = new DataBlock({
       sessionId: 'session-123',
       senderId: 'user-chat',
-      type: 'message',
+      type: 'human',
       intent: 'chat_message',
       controlPayload: 'Hello'
     });

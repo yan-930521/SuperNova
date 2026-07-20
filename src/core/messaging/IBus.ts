@@ -1,3 +1,5 @@
+import { DataBlock } from './DataBlock';
+
 /**
  * 系統級事件 (SystemEvent)
  * 用於描述系統核心組件的生命週期與關鍵狀態變化
@@ -39,20 +41,59 @@ export enum HookEvent {
 }
 
 /**
- * 彙整所有事件型別
+ * Agent 互動與廣播事件 (AgentEvent)
  */
-export type AllEventTypes = SystemEvent | HookEvent;
+export enum AgentEvent {
+  AgentMessage = "AGENT_MESSAGE",
+  AgentStateChanged = "AGENT_STATE_CHANGED"
+}
 
 /**
- * 基礎事件介面
- * @template T 事件型別
- * @template P 事件負載 (Payload)
+ * 彙整所有事件型別
  */
-export interface IEvent<T extends string = string, P = any> {
+export type AllEventTypes = SystemEvent | HookEvent | AgentEvent;
+
+/**
+ * 全局事件註冊表 (EventMap)
+ * 綁定每個事件名稱對應的 Payload 型別
+ */
+export interface GlobalEventMap {
+  // --- System Events ---
+  [SystemEvent.SessionStarted]: { sessionId: string };
+  [SystemEvent.SessionClosed]: { sessionId: string };
+  [SystemEvent.SessionUpdated]: { sessionId: string };
+  [SystemEvent.TaskCreated]: { taskId: string };
+  [SystemEvent.TaskFinished]: { taskId: string };
+  [SystemEvent.TaskFailed]: { taskId: string; error: string };
+  [SystemEvent.Tick]: { currentTime: number };
+
+  // --- Hook Events ---
+  [HookEvent.BeforeToolCall]: { toolName: string; args: any };
+  [HookEvent.AfterToolCall]: { toolName: string; result: any };
+  [HookEvent.OnToolError]: { toolName: string; error: string };
+  [HookEvent.BeforeAgentStep]: { agentId: string };
+  [HookEvent.AfterAgentStep]: { agentId: string };
+  [HookEvent.OnAgentError]: { agentId: string; error: string };
+  [HookEvent.BeforeTaskExecute]: { taskId: string };
+  [HookEvent.AfterTaskExecute]: { taskId: string };
+  [HookEvent.OnTaskError]: { taskId: string; error: string };
+
+  // --- Agent Events ---
+  [AgentEvent.AgentMessage]: DataBlock<any>;
+  [AgentEvent.AgentStateChanged]: { agentId: string; oldState: string; newState: string };
+
+  // --- 允許自定義擴充事件 ---
+  [key: string]: any;
+}
+
+/**
+ * 基礎事件介面 (自動推導 payload 型別)
+ */
+export interface IEvent<T extends Extract<keyof GlobalEventMap, string> = Extract<keyof GlobalEventMap, string>> {
   readonly type: T;
   readonly timestamp: number;
-  readonly payload: P;
-  readonly sessionId?: string; // 新增：可選的會話 ID，用於多會話安全隔離
+  readonly payload: GlobalEventMap[T];
+  readonly sessionId?: string;
 }
 
 /**
@@ -66,23 +107,23 @@ export interface IDeclarativeSubscriber {
 /**
  * 事件總線介面
  */
-export interface IEventBus<P = any> {
+export interface IEventBus {
   /**
    * 發佈事件 (非同步廣播，不等待監聽器結束)
    */
-  publish<T extends string, PL extends P>(event: IEvent<T, PL>): void;
+  publish<T extends Extract<keyof GlobalEventMap, string>>(event: IEvent<T>): void;
 
   /**
    * 發佈事件並追蹤所有監聽器 (等待所有同步/異步 Handler 執行完畢)
    */
-  publishAsync<T extends string, PL extends P>(event: IEvent<T, PL>): Promise<PromiseSettledResult<any>[]>;
+  publishAsync<T extends Extract<keyof GlobalEventMap, string>>(event: IEvent<T>): Promise<PromiseSettledResult<any>[]>;
 
   /**
    * 訂閱特定型別的事件 (回標函數訂閱)
    */
-  subscribe<T extends string, PL extends P>(
+  subscribe<T extends Extract<keyof GlobalEventMap, string>>(
     type: T,
-    handler: (event: IEvent<T, PL>) => void,
+    handler: (event: IEvent<T>) => void | Promise<void>,
     options?: { sessionId?: string }
   ): void;
 
@@ -91,31 +132,31 @@ export interface IEventBus<P = any> {
    */
   subscribe(
     type: '*',
-    handler: (event: IEvent<string, any>) => void,
+    handler: (event: IEvent<string>) => void | Promise<void>,
     options?: { sessionId?: string }
   ): void;
 
   /**
    * 宣告式訂閱 (用於 Agent 持久化休眠與喚醒)
    */
-  subscribe(
-    type: string,
+  subscribe<T extends Extract<keyof GlobalEventMap, string>>(
+    type: T,
     subscriber: IDeclarativeSubscriber
   ): void;
 
   /**
    * 取消回標函數訂閱
    */
-  unsubscribe<T extends string, PL extends P>(
+  unsubscribe<T extends Extract<keyof GlobalEventMap, string>>(
     type: T,
-    handler: (event: IEvent<T, PL>) => void
+    handler: (event: IEvent<T>) => void | Promise<void>
   ): void;
 
   /**
    * 取消宣告式訂閱
    */
-  unsubscribe(
-    type: string,
+  unsubscribe<T extends Extract<keyof GlobalEventMap, string>>(
+    type: T,
     subscriber: IDeclarativeSubscriber
   ): void;
 }
