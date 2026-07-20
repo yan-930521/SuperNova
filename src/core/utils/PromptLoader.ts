@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { Config } from '../../core/config/Config';
 import { LogManager } from '../../core/infra/LogManager';
 
 /**
@@ -38,6 +39,17 @@ export class PromptLoader {
       LogManager.recorder.error(`[PromptLoader] Failed to read prompt at ${absolutePath}: ${error.message}`, { type: 'SYSTEM' });
       return fallback;
     }
+  }
+
+  /**
+   * 根據系統配置動態加載 Agent Profile (JSON 檔)
+   * @param profileName Profile 名稱 (如 'main_agent')
+   * @param config 系統配置
+   * @param fallback 回退文本
+   */
+  public static loadProfile(profile: string, config: Config, fallback: string = ""): string {
+    const relativePath = path.resolve(config.storage.base_dir, config.storage.agent_profile_dir, `${profile}.json`);
+    return this.load(relativePath, fallback);
   }
 
   /**

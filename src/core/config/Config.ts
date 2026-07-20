@@ -1,3 +1,5 @@
+import type { ChatOpenAICallOptions, OpenAIChatInput } from '@langchain/openai';
+
 /**
  * 系統全局配置介面
  * 所有屬性均為 readonly，確保運行時配置不可變。
@@ -9,6 +11,23 @@ export interface Config {
   readonly security: SecurityConfig;
   /** 儲存路徑相關配置 */
   readonly storage: StorageConfig;
+  /** 大語言模型相關配置 */
+  readonly llm: LLMConfig;
+}
+
+/**
+ * LLM 預設選項，直接使用 LangChain 的 OpenAI Input/Call Options
+ */
+export type ModelPreset = Partial<OpenAIChatInput & ChatOpenAICallOptions>;
+
+/**
+ * LLM 配置子介面
+ */
+export interface LLMConfig {
+  /** 預設使用的 preset 名稱 */
+  readonly default_preset: string;
+  /** 自定義的多組設定檔 (如 SMART, FAST 等) */
+  readonly presets: Record<string, ModelPreset>;
 }
 
 /**
@@ -22,9 +41,12 @@ export interface StorageConfig {
   /** Agent 專屬實體工作區子目錄 */
   readonly agent_dir: string;
 
+  readonly agent_profile_dir: string;
+
   readonly session_file: string;
   readonly agent_state_file: string;
   readonly history_file: string;
+  readonly oplog_file: string;
 }
 
 /**

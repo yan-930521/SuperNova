@@ -19,8 +19,30 @@ export const DEFAULT_CONFIG: Config = {
         base_dir: './workspace',
         session_dir: 'session',
         agent_dir: 'agent',
+        agent_profile_dir: 'profiles',
         session_file: 'session.json',
         history_file: 'history.jsonl',
-        agent_state_file: 'state.json'
+        agent_state_file: 'state.json',
+        oplog_file: '.oplog.jsonl'
     },
+    llm: {
+        default_preset: 'SMART',
+        presets: {
+            SMART: {
+                modelName: 'gpt-4o',
+                temperature: 0.2,
+                maxTokens: 4096,
+            },
+            FAST: {
+                modelName: 'gpt-4o-mini',
+                temperature: 0.2,
+                maxTokens: 2048,
+            },
+            CHEAP: {
+                modelName: 'gpt-3.5-turbo',
+                temperature: 0,
+                maxTokens: 1024,
+            }
+        }
+    }
 };

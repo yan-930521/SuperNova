@@ -1,5 +1,6 @@
 import * as path from 'path';
 
+import { AgentManager } from '../agent/AgentManager';
 import { Config } from '../config/Config';
 import { ComponentContainer } from '../container/ComponentContainer';
 import { LogManager } from '../infra/LogManager';
@@ -9,7 +10,6 @@ import {
 import { WorkspaceManager } from '../infra/persistence/WorkspaceManager';
 import { EventBus } from '../messaging/EventBus';
 import { SessionManager } from '../session/SessionManager';
-import { AgentManager } from '../agent/AgentManager';
 import { ILifecycle } from './ILifecycle';
 
 /**
@@ -50,12 +50,11 @@ export class RuntimeKernel implements ILifecycle {
       // WorkspaceManager 內部會依據工作區類型動態分配 StorageDriver (VFS/Git)
       const workspaceManager = new WorkspaceManager(this.config, process.cwd());
 
-      // 4. 實例化高階業務邏輯組件 - SessionManager 與 AgentManager
-      // SessionManager 負責管理會話，由 Kernel 注入 SessionRepo 等依賴
-      const sessionManager = new SessionManager(this.config, sessionRepo, workspaceManager);
-
       // AgentManager 負責所有 Agent 狀態管理與生命週期，注入 agentStateRepo 與 eventBus
-      const agentManager = new AgentManager(this.config, agentStateRepo, eventBus);
+      const agentManager = new AgentManager(this.config, agentStateRepo, eventBus, dataBlockRepo, workspaceManager);
+
+      // SessionManager 負責管理會話，統一攔截與派發 AgentMessage
+      const sessionManager = new SessionManager(this.config, sessionRepo, workspaceManager, agentManager, dataBlockRepo, eventBus);
 
       // 5. 依照依賴拓撲順序註冊至 IoC 容器
       // 容器啟動時會按照此註冊順序執行 initialize() 和 start()
