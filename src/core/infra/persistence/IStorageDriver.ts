@@ -7,6 +7,11 @@ import { WorkspaceType } from './IWorkspaceManager';
  */
 export interface IStorageDriver {
   /**
+   * 檢查該驅動是否支援在底層沙盒執行系統指令 (RunBash)
+   */
+  readonly supportsCommandExecution: boolean;
+
+  /**
    * 初始化儲存介質
    * @param sessionId 會話 ID
    * @param agentId 代理/任務 ID

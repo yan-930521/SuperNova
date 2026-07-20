@@ -1,6 +1,10 @@
 import { existsSync } from 'fs';
 import * as path from 'path';
 
+import { BaseTool } from '../../agent/tool/BaseTool';
+import {
+    ListFilesTool, ReadFileTool, RunBashTool, WriteFileTool
+} from '../../agent/tool/WorkspaceTools';
 import { Config } from '../../config/Config';
 import { ILifecycle } from '../../lifecycle/ILifecycle';
 import { IStorageDriver } from './IStorageDriver';
@@ -173,5 +177,22 @@ export class WorkspaceManager implements IWorkspaceManager, ILifecycle {
             throw new Error(`[WorkspaceManager] Storage driver for session ${sessionId} not initialized.`);
         }
         return driver;
+    }
+
+    public loadTools(sessionId: string, agentId: string): BaseTool[] {
+        const driver = this.getRequiredDriver(sessionId);
+        
+        const tools: BaseTool[] = [
+            new ReadFileTool(this, sessionId, agentId),
+            new WriteFileTool(this, sessionId, agentId),
+            new ListFilesTool(this, sessionId, agentId)
+        ];
+
+        // 根據底層驅動能力，動態注入 Bash 工具
+        if (driver.supportsCommandExecution) {
+            tools.push(new RunBashTool(this, sessionId, agentId));
+        }
+
+        return tools;
     }
 }

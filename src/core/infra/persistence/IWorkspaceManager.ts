@@ -1,3 +1,5 @@
+import { BaseTool } from '../../agent/tool/BaseTool';
+
 export type WorkspaceType = 'VOLATILE' | 'PERSISTENT';
 
 /**
@@ -81,6 +83,13 @@ export interface IWorkspaceManager {
     command: string,
     options?: { timeoutMs?: number }
   ): Promise<{ stdout: string; stderr: string; exitCode: number }>;
+
+  /**
+   * (Capability Provider) 根據當前工作區狀態與代理權限，動態返回可用工具集
+   * @param sessionId 會話 ID
+   * @param agentId 代理/任務 ID
+   */
+  loadTools(sessionId: string, agentId: string): BaseTool[];
 }
 
 

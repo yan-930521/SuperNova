@@ -10,6 +10,7 @@ import { WorkspaceType } from '../IWorkspaceManager';
  * 使用 sessionId 與 agentId 組成唯一的虛擬路徑。
  */
 export class MemoryVfsStorageDriver implements IStorageDriver {
+  public readonly supportsCommandExecution = false;
   private activePaths: Map<string, string> = new Map();
 
   /**
