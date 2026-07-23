@@ -4,6 +4,7 @@ import * as path from 'path';
 
 import { Config } from '../../../config/Config';
 import { DataBlock } from '../../../messaging/DataBlock';
+import { IdGenerator } from '../../../utils/IdGenerator';
 import { LogManager } from '../../LogManager';
 import { IDataBlockRepository } from '../IRepository';
 
@@ -94,10 +95,61 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
             }
 
             return blocks;
-        } catch (err: any) {
+    } catch (err: any) {
             this.logger.error(`[DataBlockRepository] Failed to read history for agent ${agentId}: ${err.message}`);
             throw err;
         }
+    }
+
+    /**
+     * 檢查並將超大字串卸載為 DataPointer，並回傳更新後的 DataBlock。
+     */
+    public async offloadLargePayloads(sessionId: string, block: DataBlock<any>, thresholdBytes: number = 2000): Promise<DataBlock<any>> {
+        if (block.validateSize(thresholdBytes)) {
+            return block; // 大小合格，不需要卸載
+        }
+
+        const blobsDir = path.join(this.baseDir, sessionId, 'blobs');
+        if (!existsSync(blobsDir)) {
+            mkdirSync(blobsDir, { recursive: true });
+        }
+
+        const newDataPointers = [...block.dataPointers];
+
+        const { newPayload, hasChanges } = await DataBlock.traverseAndReplaceLargeStrings(
+            block.controlPayload,
+            thresholdBytes,
+            async (largeString) => {
+                const blobId = IdGenerator.blob();
+                const blobPath = path.join(blobsDir, `${blobId}.txt`);
+                
+                // 寫入實體硬碟
+                await fs.writeFile(blobPath, largeString, 'utf-8');
+                
+                newDataPointers.push({
+                    type: 'FILE',
+                    uri: blobId,
+                    metadata: {
+                        originalLength: largeString.length,
+                        preview: largeString.substring(0, 100) + '...'
+                    }
+                });
+
+                return `<Pointer: ${blobId}>`;
+            }
+        );
+
+        if (!hasChanges) {
+            return block;
+        }
+
+        this.logger.debug(`[DataBlockRepository] Offloaded large payload in block ${block.id}`);
+        
+        // 建立並回傳一個全新的 DataBlock (不可變)
+        const blockData = block.toJSON();
+        blockData.controlPayload = newPayload;
+        blockData.dataPointers = newDataPointers;
+        return DataBlock.fromJSON(blockData);
     }
 
     // --- 內部輔助方法 ---

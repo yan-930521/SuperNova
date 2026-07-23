@@ -1,5 +1,8 @@
-import { AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage } from '@langchain/core/messages';
+import {
+    AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
+} from '@langchain/core/messages';
 
+import { ToolControlPayload } from '../agent';
 import { IdGenerator } from '../utils/IdGenerator';
 
 /**
@@ -116,55 +119,132 @@ export class DataBlock<TControlPayload = Record<string, any>> {
     }
 
     /**
-     * 驗證 DataBlock 是否過大
-     * 若 controlPayload 經過 JSON.stringify 後超過 100KB，拋出警告
+     * 驗證 DataBlock 是否超過大小限制
+     * 若 controlPayload 經過 JSON.stringify 後超過 thresholdBytes，回傳 false 並拋出警告
      */
-    public validateSize(): void {
-        const payloadSize = Buffer.byteLength(JSON.stringify(this.controlPayload), 'utf8');
-        const MAX_SIZE = 100 * 1024; // 100 KB
-        if (payloadSize > MAX_SIZE) {
-            console.warn(`[WARNING] DataBlock ${this.id} payload size (${payloadSize} bytes) exceeds 100KB limit! Please use dataPointers (Data Plane) for large data.`);
+    public validateSize(thresholdBytes: number = 100 * 1024): boolean {
+        const payloadSize = Buffer.byteLength(JSON.stringify(this.controlPayload) || '', 'utf8');
+        if (payloadSize >= thresholdBytes) {
+            console.warn(`[WARNING] DataBlock ${this.id} payload size (${payloadSize} bytes) exceeds limit of ${thresholdBytes} bytes!`);
+            return false; // 過大，無效
         }
+        return true; // 大小合格
+    }
+
+    /**
+     * 遞迴走訪 Payload，允許對過大的字串進行非同步處理與替換
+     * @param payload 原始 Payload
+     * @param thresholdBytes 觸發替換的位元組閥值
+     * @param replacer 非同步替換函式，傳入過大字串，回傳替換後的新物件或字串
+     */
+    public static async traverseAndReplaceLargeStrings(
+        payload: any,
+        thresholdBytes: number,
+        replacer: (largeString: string) => Promise<any>
+    ): Promise<{ newPayload: any; hasChanges: boolean }> {
+        let hasChanges = false;
+
+        const processNode = async (node: any): Promise<any> => {
+            if (node === null || node === undefined) return node;
+
+            if (typeof node === 'string') {
+                if (Buffer.byteLength(node, 'utf8') >= thresholdBytes) {
+                    hasChanges = true;
+                    return await replacer(node);
+                }
+                return node;
+            }
+
+            if (Array.isArray(node)) {
+                const newArray = [];
+                for (let i = 0; i < node.length; i++) {
+                    newArray.push(await processNode(node[i]));
+                }
+                return newArray;
+            }
+
+            if (typeof node === 'object') {
+                const newObj: any = {};
+                for (const [key, value] of Object.entries(node)) {
+                    newObj[key] = await processNode(value);
+                }
+                return newObj;
+            }
+
+            return node;
+        };
+
+        const newPayload = await processNode(payload);
+        return { newPayload, hasChanges };
     }
 
     /**
      * 將 DataBlock 的屬性與負載格式化轉換為結構化的 Markdown 文本。
      * - 若 type !== 'system'：直接回傳 controlPayload 中的純文字內容（text/content/stdout），不附加任何系統裝飾。
-     * - 若 type === 'system'：回傳精美的結構化 Markdown 系統事件回報。
+     * - 若 type === 'system' || type === 'tool'：回傳精美的結構化 Markdown 系統事件回報。
      */
     public toMarkdown(): string {
-        if (this.type !== 'system') {
+        if ((this.type !== 'system') && (this.type !== 'tool')) {
             if (typeof this.controlPayload === 'string') {
                 return this.controlPayload;
             }
             return JSON.stringify(this.controlPayload);
         }
 
-        // system 類型的結構化 Markdown 渲染
         const lines: string[] = [];
         const dateStr = new Date(this.timestamp).toISOString();
 
-        lines.push(`### [EVENT: ${this.intent.toUpperCase()}]`);
-        lines.push(`* **Sender**: \`${this.senderId}\``);
-        if (this.priority > MessagePriority.NORMAL) {
-            lines.push(`* **Priority**: ⚠️ \`URGENT/HIGH\``);
-        }
-        lines.push(`* **Time**: \`${dateStr}\``);
+        if (this.type === "system") {
+            lines.push(`### [EVENT: ${this.intent.toUpperCase()}]`);
+            lines.push(`- **Sender**: \`${this.senderId}\``);
+            if (this.priority > MessagePriority.NORMAL) {
+                lines.push(`- **Priority**: ⚠️ \`URGENT / HIGH\``);
+            }
+            lines.push(`- **Time**: \`${dateStr}\``);
 
-        // 格式化 Control Payload
-        if (this.controlPayload && Object.keys(this.controlPayload).length > 0) {
-            lines.push(`* **Payload**:`);
-            lines.push('```json');
-            lines.push(JSON.stringify(this.controlPayload, null, 2));
-            lines.push('```');
+            if (this.controlPayload && Object.keys(this.controlPayload).length > 0) {
+                lines.push(`\n**Payload**:`);
+                lines.push('```json');
+                lines.push(JSON.stringify(this.controlPayload, null, 2));
+                lines.push('```');
+            }
+        } else if (this.type === "tool") {
+            const payload = this.controlPayload as ToolControlPayload;
+            const toolName = payload.toolName || 'UNKNOWN_TOOL';
+            const isError = this.intent === 'TOOL_ERROR' || payload.error;
+            const statusIcon = isError ? 'ERROR' : 'SUCCESS';
+
+            lines.push(`### 🛠️ [TOOL: ${toolName}]`);
+            lines.push(`- **Status**: ${statusIcon}`);
+            lines.push(`- **Time**: \`${dateStr}\``);
+
+            if (payload.args && Object.keys(payload.args).length > 0) {
+                lines.push(`\n**Arguments**:`);
+                lines.push('```json');
+                lines.push(JSON.stringify(payload.args, null, 2));
+                lines.push('```');
+            }
+
+            if (isError && payload.error) {
+                lines.push(`\n**Error Details**:`);
+                lines.push('```text');
+                lines.push(String(payload.error));
+                lines.push('```');
+            } else if (payload.result !== undefined) {
+                lines.push(`\n**Result**:`);
+                const resultStr = typeof payload.result === 'object'
+                    ? JSON.stringify(payload.result, null, 2)
+                    : String(payload.result);
+                const format = typeof payload.result === 'object' ? 'json' : 'text';
+                lines.push(`\`\`\`${format}\n${resultStr}\n\`\`\``);
+            }
         }
 
-        // 格式化 Data Pointers
         if (this.dataPointers && this.dataPointers.length > 0) {
-            lines.push(`* **Data Pointers**:`);
+            lines.push(`\n**Data Pointers**:`);
             for (const ptr of this.dataPointers) {
                 const metadataStr = ptr.metadata ? ` (metadata: ${JSON.stringify(ptr.metadata)})` : '';
-                lines.push(`  - **${ptr.type}**: [${ptr.uri}](${ptr.uri})${metadataStr}`);
+                lines.push(`- **${ptr.type}**: [${ptr.uri}](${ptr.uri})${metadataStr}`);
             }
         }
 
@@ -179,35 +259,20 @@ export class DataBlock<TControlPayload = Record<string, any>> {
     public toMessage(readerId?: string): BaseMessage {
         const content = this.toMarkdown();
 
-        if (this.type === 'system') {
+        if (this.type === 'system' || this.type === 'tool') {
             return new SystemMessage({ content });
         }
 
-        let finalContent = content;
-        // 優先度語意注入
-        if (this.priority >= MessagePriority.HIGH) {
-            finalContent = `[⚠️ URGENT PRIORITY]\n${finalContent}`;
-        }
-
         if (this.type === 'human') {
-            return new HumanMessage({ content: finalContent });
+            return new HumanMessage({ content });
         }
 
         if (this.type === 'ai') {
             // 如果這則 AI 訊息不是讀取者自己發的，代表是來自其他 Agent，轉換為 SystemMessage 傳遞
             if (readerId && this.senderId !== readerId) {
-                return new SystemMessage({ content: `[Message from ${this.senderId}]:\n${finalContent}` });
+                return new SystemMessage({ content: `[Message from ${this.senderId}]:\n${content}` });
             }
-            return new AIMessage({ content: finalContent });
-        }
-
-        if (this.type === 'tool') {
-            // ToolMessage 在 LangChain 中必須有 tool_call_id
-            const toolCallId = (this.controlPayload as any).toolCallId || this.id;
-            return new ToolMessage({
-                content,
-                tool_call_id: toolCallId
-            });
+            return new AIMessage({ content });
         }
 
         throw new Error(`[DataBlock] Unsupported message type for LangChain conversion: ${this.type}`);

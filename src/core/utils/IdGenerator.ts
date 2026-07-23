@@ -55,4 +55,11 @@ export class IdGenerator {
   static session(): string {
     return this.generate('ssn_', true);
   }
+
+  /**
+   * 生成 Blob ID
+   */
+  static blob(): string {
+    return this.generate('blob_');
+  }
 }

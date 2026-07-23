@@ -25,6 +25,7 @@ related_docs:
        *   **`intent` (業務意圖名稱)**：一個字串（e.g. `'TASK_SUCCESS'`, `'GIT_CONFLICT'`, `'HITL_APPROVED'`），用以標記具體發生的系統或業務事件。
     2. **靈活路由**：不僅用於封裝 Worker 的執行結果，無論是 `SubAgent` 或 `Worker`，都能將資訊包裝成 `DataBlock` 發送給上級，或透過指定**唯一 ID** 點對點傳送給特定的 Agent。
     3. **控制面與資料面分離 (Control/Data Plane Separation)**：為避免 `EventBus` 遭遇巨量負載，`DataBlock` 僅可夾帶巨型資料的**指標 (Pointer) 或 URI**（指向 `WorkspaceManager` 中的實體檔案或外部快取），真正的資料本體交由底層資料面處理。
+    4. **Claim Check Pattern (資料指標模式)**：當 `DataBlock` 乘載的 `controlPayload` 內部字串過大（例如超出 Token 安全閾值）時，系統會自動將該長字串抽離，寫入實體 Blob 檔案，並在原位置替換為 `DataPointer` (例如 `{"_type": "DataPointer", "blobId": "..."}`)，確保歷史紀錄 (Oplog) 不會因龐大資料而崩潰。
 
 ### `InboxBuffer` (收件箱)
 *   **職責**：暫存 `Agent` 在掛起期間接收到的所有 `DataBlock`。
@@ -33,7 +34,7 @@ related_docs:
 *   **職責**：維護 Agent 的操作歷史與上下文視窗，防止 Context Drift (上下文漂移)。
 *   **行為**：
     1. **去中心化儲存 (Decentralized Storage)**：每個 Agent 的操作日誌與內部運行日誌直接實體化（例如寫入 `.oplog.jsonl` 與 `agent.log`），強制儲存於**專屬的實體日誌目錄**中，**完全獨立於 `WorkspaceManager`** 的任務隔離區。
-    2. **滾動截斷**：維護專屬目錄內日誌檔案的頭尾滾動更新。
+    2. **滾動截斷與指標卸載 (Blob Offloading)**：維護專屬目錄內日誌檔案的頭尾滾動更新。為了避免廣播訊息時重複 I/O，**控制流由 `SessionManager` 負責**：在接收到全域訊息準備派發前，會統一呼叫 `DataBlockRepository.offloadLargePayloads()`。此方法會掃描 `DataBlock`，若檢測到超大字串，會自動將其卸載到實體的 `blobs/` 目錄，並在記憶體中將其改寫為 `DataPointer`，再進行後續的廣播與存檔。這完美解決了 Token 撐爆問題，並確保了單一訊息只會存檔一次 Blob。
     3. **Hot-Lock (防幻覺鎖定)**：採用**事件驅動**或**主動鎖定**。當 `DataBlock` 包含錯誤狀態，或 Agent 顯式調用 `lock_context()` 時，立刻鎖定當前上下文免於截斷，確保 Agent 在反思排錯時擁有 100% 完整的錯誤現場資訊。
 
 ### `WorkspaceManager` (工作區與儲存管理器)

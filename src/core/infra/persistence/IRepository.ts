@@ -12,7 +12,7 @@ export interface IEntity {
 }
 
 /**
- * 通用儲存庫介面 (基本 CRUD)
+ * 通用儲存庫介面
  * @template T 實體型別，必須繼承自 IEntity
  */
 export interface IRepository<T extends IEntity> extends ILifecycle {}
@@ -41,6 +41,12 @@ export interface IDataBlockRepository extends IRepository<DataBlock<any>> {
    * 追加單筆 DataBlock 至特定 Agent 的歷史末尾 (JSONLine 追加)
    */
   appendForAgent(sessionId: string, agentId: string, block: DataBlock<any>): Promise<void>;
+
+  /**
+   * 檢查並將超大字串卸載為 DataPointer，並回傳更新後的 DataBlock。
+   * 此方法保證不改變原始的 DataBlock 物件，而是回傳一個 clone 過的新物件。
+   */
+  offloadLargePayloads(sessionId: string, block: DataBlock<any>, thresholdBytes?: number): Promise<DataBlock<any>>;
 
   /**
    * 讀取並還原特定 Agent 的所有 DataBlock 歷史
