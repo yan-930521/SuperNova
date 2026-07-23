@@ -22,7 +22,6 @@ docs/
 │   └── YYYY-MM-DD-topic-design.md
 │
 └── examples/                         # 綜合模擬使用場景與資料流演練 (Scenario Walkthrough)
-    └── scenario_hn_discord.md        # (原 docs/architecture/examples/ 下檔案遷移至此)
 ```
 
 ---
@@ -66,6 +65,5 @@ related_docs:
 當此規範確立後，後續的文檔修改應逐步進行以下調整：
 1.  **文件標頭補齊**：逐步為現存的所有 `docs/**/*.md` 文件補上 YAML Frontmatter。
 2.  **目錄扁平化**：
-    *   將 [scenario_hn_discord.md](file:///D:/Dev/Projects/Special/SuperNova/docs/architecture/examples/scenario_hn_discord.md) 移動至 `docs/examples/scenario_hn_discord.md`。
     *   移除空目錄 `docs/architecture/examples/`。
 3.  **全局架構更新**：更新 `docs/ARCH.md`，將所有文檔連結對齊至最新路徑。

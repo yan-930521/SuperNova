@@ -11,3 +11,4 @@ docs/review/*
 .agent/*
 .dev/*
 .worktrees/*
+src/package/*

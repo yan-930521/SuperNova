@@ -23,7 +23,7 @@ related_docs:
     每個工具必須透過 `zod` 定義其參數結構 (`schema`)。這不僅讓 TypeScript 具備完整的型別推導能力，也能在執行期防堵 LLM 生成的無效或惡意參數，避免執行時崩潰。
 *   **沙盒與上下文隔離 (ToolContext)**：
     工具的執行方法 `execute(args, context)` 強制要求傳入 `ToolContext`。
-    `ToolContext` 包含 `sessionId`、`agentId` 與 `workspacePath`。這確保了檔案讀寫或環境操作被限制在該 Agent 專屬的目錄沙盒內，實踐「零信任安全架構」。
+    `ToolContext` 包含 `sessionId`、`agentId`、`workspacePath`，以及為了能讓 Agent 發送事件而注入的 `eventBus` (型別為 `IEventBus`)。這確保了檔案讀寫或環境操作被限制在該 Agent 專屬的目錄沙盒內，實踐「零信任安全架構」，並允許 Tool 將執行軌跡拋回事件系統。
 *   **LLM 框架解耦 (Adapter Pattern)**：
     `BaseTool` 本身是領域層的實體，完全不依賴特定 LLM 提供商。但它內建了 `toLangChainTool()` 轉譯方法，可以將自身動態打包為 `@langchain/core/tools` 相容的 `DynamicStructuredTool`。若未來更換框架，僅需修改此橋接方法。
 
@@ -44,6 +44,6 @@ related_docs:
 
 1.  **綁定 (Binding)**：Agent 將其持有的 `BaseTool[]` 轉譯為 LLM 原生格式並綁定 (Bind) 到 Prompt 中。
 2.  **呼叫 (Invocation)**：LLM 決定呼叫特定工具，回傳 Function Calling 要求。
-3.  **攔截與驗證 (Validation)**：底層執行器攔截該要求，首先透過 `BaseTool.schema.parse()` 進行嚴格驗證。
-4.  **執行 (Execution)**：驗證通過後，將參數與 `ToolContext` 傳入 `BaseTool.execute()` 執行實體邏輯。
-5.  **反饋 (Feedback)**：工具執行完畢（成功或拋出異常），結果被封裝為 `ToolMessage` (或 `SystemMessage`) 傳回給 Agent，完成單次交互。
+3.  **攔截與紀錄 (Intercept & Record)**：在 `toLangChainTool()` 中攔截呼叫，並利用 `context.eventBus` 發送包含 `TOOL_CALL` 意圖的 `DataBlock` (角色為 `ai`) 以紀錄決策，打破 LangChain 內部的黑盒。
+4.  **驗證與執行 (Validation & Execution)**：底層執行器先透過 `BaseTool.schema.parse()` 進行嚴格驗證，驗證通過後，將參數與 `ToolContext` 傳入 `BaseTool.execute()` 執行實體邏輯。
+5.  **反饋與紀錄 (Feedback & Record)**：工具執行完畢（成功或拋出異常），再次利用 `context.eventBus` 發送包含 `TOOL_RESULT` 意圖的 `DataBlock` (角色為 `tool`) 作為執行結果的回報。結果同時被封裝為 `ToolMessage` 傳回給 LLM，完成單次交互與系統歷史的雙向同步。

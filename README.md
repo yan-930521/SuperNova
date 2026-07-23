@@ -8,6 +8,8 @@
 SuperNova 是一個專為長期任務設計的 **AI Runtime (執行時)**。它運行於 **Bun** 高性能環境，旨在探索如何讓 AI Agent 在處理複雜、跨領域且具備長期目標的任務時，透過架構上的解耦與事件驅動來解決 **Context Drift (上下文漂移)** 與 **Goal Drift (目標偏移)** 問題。
 
 > **快速掌握架構**：請優先閱讀 [docs/ARCH.md](docs/ARCH.md) 以獲取最新的系統設計藍圖、通訊協議與角色分工詳情。
+> 
+> **專案前身**：[Proj.Nova](https://github.com/yan-930521/Proj.Nova/)
 
 ## 🌟 核心架構亮點 (Key Features)
 
