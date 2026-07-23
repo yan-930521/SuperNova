@@ -20,7 +20,7 @@ export class GitLocalStorageDriver implements IStorageDriver {
   public readonly supportsCommandExecution = true;
   private activePaths: Map<string, string> = new Map();
 
-  constructor(private readonly basePersistentPath: string = process.cwd()) {}
+  constructor(private readonly basePersistentPath: string) {}
 
   /**
    * 初始化獨立的空 Git 倉庫或其內部的 Agent Worktree
@@ -35,7 +35,7 @@ export class GitLocalStorageDriver implements IStorageDriver {
       return this.activePaths.get(key)!;
     }
 
-    const sessionRepoPath = path.join(this.basePersistentPath, 'workspace', sessionId);
+    const sessionRepoPath = path.join(this.basePersistentPath, sessionId);
 
     if (agentId === sessionId) {
       // --- 1. 初始化 Session 根倉庫 (Session中央共享倉庫) ---
@@ -43,14 +43,18 @@ export class GitLocalStorageDriver implements IStorageDriver {
         if (!existsSync(sessionRepoPath)) {
           await fs.mkdir(sessionRepoPath, { recursive: true });
         }
-        await execAsync(`git init -b main`, { cwd: sessionRepoPath });
-        await execAsync(`git config user.name "SuperNova Agent"`, { cwd: sessionRepoPath });
-        await execAsync(`git config user.email "agent@supernova.ai"`, { cwd: sessionRepoPath });
+        
+        // 檢查是否已經初始化過 Git (避免重複掛載導致 commit failed)
+        if (!existsSync(path.join(sessionRepoPath, '.git'))) {
+          await execAsync(`git init -b main`, { cwd: sessionRepoPath });
+          await execAsync(`git config user.name "SuperNova Agent"`, { cwd: sessionRepoPath });
+          await execAsync(`git config user.email "agent@supernova.ai"`, { cwd: sessionRepoPath });
 
-        // 寫入初始佔位 commit，確保 main 分支正式存在
-        await fs.writeFile(path.join(sessionRepoPath, '.keep'), 'placeholder', 'utf-8');
-        await execAsync(`git add .keep`, { cwd: sessionRepoPath });
-        await execAsync(`git commit -m "Initial commit"`, { cwd: sessionRepoPath });
+          // 寫入初始佔位 commit，確保 main 分支正式存在
+          await fs.writeFile(path.join(sessionRepoPath, '.keep'), 'placeholder', 'utf-8');
+          await execAsync(`git add .keep`, { cwd: sessionRepoPath });
+          await execAsync(`git commit -m "Initial commit"`, { cwd: sessionRepoPath });
+        }
 
         this.activePaths.set(key, sessionRepoPath);
         return sessionRepoPath;
@@ -68,6 +72,10 @@ export class GitLocalStorageDriver implements IStorageDriver {
         this.activePaths.set(key, agentWsPath);
         return agentWsPath;
       } catch (error: any) {
+        if (error.message.includes('already exists')) {
+          this.activePaths.set(key, agentWsPath);
+          return agentWsPath;
+        }
         throw new Error(`[GitLocalStorageDriver] Failed to init Agent Worktree for ${agentId}: ${error.message}`);
       }
     }
@@ -155,7 +163,7 @@ export class GitLocalStorageDriver implements IStorageDriver {
       return { success: true };
     }
 
-    const sessionRepoPath = path.join(this.basePersistentPath, 'workspace', sessionId);
+    const sessionRepoPath = path.join(this.basePersistentPath, sessionId);
     const branchName = `branch_${agentId}`;
 
     try {
@@ -178,7 +186,7 @@ export class GitLocalStorageDriver implements IStorageDriver {
     const basePath = this.activePaths.get(key);
     if (!basePath) return;
 
-    const sessionRepoPath = path.join(this.basePersistentPath, 'workspace', sessionId);
+    const sessionRepoPath = path.join(this.basePersistentPath, sessionId);
 
     try {
       if (agentId === sessionId) {

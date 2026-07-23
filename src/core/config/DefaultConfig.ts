@@ -20,6 +20,7 @@ export const DEFAULT_CONFIG: Config = {
         session_dir: 'session',
         agent_dir: 'agent',
         agent_profile_dir: 'profiles',
+        blob_dir: "blobs",
         session_file: 'session.json',
         history_file: 'history.jsonl',
         agent_state_file: 'state.json',

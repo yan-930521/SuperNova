@@ -43,6 +43,8 @@ export interface StorageConfig {
 
   readonly agent_profile_dir: string;
 
+  readonly blob_dir: string;
+
   readonly session_file: string;
   readonly agent_state_file: string;
   readonly history_file: string;

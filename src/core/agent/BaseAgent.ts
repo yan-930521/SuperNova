@@ -118,6 +118,9 @@ export abstract class BaseAgent {
     /** 結構化身份設定 */
     protected profile?: AgentProfile;
 
+    /** 附加的環境上下文提示詞 */
+    protected envPrompt?: string;
+
     /** 資源消耗累積統計 */
     protected usageStats: UsageStats = { promptTokens: 0, completionTokens: 0, durationMs: 0 };
 
@@ -157,8 +160,7 @@ export abstract class BaseAgent {
         this.isClone = options?.isClone || false;
         this.parentAgentId = options?.parentAgent?.id;
 
-        // 記憶共享與隔離邏輯 (僅用於 Oplog 檔案日誌傳輸器定址)
-        // TODO: 修改邏輯
+        // 記憶共享與隔離邏輯
         if (this.isClone && options?.parentAgent) {
             this.oplogDir = options.parentAgent.oplogDir;
             this.stateFilePath = path.join(this.oplogDir, `state_${this.id}.json`);
@@ -213,6 +215,24 @@ export abstract class BaseAgent {
         this.logger.debug(`Equipped ${tools.length} tools. Cache invalidated.`);
     }
 
+    /**
+     * 增加 Agent 裝備的可用工具
+     */
+    public addTools(tools: BaseTool[]): void {
+        let toollist = [...this.tools, ...tools];
+        const signature = toollist.map(t => t.name).sort().join(',');
+
+        // 若工具陣列沒有改變，則保留原本的 ReactAgent 快取
+        if (this.cachedToolsSignature === signature) {
+            return;
+        }
+
+        this.tools = toollist;
+        this.cachedToolsSignature = signature;
+        this.cachedReactAgent = null; // 清除快取，強制下次重新編譯
+        this.logger.debug(`Equipped ${toollist.length} tools. Cache invalidated.`);
+    }
+
     public setProfile(profile: AgentProfile): void {
         this.profile = profile;
         this.logger.debug(`Agent profile updated.`);
@@ -220,6 +240,10 @@ export abstract class BaseAgent {
 
     public getProfile(): AgentProfile | undefined {
         return this.profile;
+    }
+
+    public setEnvPrompt(prompt: string): void {
+        this.envPrompt = prompt;
     }
 
     /**
@@ -290,7 +314,10 @@ export abstract class BaseAgent {
 
         // 2. 利用基礎設施轉譯為 LangChain Messages
         const systemPrompt = this.formatProfileToSystemPrompt();
-        const lcMessages = await this.compileMessages(systemPrompt, undefined, {}, { history: historyMessages });
+        const lcMessages = await this.compileMessages(systemPrompt, undefined, {}, { 
+            history: historyMessages,
+            envPrompt: this.envPrompt 
+        });
 
         // 3. 呼叫模型
         this.logger.debug(`Invoking LLM...`);
@@ -394,7 +421,7 @@ export abstract class BaseAgent {
                     const lcTools = this.tools.map(t => t.toLangChainTool({
                         sessionId: this.sessionId,
                         agentId: this.id,
-                        workspacePath: this.workspacePath
+                        eventBus: this.eventBus
                     }));
 
                     this.cachedReactAgent = createAgent({
@@ -446,8 +473,6 @@ export abstract class BaseAgent {
             throw error;
         }
     }
-
-    // ==========================================
 
     // ==========================================
     // 資源消耗輔助 (Usage & Token Tracking)

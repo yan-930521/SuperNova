@@ -46,8 +46,6 @@ export class FileSystemSessionRepository implements ISessionRepository {
     public async load(sessionId: string): Promise<Session | null> {
         const sessionFilePath = this.getFileName(sessionId);
 
-        console.log(sessionFilePath)
-
         if (!existsSync(sessionFilePath)) {
             this.logger.debug(`[SessionRepository] Session file not found: ${sessionFilePath}`);
             return null;
