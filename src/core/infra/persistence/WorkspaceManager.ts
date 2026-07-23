@@ -1,9 +1,10 @@
 import { existsSync } from 'fs';
+import { readFile } from 'fs/promises';
 import * as path from 'path';
 
 import { BaseTool } from '../../agent/tool/BaseTool';
 import {
-    ListFilesTool, ReadFileTool, RunBashTool, WriteFileTool
+    ListFilesTool, ReadBlobTool, ReadFileTool, RunBashTool, WriteFileTool
 } from '../../agent/tool/WorkspaceTools';
 import { Config } from '../../config/Config';
 import { ILifecycle } from '../../lifecycle/ILifecycle';
@@ -24,7 +25,7 @@ export class WorkspaceManager implements IWorkspaceManager, ILifecycle {
 
     constructor(
         private readonly config: Config,
-        private readonly basePersistentPath: string = process.cwd()
+        private readonly basePersistentPath: string
     ) { }
 
     /**
@@ -41,16 +42,10 @@ export class WorkspaceManager implements IWorkspaceManager, ILifecycle {
      * 停止組件 (ILifecycle)
      */
     public async stop(): Promise<void> {
-        // 停機時清理所有活躍驅動的資源
-        // 由於 destroy 需要傳入 sessionId 與 agentId，
-        // 在 stop 階段，我們可以直接移除整個 Session 根目錄 (即 agentId = sessionId)
-        for (const [sessionId, driver] of this.activeDrivers.entries()) {
-            try {
-                await driver.destroy(sessionId, sessionId);
-            } catch (e) {
-                console.error(`[WorkspaceManager] Graceful shutdown error for session ${sessionId}:`, e);
-            }
-        }
+        // 停機階段 (Graceful Shutdown)
+        // 注意：絕對不能在這裡呼叫 driver.destroy()！
+        // 系統停止只是將 Session 掛起 (SUSPENDED)，若是 PERSISTENT 工作區，必須保留檔案系統以便下次啟動時恢復。
+        // 至於 VOLATILE 記憶體工作區，程序結束後作業系統自然會回收。
         this.activeDrivers.clear();
     }
 
@@ -61,7 +56,7 @@ export class WorkspaceManager implements IWorkspaceManager, ILifecycle {
         if (type === 'VOLATILE') {
             return true;
         }
-        const expectedWsPath = path.join(this.basePersistentPath, 'workspace', sessionId);
+        const expectedWsPath = path.join(this.basePersistentPath, sessionId);
         return existsSync(expectedWsPath);
     }
 
@@ -74,7 +69,7 @@ export class WorkspaceManager implements IWorkspaceManager, ILifecycle {
     public async initWorkspace(
         sessionId: string,
         agentId: string = sessionId,
-        type: WorkspaceType = 'VOLATILE'
+        type: WorkspaceType = 'PERSISTENT'
     ): Promise<string> {
         let driver = this.activeDrivers.get(sessionId);
 
@@ -140,6 +135,15 @@ export class WorkspaceManager implements IWorkspaceManager, ILifecycle {
     }
 
     /**
+     * 讀取 Session 專屬的巨型資料 Blob
+     */
+    public async readBlob(sessionId: string, blobId: string): Promise<string> {
+        // Blob 統一存放在 session 根目錄下的 blobs 資料夾
+        const blobPath = path.join(this.basePersistentPath, sessionId, this.config.storage.blob_dir, `${blobId}.txt`);
+        return readFile(blobPath, 'utf-8');
+    }
+
+    /**
      * 寫入檔案
      */
     public async writeFile(sessionId: string, agentId: string, relativePath: string, content: string): Promise<void> {
@@ -181,11 +185,12 @@ export class WorkspaceManager implements IWorkspaceManager, ILifecycle {
 
     public loadTools(sessionId: string, agentId: string): BaseTool[] {
         const driver = this.getRequiredDriver(sessionId);
-        
+
         const tools: BaseTool[] = [
             new ReadFileTool(this, sessionId, agentId),
             new WriteFileTool(this, sessionId, agentId),
-            new ListFilesTool(this, sessionId, agentId)
+            new ListFilesTool(this, sessionId, agentId),
+            new ReadBlobTool(this, sessionId)
         ];
 
         // 根據底層驅動能力，動態注入 Bash 工具

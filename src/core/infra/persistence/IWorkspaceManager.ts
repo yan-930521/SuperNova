@@ -63,6 +63,13 @@ export interface IWorkspaceManager {
   writeFile(sessionId: string, agentId: string, relativePath: string, content: string): Promise<void>;
 
   /**
+   * 讀取 Session 專屬的巨型資料 Blob
+   * @param sessionId 會話 ID
+   * @param blobId Blob ID (例如 blob_1a2b3c)
+   */
+  readBlob(sessionId: string, blobId: string): Promise<string>;
+
+  /**
    * 列出工作區內特定目錄的檔案
    * @param sessionId 會話 ID
    * @param agentId 代理/任務 ID

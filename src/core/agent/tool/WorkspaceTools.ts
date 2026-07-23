@@ -28,6 +28,30 @@ export class ReadFileTool extends BaseTool {
   }
 }
 
+export class ReadBlobTool extends BaseTool {
+  public readonly name = 'read_blob';
+  public readonly description = 'Read the full content of a large data blob using its blobId. Use this when you see <Pointer: blob_xxx> in the payload.';
+  public readonly schema = z.object({
+    blobId: z.string().describe('The ID of the blob to read, e.g., blob_1a2b3c'),
+  });
+
+  constructor(
+    private readonly workspaceManager: IWorkspaceManager,
+    private readonly sessionId: string
+  ) {
+    super();
+  }
+
+  public async execute(args: { blobId: string }, context: ToolContext): Promise<string> {
+    try {
+      const content = await this.workspaceManager.readBlob(this.sessionId, args.blobId);
+      return content;
+    } catch (error: any) {
+      return `Failed to read blob ${args.blobId}: ${error.message}`;
+    }
+  }
+}
+
 export class WriteFileTool extends BaseTool {
   public readonly name = 'write_file';
   public readonly description = 'Write content to a file within the workspace. Provide the relative path and the content to write.';
