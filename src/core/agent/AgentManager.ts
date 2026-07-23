@@ -94,19 +94,24 @@ export class AgentManager implements ILifecycle {
         // 放入活躍池
         this.activeAgents.set(id, agent);
 
-        // 掛載工作區與工具
-        await this.workspaceManager.initWorkspace(sessionId, id);
-        agent.updateTools(this.workspaceManager.loadTools(sessionId, id));
+        try {
+            // 掛載工作區與工具
+            await this.workspaceManager.initWorkspace(sessionId, id);
+            agent.updateTools(this.workspaceManager.loadTools(sessionId, id));
 
-        // 初始化完成，切換為就緒狀態
-        agent.setReady();
+            // 初始化完成，切換為就緒狀態
+            agent.setReady();
 
-        // 初始存檔
-        const data = agent.serialize();
-        await this.stateRepo.saveAgentState(sessionId, id, data, {
-            isClone: data.isClone,
-            parentAgentId: data.parentAgentId
-        });
+            // 初始存檔
+            const data = agent.serialize();
+            await this.stateRepo.saveAgentState(sessionId, id, data, {
+                isClone: data.isClone,
+                parentAgentId: data.parentAgentId
+            });
+        } catch (err) {
+            this.activeAgents.delete(id);
+            throw err;
+        }
 
         this.logger.info(`[AgentManager] Spawned new agent ${id} of type ${type}`);
         return agent;

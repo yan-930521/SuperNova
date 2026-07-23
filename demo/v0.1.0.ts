@@ -45,20 +45,6 @@ async function main() {
     console.log(`[系統] 成功建立新會話: ${sessionId}`);
   }
 
-  // 3. 喚醒 (Spawn) MainAgent
-  try {
-    // 每次 Demo 前都試圖重新建立，如果失敗則代表需要 Rehydrate
-    await agentManager.spawnAgent(AgentType.MAIN, MainAgentId, sessionId);
-    console.log(`[系統] 成功建立新 Agent: ${MainAgentId}`);
-  } catch (e) {
-    console.log(`[系統] Agent 已存在，正在喚醒 ${MainAgentId}...`);
-    try {
-      await agentManager.rehydrate(MainAgentId, sessionId);
-    } catch (rehydrateErr) {
-      console.log(`[系統] 喚醒失敗，可能檔案已損壞，嘗試重啟...`);
-    }
-  }
-
   // 4. 設定終端機對話
   const rl = readline.createInterface({
     input: process.stdin,
