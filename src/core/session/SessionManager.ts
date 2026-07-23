@@ -3,8 +3,8 @@ import { AgentState, AgentType } from '../agent/BaseAgent';
 import { Config } from '../config/Config';
 import { LogManager } from '../infra/LogManager';
 import { ISessionRepository } from '../infra/persistence';
-import { IDataBlockRepository } from '../infra/persistence/IRepository';
-import { IWorkspaceManager } from '../infra/persistence/IWorkspaceManager';
+import { IAgentStateRepository, IDataBlockRepository } from '../infra/persistence/IRepository';
+import { IWorkspaceManager, WorkspaceType } from '../infra/persistence/IWorkspaceManager';
 import { ILifecycle } from '../lifecycle/ILifecycle';
 import { AgentEvent, IEvent, IEventBus } from '../messaging/IBus';
 import { IdGenerator } from '../utils/IdGenerator';
@@ -26,7 +26,7 @@ export class SessionManager implements ILifecycle {
         private readonly agentManager: AgentManager,
         private readonly dataBlockRepo: IDataBlockRepository,
         private readonly eventBus: IEventBus
-    ) {}
+    ) { }
 
     /**
      * 實作 ILifecycle 初始化方法
@@ -37,7 +37,7 @@ export class SessionManager implements ILifecycle {
             if (this.sessionRepo.initialize) {
                 await this.sessionRepo.initialize();
             }
-            
+
             // 統一監聽全局的 AgentMessage 進行派發與存檔
             this.eventBus.subscribe(AgentEvent.AgentMessage, this.handleAgentMessage.bind(this));
         } catch (err: any) {
@@ -53,47 +53,56 @@ export class SessionManager implements ILifecycle {
 
         try {
             const dirs = await this.sessionRepo.list();
-            for (const sessionId of dirs) {
-                // 1. 讀取並載入會話資料
-                const session = await this.sessionRepo.load(sessionId);
-                if (!session) continue;
+            
+            // 使用 Promise.all 並行恢復所有會話，大幅加速啟動時間
+            const recoveryPromises = dirs.map(async (sessionId) => {
+                try {
+                    // 1. 讀取並載入會話資料
+                    const session = await this.sessionRepo.load(sessionId);
+                    if (!session) return;
 
-                // 2. 篩選出 ACTIVE 或 SUSPENDED 狀態的會話執行恢復
-                if (session.status === SessionState.ACTIVE || session.status === SessionState.SUSPENDED) {
-                    const workspaceType = session.metadata?.workspaceType || 'PERSISTENT';
+                    // 2. 篩選出 ACTIVE 或 SUSPENDED 狀態的會話執行恢復
+                    if (session.status === SessionState.ACTIVE || session.status === SessionState.SUSPENDED) {
+                        const workspaceType = session.metadata?.workspaceType || 'PERSISTENT';
 
-                    // 3. 容錯驗證：若是 PERSISTENT 類型，檢查其物理工作空間是否存在
-                    const isHealthy = await this.workspaceManager.hasWorkspace(sessionId, workspaceType);
-                    if (!isHealthy) {
-                        // 方案 B：偵測到 Workspace 毀損，將會話標記為 FAILED 並容錯跳過
-                        this.logger.error(`[SessionManager] Session ${sessionId} workspace directory lost. Marking session as FAILED.`);
-                        session.status = SessionState.FAILED;
-                        session.touch();
-                        await this.sessionRepo.save(session);
-                        continue;
-                    }
+                        // 3. 容錯驗證：若是 PERSISTENT 類型，檢查其物理工作空間是否存在
+                        const isHealthy = await this.workspaceManager.hasWorkspace(sessionId, workspaceType);
+                        if (!isHealthy) {
+                            this.logger.error(`[SessionManager] Session ${sessionId} workspace directory lost. Marking session as FAILED.`);
+                            session.status = SessionState.FAILED;
+                            session.touch();
+                            await this.sessionRepo.save(session);
+                            return;
+                        }
 
-                    // 4. 工作空間健康，執行重啟還原
-                    try {
-                        // 重新初始化與掛載儲存驅動
+                        // 4. 工作空間健康，執行重啟還原
                         await this.workspaceManager.initWorkspace(sessionId, sessionId, workspaceType);
                         this.logger.info(`[SessionManager] Re-mounted workspace for session ${sessionId} (${workspaceType})`);
-                    } catch (wsErr: any) {
-                        this.logger.error(`[SessionManager] Failed to re-mount workspace for session ${sessionId}: ${wsErr.message}`);
-                        session.status = SessionState.FAILED;
+
+                        // 將狀態恢復為 ACTIVE 並加載至活躍記憶體中
+                        session.status = SessionState.ACTIVE;
+                        session.touch();
                         await this.sessionRepo.save(session);
-                        continue;
+                        this.activeSessions.set(sessionId, session);
+
+                        this.logger.info(`[SessionManager] Successfully recovered active session ${sessionId}`);
                     }
-
-                    // 將狀態恢復為 ACTIVE 並加載至活躍記憶體中
-                    session.status = SessionState.ACTIVE;
-                    session.touch();
-                    await this.sessionRepo.save(session);
-                    this.activeSessions.set(sessionId, session);
-
-                    this.logger.info(`[SessionManager] Successfully recovered active session ${sessionId}`);
+                } catch (wsErr: any) {
+                    this.logger.error(`[SessionManager] Failed to recover session ${sessionId}: ${wsErr.message}`);
+                    try {
+                        const failedSession = await this.sessionRepo.load(sessionId);
+                        if (failedSession) {
+                            failedSession.status = SessionState.FAILED;
+                            await this.sessionRepo.save(failedSession);
+                        }
+                    } catch (e) {
+                        // ignore secondary error
+                    }
                 }
-            }
+            });
+
+            await Promise.all(recoveryPromises);
+
         } catch (error: any) {
             this.logger.error(`[SessionManager] Error running session recovery flow: ${error.message}`);
         }
@@ -106,18 +115,21 @@ export class SessionManager implements ILifecycle {
         this.logger.info('[SessionManager] Stopping SessionManager and freezing active sessions...');
 
         // 遍歷所有記憶體中活躍的會話，更新為 SUSPENDED 凍結狀態並保存至磁碟
-        for (const [sessionId, session] of this.activeSessions.entries()) {
+        // 使用 Promise.all 並行寫入，加速停機流程
+        const stopPromises = Array.from(this.activeSessions.values()).map(async (session) => {
             if (session.status === SessionState.ACTIVE) {
                 session.status = SessionState.SUSPENDED;
                 session.touch();
                 try {
                     await this.sessionRepo.save(session);
-                    this.logger.info(`[SessionManager] Suspended active session ${sessionId} due to graceful shutdown`);
+                    this.logger.info(`[SessionManager] Suspended active session ${session.id} due to graceful shutdown`);
                 } catch (err: any) {
-                    this.logger.error(`[SessionManager] Failed to suspend session ${sessionId}: ${err.message}`);
+                    this.logger.error(`[SessionManager] Failed to suspend session ${session.id}: ${err.message}`);
                 }
             }
-        }
+        });
+
+        await Promise.all(stopPromises);
 
         this.activeSessions.clear();
         this.logger.info('[SessionManager] SessionManager stopped');
@@ -129,7 +141,7 @@ export class SessionManager implements ILifecycle {
     public async createSession(
         mainAgentId: string,
         customSessionId?: string,
-        workspaceType: 'VOLATILE' | 'PERSISTENT' = 'PERSISTENT'
+        workspaceType: WorkspaceType = 'PERSISTENT'
     ): Promise<Session> {
         const sessionId = customSessionId || IdGenerator.session();
         const session = new Session({
@@ -143,6 +155,10 @@ export class SessionManager implements ILifecycle {
         await this.workspaceManager.initWorkspace(sessionId, sessionId, workspaceType);
 
         this.activeSessions.set(sessionId, session);
+        
+        // 建立會話時，一併註冊與建立 MainAgent
+        await this.agentManager.spawnAgent(AgentType.MAIN, mainAgentId, sessionId);
+
         this.logger.info(`[SessionManager] Created new session: ${sessionId} (${workspaceType}) for main agent: ${mainAgentId}`);
         return session;
     }
@@ -165,6 +181,7 @@ export class SessionManager implements ILifecycle {
             }
 
             this.activeSessions.set(sessionId, session);
+
             this.logger.info(`[SessionManager] Loaded session: ${sessionId} from repository`);
             return session;
         } catch (err: any) {
@@ -247,35 +264,40 @@ export class SessionManager implements ILifecycle {
             }
         }
 
-        // 1. 若發送者是系統內的 Agent，客觀寫入發送者的歷史紀錄
+        // 1. 在寫入任何歷史或派發前，先卸載超大字串至 DataPointer，避免重複 I/O 與發送方/接收方 Token 撐爆
+        const processedBlock = await this.dataBlockRepo.offloadLargePayloads(block.sessionId, block, 1000);
+
+        // 2. 若發送者是系統內的 Agent，客觀寫入發送者的歷史紀錄
         // (如果是 USER 或外部 Env 發送則略過寫入，避免產生多餘的 history.jsonl)
-        if (session.registeredAgentIds.has(block.senderId)) {
-            await this.dataBlockRepo.appendForAgent(block.sessionId, block.senderId, block).catch(e => {
+        if (session.registeredAgentIds.has(processedBlock.senderId)) {
+            await this.dataBlockRepo.appendForAgent(processedBlock.sessionId, processedBlock.senderId, processedBlock).catch(e => {
                 this.logger.error(`[SessionManager] Failed to append sender history: ${e}`);
             });
         }
 
-        // 2. 決定接收對象 (Target or Broadcast)
-        const targets = block.targetId 
-            ? [block.targetId] 
-            : Array.from(session.registeredAgentIds).filter(id => id !== block.senderId);
+        // 3. 決定接收對象 (Target)
+        // 注意：若是 tool 追蹤訊息，純粹是發送方自己的內部執行紀錄，不派發給任何人
+        let targets: string[] = [];
+        if (processedBlock.type !== 'tool' && processedBlock.targetId !== null) {
+            targets = [processedBlock.targetId];
+        }
 
-        // 3. 執行派發迴圈
+        // 4. 執行派發迴圈
         for (const targetId of targets) {
             // 只有註冊在系統內的 Agent，我們才幫它維護專屬歷史與 Inbox
             if (session.registeredAgentIds.has(targetId)) {
                 // (a) 寫入目標的歷史 Oplog
-                await this.dataBlockRepo.appendForAgent(block.sessionId, targetId, block).catch(e => {
+                await this.dataBlockRepo.appendForAgent(processedBlock.sessionId, targetId, processedBlock).catch(e => {
                     this.logger.error(`[SessionManager] Failed to append target history for ${targetId}: ${e}`);
                 });
 
                 // (b) 推入會話層級的 InboxBuffer
-                session.pushToInbox(targetId, block);
-                
+                session.pushToInbox(targetId, processedBlock);
+
                 // (c) 嘗試喚醒該 Agent 或其分身 (Clone Mode 並發消化)
                 try {
                     const mainAgent = await this.agentManager.rehydrate(targetId, block.sessionId);
-                    
+
                     const pendingSenders = session.getPendingSenders(targetId);
                     for (const senderId of pendingSenders) {
                         const messages = session.popFromInboxBySender(targetId, senderId);
@@ -288,15 +310,15 @@ export class SessionManager implements ILifecycle {
                         if (mainAgent.status === AgentState.IDLE || mainAgent.status === AgentState.SUSPENDED) {
                             // 本尊空閒，直接指派給本尊
                             // (注意：若是我們改變了狀態，後續迴圈的下一個 sender 就會遇到 BUSY，從而觸發 Clone)
-                        } else if (hasUrgent || mainAgent.canClone) {
-                            // 本尊忙碌中，但有高優先級訊息，或本尊支援分身併發 -> 派生 SubAgent 分身！
+                        } else if (mainAgent.canClone) {
+                            // 本尊忙碌中，但本尊支援分身併發 -> 派生 SubAgent 分身！
                             workerAgent = await this.agentManager.spawnAgent(
-                                AgentType.SUB, 
+                                AgentType.SUB,
                                 IdGenerator.agent('sub'),
-                                block.sessionId, 
+                                block.sessionId,
                                 { isClone: true, parentAgent: mainAgent }
                             );
-                            
+
                             // 拷貝本尊的大腦設定 (Profile) 與工具集 (Tools)
                             const parentProfile = mainAgent.getProfile();
                             if (parentProfile) {
@@ -319,7 +341,7 @@ export class SessionManager implements ILifecycle {
                             if (isClone) {
                                 // 1. 合併分身的 Token 消耗與資源統計回本尊
                                 mainAgent.mergeUsage(workerAgent.getUsageStats());
-                                
+
                                 // 2. 併發分身處理完畢後，立即執行垃圾回收 (GC) 徹底銷毀
                                 await this.agentManager.terminateAgent(workerAgent.id);
                             }
