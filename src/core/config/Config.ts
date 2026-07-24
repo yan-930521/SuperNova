@@ -13,6 +13,16 @@ export interface Config {
   readonly storage: StorageConfig;
   /** 大語言模型相關配置 */
   readonly llm: LLMConfig;
+  /** Agent 行為配置 */
+  readonly agent: AgentConfig;
+}
+
+/**
+ * Agent 行為配置子介面
+ */
+export interface AgentConfig {
+  /** 允許派生分身的數量上限 (避免記憶體與 Token 無限耗盡) */
+  readonly max_clones_per_agent: number;
 }
 
 /**

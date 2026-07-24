@@ -45,5 +45,8 @@ export const DEFAULT_CONFIG: Config = {
                 maxTokens: 1024,
             }
         }
+    },
+    agent: {
+        max_clones_per_agent: 5
     }
 };
