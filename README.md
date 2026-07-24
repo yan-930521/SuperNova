@@ -35,6 +35,126 @@ SuperNova 是一個專為長期任務設計的 **AI Runtime (執行時)**。它�
 *   **`src/package/` (業務擴充與外掛層)**：包含特定領域的延伸應用、專案自訂邏輯或是外部系統對接適配器。
 *   **依賴規則**：`src/package/` 必須且只能通過 `src/core/index.ts` 的接口引用核心功能與大腦，核心層嚴禁反向引用業務擴充層，從而保證核心底座的純粹與高內聚。
 
+以下是 `src/core` 目錄實際程式碼結構與架構分層的映射圖：
+
+```mermaid
+graph TD
+    %% 定義樣式
+    classDef layer fill:#f9f9f9,stroke:#333,stroke-width:2px;
+    classDef folder fill:#e1f5fe,stroke:#039be5,stroke-width:1px,stroke-dasharray: 5 5;
+    classDef file fill:#ffffff,stroke:#757575,stroke-width:1px;
+
+    %% 核心入口
+    Index[src/core/index.ts<br>統一匯出邊界]:::file
+
+    subgraph Layer1 [1. 代理與執行層 Agent & Execution Layer]
+        direction TB
+        subgraph DirAgent [src/core/agent/]
+            direction TB
+            AgentManager[AgentManager.ts<br>大腦統籌管理]:::file
+            BaseAgent[BaseAgent.ts<br>基礎抽象大腦]:::file
+            MainAgent[MainAgent.ts<br>主節點大腦]:::file
+            SubAgent[SubAgent.ts<br>子節點大腦]:::file
+            EmbodiedAgent[EmbodiedAgent.ts<br>具身智能大腦]:::file
+            
+            subgraph DirTool [src/core/agent/tool/]
+                BaseTool[BaseTool.ts<br>工具基底]:::file
+                WorkspaceTools[WorkspaceTools.ts<br>工作區工具]:::file
+            end
+        end
+        
+        AgentManager --> BaseAgent
+        BaseAgent --> MainAgent
+        BaseAgent --> SubAgent
+        BaseAgent --> EmbodiedAgent
+        BaseAgent -.-> BaseTool
+    end
+
+    subgraph Layer2 [2. 調度與事件層 Scheduling & Event Layer]
+        direction TB
+        subgraph DirMessaging [src/core/messaging/]
+            IBus[IBus.ts<br>匯流排介面]:::file
+            EventBus[EventBus.ts<br>事件匯流排實作]:::file
+            DataBlock[DataBlock.ts<br>基礎資料載體]:::file
+            
+            IBus --> EventBus
+        end
+    end
+
+    subgraph Layer3 [3. 狀態與記憶層 State & Memory Layer]
+        direction TB
+        subgraph DirSession [src/core/session/]
+            SessionManager[SessionManager.ts<br>會話管理器]:::file
+            Session[Session.ts<br>會話實體]:::file
+        end
+        
+        SessionManager --> Session
+        Session -.-> DataBlock
+    end
+
+    subgraph Layer4 [4. 系統基礎建設層 Infrastructure & Security]
+        direction TB
+        subgraph DirLifecycle [src/core/lifecycle/]
+            RuntimeKernel[RuntimeKernel.ts<br>運行時內核中樞]:::file
+            ILifecycle[ILifecycle.ts]:::file
+        end
+        
+        subgraph DirContainer [src/core/container/]
+            ComponentContainer[ComponentContainer.ts<br>DI 依賴注入容器]:::file
+        end
+        
+        subgraph DirConfig [src/core/config/]
+            ConfigLoader[ConfigLoader.ts]:::file
+            Config[Config.ts]:::file
+            DefaultConfig[DefaultConfig.ts]:::file
+        end
+        
+        subgraph DirInfra [src/core/infra/]
+            LogManager[LogManager.ts<br>全域日誌管理]:::file
+            
+            subgraph DirPersistence [src/core/infra/persistence/]
+                WorkspaceManager[WorkspaceManager.ts<br>實體工作空間控制]:::file
+                IRepository[IRepository.ts]:::file
+                IStorageDriver[IStorageDriver.ts]:::file
+            end
+            
+            subgraph DirTransports [src/core/infra/transports/]
+                ConsoleTransport[ConsoleTransport.ts]:::file
+                FileTransport[FileTransport.ts]:::file
+            end
+            
+            LogManager --> ConsoleTransport
+            LogManager --> FileTransport
+        end
+        
+        subgraph DirUtils [src/core/utils/]
+            GraphValidator[GraphValidator.ts]:::file
+            IdGenerator[IdGenerator.ts]:::file
+            PromptLoader[PromptLoader.ts]:::file
+        end
+        
+        RuntimeKernel --> ComponentContainer
+    end
+
+    %% 核心跨層依賴關聯 (虛線)
+    RuntimeKernel -. 初始化 .-> AgentManager
+    RuntimeKernel -. 初始化 .-> SessionManager
+    RuntimeKernel -. 初始化 .-> ConfigLoader
+    RuntimeKernel -. 初始化 .-> LogManager
+    
+    BaseAgent -. 事件收發 .-> EventBus
+    
+    %% 匯出邊界
+    DirAgent -.-> Index
+    DirMessaging -.-> Index
+    DirSession -.-> Index
+    DirLifecycle -.-> Index
+    DirContainer -.-> Index
+    DirConfig -.-> Index
+    DirInfra -.-> Index
+    DirUtils -.-> Index
+```
+
 ## ⚡ 為什麼選擇 Bun？ (Why Bun?)
 
 為了支撐 AI Agent 的高頻、長時運行需求，我們選擇 Bun 作為核心 Runtime：
