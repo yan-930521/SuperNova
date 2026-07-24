@@ -26,7 +26,10 @@ describe('SessionManager Recovery and Freeze Test', () => {
     const wm = new WorkspaceManager(testConfig, workspaceRoot);
     const sessionRepo = new FileSystemSessionRepository(testConfig, sessionRoot);
     const eventBus = new EventBus();
-    const mockAgentManager = {} as any;
+    const mockAgentManager = {
+      spawnAgent: async () => {},
+      getActiveCloneCount: () => 0
+    } as any;
     const mockDataBlockRepo = {} as any;
     const sm = new SessionManager(testConfig, sessionRepo, wm, mockAgentManager, mockDataBlockRepo, eventBus);
 
@@ -111,7 +114,10 @@ describe('SessionManager Recovery and Freeze Test', () => {
     const sessionRepo = new FileSystemSessionRepository(testConfig, sessionRoot);
     const wm = new WorkspaceManager(testConfig, process.cwd());
     const eventBus = new EventBus();
-    const mockAgentManager = {} as any;
+    const mockAgentManager = {
+      spawnAgent: async () => {},
+      getActiveCloneCount: () => 0
+    } as any;
     const mockDataBlockRepo = {} as any;
     const sm = new SessionManager(testConfig, sessionRepo, wm, mockAgentManager, mockDataBlockRepo, eventBus);
     await sm.initialize();

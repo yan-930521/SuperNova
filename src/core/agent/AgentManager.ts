@@ -163,6 +163,20 @@ export class AgentManager implements ILifecycle {
     }
 
     /**
+     * 計算特定 Agent 當前在記憶體中活躍的分身數量
+     */
+    public getActiveCloneCount(parentAgentId: string): number {
+        let count = 0;
+        for (const agent of this.activeAgents.values()) {
+            const data = agent.serialize();
+            if (data.isClone && data.parentAgentId === parentAgentId) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /**
      * 喚醒 (從持久化讀取並還原到記憶體)
      */
     public async rehydrate(agentId: string, sessionId: string, options?: any): Promise<BaseAgent> {

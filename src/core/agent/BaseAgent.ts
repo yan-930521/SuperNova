@@ -503,8 +503,21 @@ export abstract class BaseAgent {
             this.logger.warn(`Attempted to change state of terminated agent ${this.id}`);
             return;
         }
-        this.logger.debug(`State transition: ${this.state} -> ${newState}`);
+        const oldState = this.state;
+        this.logger.debug(`State transition: ${oldState} -> ${newState}`);
         this.state = newState;
+        
+        // 發布狀態改變事件，讓 SessionManager 等外部控制器能進行 Inbox 檢查與資源回收
+        this.eventBus.publish({
+            type: AgentEvent.AgentStateChanged,
+            timestamp: Date.now(),
+            sessionId: this.sessionId,
+            payload: {
+                agentId: this.id,
+                oldState,
+                newState
+            }
+        });
     }
 
     public getState(): AgentState {
@@ -577,7 +590,7 @@ export abstract class BaseAgent {
      * 喚醒後切換至 BUSY，並處理收到的事件訊息
      */
     public async resume(messages: DataBlock[]): Promise<void> {
-        if (this.state !== AgentState.SUSPENDED && this.state !== AgentState.IDLE && this.state !== AgentState.INITIALIZING) {
+        if (this.state !== AgentState.SUSPENDED && this.state !== AgentState.IDLE) {
             this.logger.warn(`Resume ignored. Current state is ${this.state}`);
             return;
         }
