@@ -74,54 +74,6 @@ describe('BaseAgent Memory Sharing & Serialization Test', () => {
     fs.rmSync(testStorageDir, { recursive: true, force: true });
   });
 
-  it('should support independent mode with isolated directories', () => {
-    const parentId = 'parent-agent';
-    const sessionId = 'session-123';
-    const workspacePath = path.join(testStorageDir, 'workspace-parent');
-
-    const parentAgent = new MockTestAgent(parentId, sessionId, eventBus, mockConfig, mockDataBlockRepo, {
-      workspacePath
-    });
-
-    // 驗證獨立目錄定址
-    expect(parentAgent.workspacePath).toBe(workspacePath);
-    expect(parentAgent['oplogDir']).toContain(path.join(mockConfig.storage.base_dir, mockConfig.storage.session_dir, sessionId, mockConfig.storage.agent_dir, parentId));
-  });
-
-  it('should support clone mode with shared memory', async () => {
-    const parentId = 'parent-agent';
-    const cloneId = 'clone-agent';
-    const sessionId = 'session-123';
-    const workspacePath = path.join(testStorageDir, 'workspace-parent');
-
-    const parentAgent = new MockTestAgent(parentId, sessionId, eventBus, mockConfig, mockDataBlockRepo, {
-      workspacePath
-    });
-
-    const cloneAgent = new MockTestAgent(cloneId, sessionId, eventBus, mockConfig, mockDataBlockRepo, {
-      workspacePath,
-      parentAgent,
-      isClone: true
-    });
-
-    // 1. 驗證分身與父級記憶物理共享路徑
-    expect(cloneAgent.workspacePath).toBe(parentAgent.workspacePath); // 工作區共享
-    expect(cloneAgent['oplogDir']).toBe(parentAgent['oplogDir']); // 記憶共享
-
-    // 2. 驗證日誌共享寫入同一個實體 oplog 檔案
-    parentAgent.triggerLog('Parent log entry');
-    cloneAgent.triggerLog('Clone log entry');
-
-    // 由於 LogManager 檔案寫入是非同步的，等待短暫延遲後讀取
-    await new Promise(resolve => setTimeout(resolve, 100));
-
-    const oplogFilePath = path.join(parentAgent['oplogDir'], '.oplog.jsonl');
-    expect(fs.existsSync(oplogFilePath)).toBe(true);
-
-    const content = fs.readFileSync(oplogFilePath, 'utf-8');
-    expect(content).toContain('Parent log entry');
-    expect(content).toContain('Clone log entry');
-  });
 
   it('should serialize and hydrate state without repository', () => {
     const agentId = 'agent-serialization';

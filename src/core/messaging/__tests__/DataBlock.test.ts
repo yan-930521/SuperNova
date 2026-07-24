@@ -20,11 +20,11 @@ describe('DataBlock toMarkdown and toMessage Test', () => {
 
     // 驗證標題與系統包裝
     expect(md).toContain('### [EVENT: TASK_SUCCESS]');
-    expect(md).toContain('* **Sender**: `worker-bash`');
-    expect(md).toContain('* **Payload**:');
+    expect(md).toContain('- **Sender**: `worker-bash`');
+    expect(md).toContain('**Payload**:');
     expect(md).toContain('"exitCode": 0');
     expect(md).toContain('"stdout": "Build OK"');
-    expect(md).toContain('* **Data Pointers**:');
+    expect(md).toContain('**Data Pointers**:');
     expect(md).toContain('- **FILE**: [workspace/hello.ts](workspace/hello.ts) (metadata: {"size":100})');
   });
 
@@ -43,9 +43,12 @@ describe('DataBlock toMarkdown and toMessage Test', () => {
       senderId: 'worker-tool',
       type: 'tool',
       intent: 'run_tool',
-      controlPayload: { exitCode: 0, stdout: 'Build OK' }
+      controlPayload: { toolName: 'RUN_TOOL', result: 'Build OK' }
     });
-    expect(blockObj.toMarkdown()).toBe('{"exitCode":0,"stdout":"Build OK"}');
+    
+    const mdTool = blockObj.toMarkdown();
+    expect(mdTool).toContain('### 🛠️ [TOOL: RUN_TOOL]');
+    expect(mdTool).toContain('- **Status**: SUCCESS');
   });
 
   it('should format to LangChain Message instances with correct mapping', () => {
