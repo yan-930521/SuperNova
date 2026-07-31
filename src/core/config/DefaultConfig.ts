@@ -47,6 +47,10 @@ export const DEFAULT_CONFIG: Config = {
         }
     },
     agent: {
-        max_clones_per_agent: 5
+        max_clones_per_agent: 5,
+        force_wakeup_threshold: 5,
+        save_tokens: true,
+        uncompressed_tail: 20,
+        max_context_window: 100
     }
 };

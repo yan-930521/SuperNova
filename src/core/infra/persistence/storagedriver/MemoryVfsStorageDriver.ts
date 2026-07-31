@@ -1,13 +1,14 @@
 import { fs as virtualFs } from 'memfs';
 import * as path from 'path';
 
+import { LogManager } from '../../LogManager';
 import { IStorageDriver } from '../IStorageDriver';
-import { WorkspaceType } from '../IWorkspaceManager';
+import { WorkspaceType, WorkspaceOptions } from '../IWorkspaceManager';
 
 /**
- * 記憶體虛擬檔案系統儲存驅動器 (MemoryVfsStorageDriver)
- * 專注於使用 memfs 提供虛擬磁碟隔離環境。
- * 使用 sessionId 與 agentId 組成唯一的虛擬路徑。
+ * 記憶體虛擬檔案系統 (VOLATILE) 儲存驅動器
+ * 完全活在記憶體中，Session 或 Agent 銷毀即消失。
+ * 用於高頻率、無須存檔的草稿任務 (Draft Tasks)。
  */
 export class MemoryVfsStorageDriver implements IStorageDriver {
   public readonly supportsCommandExecution = false;
@@ -16,7 +17,7 @@ export class MemoryVfsStorageDriver implements IStorageDriver {
   /**
    * 初始化虛擬工作區目錄
    */
-  public async init(sessionId: string, agentId: string, type: WorkspaceType): Promise<string> {
+  public async init(sessionId: string, agentId: string, type: WorkspaceType, options?: WorkspaceOptions): Promise<string> {
     if (type !== 'VOLATILE') {
       throw new Error(`[MemoryVfsStorageDriver] Unsupported workspace type: ${type}`);
     }
@@ -85,7 +86,7 @@ export class MemoryVfsStorageDriver implements IStorageDriver {
    * 虛擬快照提交
    */
   public async commit(sessionId: string, agentId: string, message: string): Promise<void> {
-    console.log(`[MemoryVfsStorageDriver] VFS commit bypassed for ${agentId}: ${message}`);
+    LogManager.recorder.info(`[MemoryVfsStorageDriver] VFS commit bypassed for ${agentId}: ${message}`);
   }
 
   /**

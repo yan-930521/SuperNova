@@ -9,7 +9,7 @@ import {
 import { Config } from '../../config/Config';
 import { ILifecycle } from '../../lifecycle/ILifecycle';
 import { IStorageDriver } from './IStorageDriver';
-import { IWorkspaceManager, WorkspaceType } from './IWorkspaceManager';
+import { IWorkspaceManager, WorkspaceType, WorkspaceOptions } from './IWorkspaceManager';
 import { GitLocalStorageDriver } from './storagedriver/GitLocalStorageDriver';
 import { MemoryVfsStorageDriver } from './storagedriver/MemoryVfsStorageDriver';
 
@@ -69,7 +69,8 @@ export class WorkspaceManager implements IWorkspaceManager, ILifecycle {
     public async initWorkspace(
         sessionId: string,
         agentId: string = sessionId,
-        type: WorkspaceType = 'PERSISTENT'
+        type: WorkspaceType = 'PERSISTENT',
+        options?: WorkspaceOptions
     ): Promise<string> {
         let driver = this.activeDrivers.get(sessionId);
 
@@ -82,7 +83,7 @@ export class WorkspaceManager implements IWorkspaceManager, ILifecycle {
             this.activeDrivers.set(sessionId, driver);
         }
 
-        return driver.init(sessionId, agentId, type);
+        return driver.init(sessionId, agentId, type, options);
     }
 
     /**

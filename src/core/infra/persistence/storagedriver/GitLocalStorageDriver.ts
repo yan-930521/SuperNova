@@ -5,7 +5,7 @@ import * as path from 'path';
 import { promisify } from 'util';
 
 import { IStorageDriver } from '../IStorageDriver';
-import { WorkspaceType } from '../IWorkspaceManager';
+import { WorkspaceType, WorkspaceOptions } from '../IWorkspaceManager';
 
 const execAsync = promisify(exec);
 
@@ -25,7 +25,7 @@ export class GitLocalStorageDriver implements IStorageDriver {
   /**
    * 初始化獨立的空 Git 倉庫或其內部的 Agent Worktree
    */
-  public async init(sessionId: string, agentId: string, type: WorkspaceType): Promise<string> {
+  public async init(sessionId: string, agentId: string, type: WorkspaceType, options?: WorkspaceOptions): Promise<string> {
     if (type !== 'PERSISTENT') {
       throw new Error(`[GitLocalStorageDriver] Unsupported workspace type: ${type}`);
     }
@@ -65,10 +65,12 @@ export class GitLocalStorageDriver implements IStorageDriver {
       // --- 2. 在 Session 倉庫下開闢 Agent 子工作區 (Git Worktree) ---
       const agentWsPath = path.join(sessionRepoPath, '.worktrees', agentId);
       const branchName = `branch_${agentId}`;
+      const parentBranch = options?.parentAgentId ? `branch_${options.parentAgentId}` : 'main';
 
       try {
         // 在 Session 倉庫的相對目錄下建立 worktree
-        await execAsync(`git worktree add -b ${branchName} "${agentWsPath}"`, { cwd: sessionRepoPath });
+        // 從指定的 parentBranch 切出新分支
+        await execAsync(`git worktree add -b ${branchName} "${agentWsPath}" ${parentBranch}`, { cwd: sessionRepoPath });
         this.activePaths.set(key, agentWsPath);
         return agentWsPath;
       } catch (error: any) {

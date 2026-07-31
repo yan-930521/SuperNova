@@ -109,7 +109,7 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
             return block; // 大小合格，不需要卸載
         }
 
-        const blobsDir = path.join(this.baseDir, sessionId, 'blobs');
+        const blobsDir = path.join(this.baseDir, sessionId, this.config.storage.blob_dir);
         if (!existsSync(blobsDir)) {
             mkdirSync(blobsDir, { recursive: true });
         }
@@ -135,7 +135,8 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
                     }
                 });
 
-                return `<Pointer: ${blobId}>`;
+                const previewText = largeString.substring(0, 100).replace(/\r?\n/g, ' ') + '...';
+                return `<Pointer: ${blobId} (Preview: ${previewText})>`;
             }
         );
 

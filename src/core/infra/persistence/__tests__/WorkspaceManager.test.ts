@@ -6,7 +6,8 @@ import { DEFAULT_CONFIG } from '../../../config/DefaultConfig';
 
 describe('WorkspaceManager Two-Tier Workspace Test', () => {
   it('should support VOLATILE VFS routing for session and agents', async () => {
-    const wm = new WorkspaceManager(DEFAULT_CONFIG);
+    const tempTestPath = path.join(process.cwd(), '.dev_test_repo_volatile');
+    const wm = new WorkspaceManager(DEFAULT_CONFIG, tempTestPath);
 
     // 1. 初始化 Session 根
     const sessionPath = await wm.initWorkspace('session-vfs', 'session-vfs', 'VOLATILE');
