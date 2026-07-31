@@ -8,20 +8,28 @@ import { LogManager } from '../../core/infra/LogManager';
  * Prompt 加載器
  * 提供具備快取、錯誤處理與回退機制的 Prompt 讀取功能。
  */
+interface CacheEntry {
+  content: string;
+  timestamp: number;
+}
+
 export class PromptLoader {
-  private static cache: Map<string, string> = new Map();
+  private static cache: Map<string, CacheEntry> = new Map();
+  private static readonly TTL_MS = 60000; // 60 seconds
 
   /**
-   * 加載 Prompt 檔案內容
+   * 加載 Prompt 檔案內容 (附帶 TTL 快取機制)
    * @param relativePath 相對於項目根目錄的路徑
    * @param fallback 當讀取失敗時的回退文本
    */
   public static load(relativePath: string, fallback: string = ""): string {
     const absolutePath = path.resolve(process.cwd(), relativePath);
+    const now = Date.now();
 
-    // 1. 檢查快取
-    if (this.cache.has(absolutePath)) {
-      return this.cache.get(absolutePath)!;
+    // 1. 檢查快取及 TTL
+    const cached = this.cache.get(absolutePath);
+    if (cached && (now - cached.timestamp < this.TTL_MS)) {
+      return cached.content;
     }
 
     try {
@@ -33,7 +41,7 @@ export class PromptLoader {
 
       // 3. 讀取內容
       const content = fs.readFileSync(absolutePath, 'utf-8');
-      this.cache.set(absolutePath, content);
+      this.cache.set(absolutePath, { content, timestamp: now });
       return content;
     } catch (error: any) {
       LogManager.recorder.error(`[PromptLoader] Failed to read prompt at ${absolutePath}: ${error.message}`, { type: 'SYSTEM' });
