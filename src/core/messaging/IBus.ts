@@ -1,3 +1,4 @@
+import { ContextOverride } from '../agent/BaseAgent';
 import { DataBlock } from './DataBlock';
 
 /**
@@ -98,13 +99,7 @@ export interface GlobalEventMap {
     [HookEvent.BeforeToolCall]: { toolName: string; args: any };
     [HookEvent.AfterToolCall]: { toolName: string; result: any };
     [HookEvent.OnToolError]: { toolName: string; error: string };
-    [HookEvent.BeforeAgentStep]: { 
-        agentId: string; 
-        remoteControllerId?: string | null;
-        injectedPrompts: IPromptSection[];
-        overrideProfile?: any;
-        overridePreset?: string;
-    };
+    [HookEvent.BeforeAgentStep]: ContextOverride;
     [HookEvent.AfterAgentStep]: { agentId: string };
     [HookEvent.OnAgentError]: { agentId: string; error: string };
     [HookEvent.BeforeTaskExecute]: { taskId: string };
@@ -116,7 +111,7 @@ export interface GlobalEventMap {
     [AgentEvent.AgentStateChanged]: { agentId: string; oldState: string; newState: string };
     [AgentEvent.WorldUpdated]: { agentId: string; worldState: string };
     [AgentEvent.EmotionTriggered]: { impacts: any };
-    [AgentEvent.ProjectionToggled]: { targetAgentId: string; controllerId: string | null };
+    [AgentEvent.ProjectionToggled]: { targetAgentId: string; controllerId: string; enable: boolean };
 
     // --- 允許自定義擴充事件 ---
     [key: string]: any;

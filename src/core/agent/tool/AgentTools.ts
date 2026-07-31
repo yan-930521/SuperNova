@@ -48,7 +48,8 @@ export class ToggleProjectionTool extends BaseTool {
             sessionId: context.sessionId,
             payload: {
                 targetAgentId: args.targetId,
-                controllerId: args.enable ? context.agentId : null
+                controllerId: context.agentId,
+                enable: args.enable
             }
         });
 
