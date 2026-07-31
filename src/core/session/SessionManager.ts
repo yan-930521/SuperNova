@@ -1,12 +1,13 @@
 import { AgentManager } from '../agent/AgentManager';
 import { AgentState, AgentType } from '../agent/BaseAgent';
+import { ProjectionHandler } from '../agent/ProjectionHandler';
 import { Config } from '../config/Config';
 import { LogManager } from '../infra/LogManager';
 import { ISessionRepository } from '../infra/persistence';
 import { IAgentStateRepository, IDataBlockRepository } from '../infra/persistence/IRepository';
 import { IWorkspaceManager, WorkspaceType } from '../infra/persistence/IWorkspaceManager';
 import { ILifecycle } from '../lifecycle/ILifecycle';
-import { MessagePriority } from '../messaging/DataBlock';
+import { DataBlock, MessagePriority } from '../messaging/DataBlock';
 import { AgentEvent, IEvent, IEventBus } from '../messaging/IBus';
 import { IdGenerator } from '../utils/IdGenerator';
 import { Session, SessionState } from './Session';
@@ -43,6 +44,7 @@ export class SessionManager implements ILifecycle {
             // 統一監聽全局的 AgentMessage 進行派發與存檔
             this.eventBus.subscribe(AgentEvent.AgentMessage, this.handleAgentMessage.bind(this));
             this.eventBus.subscribe(AgentEvent.AgentStateChanged, this.handleAgentStateChanged.bind(this));
+            this.eventBus.subscribe(AgentEvent.ProjectionToggled, this.handleProjectionToggled.bind(this));
         } catch (err: any) {
             this.logger.error(`[SessionManager] Failed to initialize session repository: ${err.message}`);
         }
@@ -324,9 +326,44 @@ export class SessionManager implements ILifecycle {
         if (newState === 'IDLE') {
             const session = this.getSession(sessionId);
             if (session && session.getPendingSenders(agentId).length > 0) {
-                this.logger.info(`[SessionManager] Agent ${agentId} is IDLE and has pending messages. Triggering dispatch.`);
+                this.logger.info(`[SessionManager] Agent ${agentId} is IDLE and has pending messages.Triggering dispatch.`);
                 await this.dispatchInboxForAgent(session, agentId);
             }
+        }
+    }
+
+    /**
+     * 監聽投影狀態變更，並同步記錄在 Session Metadata 中
+     */
+    private async handleProjectionToggled(event: IEvent<AgentEvent.ProjectionToggled>): Promise<void> {
+        const { targetAgentId, controllerId, enable } = event.payload;
+        const sessionId = event.sessionId;
+
+        if (!sessionId) {
+            this.logger.warn(`[SessionManager] Ignored projection toggle: Missing sessionId.`);
+            return;
+        }
+
+        let session = this.getSession(sessionId);
+        if (!session) {
+            try {
+                session = await this.loadSession(sessionId);
+            } catch {
+                this.logger.warn(`[SessionManager] Ignored projection toggle for unknown session ${sessionId}`);
+                return;
+            }
+        }
+
+        if (enable) {
+            session.setProjectedBodyId(controllerId, targetAgentId);
+            this.logger.info(`[SessionManager] Projection started: ${controllerId} -> ${targetAgentId} in session`);
+        } else {
+            session.setProjectedBodyId(controllerId, null);
+            this.logger.info(`[SessionManager] Projection ended for ${controllerId} in session`);
+        }
+
+        if (this.sessionRepo.save) {
+            await this.sessionRepo.save(session);
         }
     }
 
@@ -335,97 +372,68 @@ export class SessionManager implements ILifecycle {
      * 負責判斷是否需要派生 Clone 或退回 Inbox 等待
      */
     private async dispatchInboxForAgent(session: Session, agentId: string): Promise<void> {
+        // TODO: 效能優化
         try {
             const mainAgent = await this.agentManager.rehydrate(agentId, session.id);
 
+            // 排隊機制：如果 Agent 正在忙碌，則不派發，讓訊息留在 Inbox 內。
+            // 系統會透過 handleAgentStateChanged 監聽 IDLE 事件並再次觸發 dispatch。
+            if (mainAgent.getState() === AgentState.BUSY) {
+                this.logger.debug(`[SessionManager] Agent ${agentId} is BUSY. Messages will be queued in inbox.`);
+                return;
+            }
+
             const pendingSenders = session.getPendingSenders(agentId);
+            if (pendingSenders.length === 0) return;
+
+            const messageBatches: DataBlock[][] = [];
+
             for (const senderId of pendingSenders) {
                 const messages = session.popFromInboxBySender(agentId, senderId);
                 if (messages.length === 0) continue;
 
                 // 優先度過濾：如果這批訊息全部都是 LOW 優先度，則不喚醒 Agent (靜默)
-                // 訊息已經在 handleAgentMessage 被寫入 Oplog，下次 Agent 醒來時還是會看到
                 const hasActionableMessage = messages.some(m => m.priority > MessagePriority.LOW);
                 if (!hasActionableMessage && messages.length < this.config.agent.force_wakeup_threshold) {
                     this.logger.debug(`[SessionManager] Ignored ${messages.length} LOW priority messages for agent ${agentId} from ${senderId}. Agent will not be resumed.`);
                     for (const m of messages) {
                         session.pushToInbox(agentId, m);
                     }
-                    continue; // 跳過，等下次 IDLE 觸發
+                    continue;
                 }
 
-                let workerAgent = mainAgent;
-                const projectedBodyId = this.agentManager.getProjectedBodyId(agentId, session.id);
-
-                // 若本尊正在投影 (靈魂轉移)，直接將喚醒訊號與 Inbox 處理權交給軀殼！
-                if (projectedBodyId) {
-                    this.logger.info(`[SessionManager] Agent ${agentId} is projecting into ${projectedBodyId}. Routing inbox directly to EmbodiedAgent!`);
-                    workerAgent = await this.agentManager.rehydrate(projectedBodyId, session.id);
-                }
-                // 若本尊空閒，直接交由本尊處理
-                // (注意：若是我們改變了狀態，後續迴圈的下一個 sender 就會遇到 BUSY，從而觸發 Clone 或退回)
-                else if (mainAgent.status === 'IDLE' || mainAgent.status === 'SUSPENDED') {
-                    // workerAgent = mainAgent;
-                } else if (mainAgent.canClone) {
-                    // 檢查分身數量上限
-                    const activeClones = this.agentManager.getActiveCloneCount(mainAgent.id);
-                    const maxClones = this.config.agent?.max_clones_per_agent ?? 5;
-
-                    if (activeClones < maxClones) {
-                        // 本尊忙碌中，且未達分身上限 -> 派生 TaskAgent 分身！
-                        this.logger.info(`[SessionManager] Spawning clone for ${mainAgent.id} (Current clones: ${activeClones}/${maxClones})`);
-                        workerAgent = await this.agentManager.spawnAgent(
-                            AgentType.TASK,
-                            IdGenerator.agent('sub'),
-                            session.id,
-                            { isClone: true, parentAgent: mainAgent }
-                        );
-
-                        // 拷貝本尊的大腦設定 (Profile) 與工具集 (Tools)
-                        const parentProfile = mainAgent.getProfile();
-                        if (parentProfile) {
-                            workerAgent.setProfile(parentProfile);
-                        }
-                    } else {
-                        // 達到分身上限，強制退回 Inbox 排隊等待
-                        this.logger.warn(`[SessionManager] Clone limit reached for ${mainAgent.id} (${maxClones}). Queuing messages.`);
-                        for (const m of messages) {
-                            session.pushToInbox(agentId, m);
-                        }
-                        continue;
-                    }
-                } else {
-                    // 本尊忙碌，且不支援分身，只能乖乖放回 Inbox 排隊
-                    for (const m of messages) {
-                        session.pushToInbox(agentId, m);
-                    }
-                    continue; // 跳過，等下次 IDLE 觸發
-                }
-
-                // 判斷是否為剛才建立的臨時分身 (只有 TaskAgent 分身才需要在執行後銷毀)
-                const isTemporaryClone = workerAgent !== mainAgent && workerAgent.type === 'TASK';
-
-                // 獨立非同步並行處理 (不 await，讓它在背景跑)
-                const resumePromise = workerAgent.resume(messages).catch(e => {
-                    this.logger.error(`[SessionManager] Agent ${workerAgent.id} failed to resume: ${e}`);
-                }).finally(async () => {
-                    if (isTemporaryClone) {
-                        // 1. 合併分身的 Token 消耗與資源統計回本尊
-                        mainAgent.mergeUsage(workerAgent.getUsageStats());
-
-                        // 2. 併發分身處理完畢後，立即執行垃圾回收 (GC) 徹底銷毀
-                        await this.agentManager.terminateAgent(workerAgent.id);
-                    }
-
-                    // 3. 確保對話結束或分身合併後，將本尊的最新狀態 (如 Token 消耗量、歷史指針) 存檔
-                    await this.agentManager.saveAgent(mainAgent.id).catch(e => {
-                        this.logger.error(`[SessionManager] Failed to save main agent ${mainAgent.id} state: ${e}`);
-                    });
-
-                    this.activeTaskPromises.delete(resumePromise);
-                });
-                this.activeTaskPromises.add(resumePromise);
+                messageBatches.push(messages);
             }
+
+            if (messageBatches.length === 0) return;
+
+            let workerAgent = mainAgent;
+            const projectedBodyId = session.getProjectedBodyId(agentId);
+
+            // 若本尊正在投影 (靈魂轉移)，透過 ProjectionHandler 產生合成的執行器處理 Inbox
+            if (projectedBodyId) {
+                if (!mainAgent.projectionHandler || mainAgent.projectionHandler.body.id !== projectedBodyId) {
+                    this.logger.info(`[SessionManager] Agent ${agentId} is projecting into ${projectedBodyId}. Initializing stateful ProjectionHandler!`);
+                    const bodyAgent = await this.agentManager.rehydrate(projectedBodyId, session.id);
+                    mainAgent.projectionHandler = new ProjectionHandler(mainAgent, bodyAgent, this.dataBlockRepo);
+                }
+                workerAgent = mainAgent.projectionHandler as any;
+            } else {
+                mainAgent.projectionHandler = null;
+            }
+
+            // 獨立非同步並行處理 (不 await，讓它在背景跑)
+            const resumePromise = workerAgent.resume(messageBatches).catch(e => {
+                this.logger.error(`[SessionManager] Agent ${workerAgent.id} failed to resume: ${e}`);
+            }).finally(async () => {
+                // 確保對話結束後，將本尊的最新狀態 (如 Token 消耗量、歷史指針) 存檔
+                await this.agentManager.saveAgent(mainAgent.id).catch(e => {
+                    this.logger.error(`[SessionManager] Failed to save main agent ${mainAgent.id} state: ${e}`);
+                });
+
+                this.activeTaskPromises.delete(resumePromise);
+            });
+            this.activeTaskPromises.add(resumePromise);
 
             // 保存會話狀態 (更新 Inbox 狀態)
             await this.sessionRepo.save(session).catch(e => {

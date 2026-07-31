@@ -100,6 +100,31 @@ export class Session implements IEntity {
   }
 
   /**
+   * 取得某個 Agent (大腦) 目前正在投影控制的軀殼 ID
+   */
+  public getProjectedBodyId(controllerId: string): string | null {
+    if (this.metadata.projections && this.metadata.projections[controllerId]) {
+      return this.metadata.projections[controllerId];
+    }
+    return null;
+  }
+
+  /**
+   * 設定或清除某個 Agent (大腦) 的投影目標軀殼 ID
+   */
+  public setProjectedBodyId(controllerId: string, bodyId: string | null): void {
+    if (!this.metadata.projections) {
+      this.metadata.projections = {};
+    }
+    if (bodyId) {
+      this.metadata.projections[controllerId] = bodyId;
+    } else {
+      delete this.metadata.projections[controllerId];
+    }
+    this.touch();
+  }
+
+  /**
    * 取得特定 Agent 的 Inbox 中有哪些不同的發送者 (SenderId)
    */
   public getPendingSenders(agentId: string): string[] {
