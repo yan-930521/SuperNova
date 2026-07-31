@@ -30,7 +30,7 @@ export class ReadFileTool extends BaseTool {
 
 export class ReadBlobTool extends BaseTool {
   public readonly name = 'read_blob';
-  public readonly description = 'Read the full content of a large data blob using its blobId. Use this when you see <Pointer: blob_xxx> in the payload.';
+  public readonly description = 'Read the full content of a compressed data blob. WARNING: DO NOT call this tool unless you explicitly see a `<Pointer: blob_xxx>` string in your recent message logs! If you just want to read a normal file in the workspace, you MUST use `read_file` instead.';
   public readonly schema = z.object({
     blobId: z.string().describe('The ID of the blob to read, e.g., blob_1a2b3c'),
   });

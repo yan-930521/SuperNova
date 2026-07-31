@@ -12,9 +12,28 @@ import { IDataBlockRepository, IEntity } from '../infra/persistence/IRepository'
 import { WorkspaceType } from '../infra/persistence/IWorkspaceManager';
 import { ConsoleTransport } from '../infra/transports/ConsoleTransport';
 import { FileTransport } from '../infra/transports/FileTransport';
-import { DataBlock } from '../messaging/DataBlock';
-import { AgentEvent, IEventBus } from '../messaging/IBus';
+import { DataBlock, MessagePriority } from '../messaging/DataBlock';
+import {
+    AgentEvent, HookEvent, IEventBus, IPromptSection, PromptSectionIndex
+} from '../messaging/IBus';
 import { BaseTool } from './tool/BaseTool';
+
+/** 代理人內部狀態與情緒載體 */
+export interface EmotionalState {
+    // 基礎資源
+    energy: number;       // 能量值 (0-100)，隨時間或運算消耗
+    intimacy: number;     // 親密度/好感度 (Affinity) (0-100)
+
+    // 具體情緒維度 (0-100)
+    joy: number;          // 喜悅
+    distress: number;     // 難過/痛苦
+    anxiety: number;      // 焦慮
+    fear: number;         // 恐懼
+    pride: number;        // 驕傲/成就感
+    stress: number;       // 壓力
+    excitement: number;   // 興奮
+    socialNeed: number;   // 社交需求/孤單感
+}
 
 /**
  * 代理人結構化身份與認知設定檔 (Cognitive Architecture Profile)
@@ -32,6 +51,10 @@ export interface AgentProfile {
     capabilities?: string[];
     /** 預期的回覆格式或結構 (例如：必須輸出為 JSON) */
     outputFormat?: string;
+    /** 行動準則 (例如：如何操作工具或應對特定狀況) */
+    action_guidelines?: string[];
+    /** 指定該 Agent 偏好的 LLM Preset (若未指定則使用 default_preset) */
+    llmPreset?: string;
 }
 
 /**
@@ -39,7 +62,7 @@ export interface AgentProfile {
  */
 export enum AgentType {
     MAIN = 'MAIN',
-    SUB = 'SUB',
+    TASK = 'TASK',
     EMBODIED = 'EMBODIED'
 }
 
@@ -58,9 +81,13 @@ export interface BaseAgentData extends IEntity {
         durationMs: number;
     };
     readonly timestamp: number;
-    readonly isClone?: boolean;
+    readonly isClone: boolean;
     readonly parentAgentId?: string;
+    readonly remoteControllerId?: string | null;
+    readonly projectedBodyId?: string | null;
+    readonly projectionStartTime?: number;
     readonly profile?: AgentProfile;
+    readonly emotionalState?: EmotionalState;
     readonly workspaceType?: WorkspaceType;
 }
 
@@ -76,6 +103,8 @@ export enum AgentState {
     BUSY = 'BUSY',
     /** 掛起中，主動釋放資源 */
     SUSPENDED = 'SUSPENDED',
+    /** 意識投影中 (靈魂不在體內，不處理自身 Inbox) */
+    PROJECTING = 'PROJECTING',
     /** 已安全銷毀 */
     TERMINATED = 'TERMINATED'
 }
@@ -93,10 +122,14 @@ export interface UsageStats {
  * Agent 建構選項
  */
 export interface AgentOptions {
+    remoteControllerId?: string;
+    /** 當前正在接管的軀殼 ID (僅限主大腦投影時) */
+    projectedBodyId?: string;
     workspacePath?: string;
     workspaceType?: WorkspaceType;
     parentAgent?: BaseAgent;
     isClone?: boolean;
+    agentManager?: any; // 注入 AgentManager 供動態存取
 }
 
 /**
@@ -118,8 +151,18 @@ export abstract class BaseAgent {
     /** 結構化身份設定 */
     protected profile?: AgentProfile;
 
-    /** 附加的環境上下文提示詞 */
-    protected envPrompt?: string;
+    /** 動態內部情感與狀態 (OCC 情緒模型) */
+    protected emotionalState?: EmotionalState;
+
+    /** 物理世界感官狀態快取 (來自 WorldUpdated 事件) */
+    protected envState: string = '';
+    public getEnvState(): string { return this.envState; }
+
+    /** 意識投影控制器 (如果被接管，此值為接管者的 ID) */
+    public remoteControllerId: string | null = null;
+    public projectedBodyId: string | null = null;
+    public projectionStartTime: number = 0;
+    protected projectedEnvState: string = '';
 
     /** 資源消耗累積統計 */
     protected usageStats: UsageStats = { promptTokens: 0, completionTokens: 0, durationMs: 0 };
@@ -131,6 +174,7 @@ export abstract class BaseAgent {
     protected readonly stateFilePath: string; // 為了與原先代碼相容保留
     protected readonly isClone: boolean;
     protected readonly parentAgentId?: string;
+    protected readonly agentManager?: any;
 
     private llmInstances = new Map<string, BaseChatModel>();
 
@@ -159,6 +203,7 @@ export abstract class BaseAgent {
         this.workspaceType = options?.workspaceType || 'PERSISTENT';
         this.isClone = options?.isClone || false;
         this.parentAgentId = options?.parentAgent?.id;
+        this.agentManager = options?.agentManager;
 
         // 記憶共享與隔離邏輯
         if (this.isClone && options?.parentAgent) {
@@ -178,6 +223,52 @@ export abstract class BaseAgent {
 
         this.logger.addTransport(new FileTransport('DEBUG', this.oplogDir, this.config.storage.oplog_file));
         this.logger.info(`Initializing agent: ${this.id} under session: ${this.sessionId}`);
+
+        // 統一呼叫 Hook 註冊，確保所有繼承的 Agent 都在基礎建設就緒後掛載監聽器
+        this.setupHooks();
+    }
+
+    /**
+     * 註冊 Agent 專屬的 Hooks
+     * 預設為空，供子類別 Override 來實作各自的事件監聽邏輯
+     */
+    protected setupHooks(): void {
+        this.eventBus.subscribe(AgentEvent.WorldUpdated, (event) => {
+            if (event.payload.agentId === this.id) {
+                this.envState = event.payload.worldState;
+            } else if (event.payload.agentId === this.projectedBodyId) {
+                this.projectedEnvState = event.payload.worldState;
+            }
+        });
+
+        this.eventBus.subscribe(AgentEvent.ProjectionToggled, async (event) => {
+            if (event.sessionId !== this.sessionId) return;
+            
+            // 我是被接管的軀殼
+            if (event.payload.targetAgentId === this.id) {
+                this.remoteControllerId = event.payload.controllerId;
+                if (this.remoteControllerId) {
+                    this.logger.info(`Consciousness hijacked by remote controller: ${this.remoteControllerId}`);
+                } else {
+                    this.logger.info(`Consciousness restored to local autonomy.`);
+                }
+            }
+            // 我是發動接管的大腦 (正在啟動投影)
+            else if (event.payload.controllerId === this.id) {
+                this.projectedBodyId = event.payload.targetAgentId;
+                this.projectionStartTime = Date.now();
+                this.setState(AgentState.PROJECTING);
+                this.logger.info(`Consciousness projected into ${this.projectedBodyId}. My body is now dormant.`);
+            }
+            // 我是發動接管的大腦 (正在結束投影)
+            else if (event.payload.controllerId === null && this.projectedBodyId === event.payload.targetAgentId) {
+                this.logger.info(`Consciousness returned from avatar.`);
+                this.projectedBodyId = null;
+                this.projectedEnvState = '';
+                this.projectionStartTime = 0;
+                this.setState(AgentState.IDLE);
+            }
+        });
     }
 
     // ==========================================
@@ -242,38 +333,79 @@ export abstract class BaseAgent {
         return this.profile;
     }
 
-    public setEnvPrompt(prompt: string): void {
-        this.envPrompt = prompt;
+    public getTools(): BaseTool[] {
+        return this.tools;
     }
 
+
+
     /**
-     * 將結構化的 JSON Profile 渲染為 LLM 可理解的 System Prompt 文字
+     * 將結構化的 JSON Profile 渲染為帶有順序索引的 Prompt 區塊陣列
      */
-    protected formatProfileToSystemPrompt(): string {
-        if (!this.profile) {
-            return 'You are a helpful autonomous agent.';
+    protected buildProfilePromptSections(targetProfile?: AgentProfile): IPromptSection[] {
+        const profile = targetProfile || this.profile;
+        if (!profile) {
+            return [{
+                index: PromptSectionIndex.SYSTEM_CORE,
+                content: 'You are a helpful autonomous agent.'
+            }];
         }
 
-        let prompt = `## IDENTITY\n${this.profile.identity}\n\n`;
-        prompt += `## MISSION\n${this.profile.mission}\n\n`;
+        const sections: IPromptSection[] = [];
 
-        if (this.profile.principles && this.profile.principles.length > 0) {
-            prompt += `## PRINCIPLES (CRITICAL)\n`;
-            this.profile.principles.forEach(p => prompt += `- ${p}\n`);
-            prompt += `\n`;
+        if (profile.mission || profile.principles) {
+            let corePrompt = '';
+            if (profile.mission) corePrompt += `## MISSION\n${profile.mission}\n\n`;
+            if (profile.principles && profile.principles.length > 0) {
+                corePrompt += `## PRINCIPLES (CRITICAL)\n`;
+                profile.principles.forEach(p => corePrompt += `- ${p}\n`);
+            }
+            sections.push({ index: PromptSectionIndex.SYSTEM_CORE, content: corePrompt.trim() });
         }
 
-        if (this.profile.capabilities && this.profile.capabilities.length > 0) {
-            prompt += `## CAPABILITIES\n`;
-            this.profile.capabilities.forEach(c => prompt += `- ${c}\n`);
-            prompt += `\n`;
+        if (this.envState) {
+            sections.push({
+                index: PromptSectionIndex.ENVIRONMENT_STATE,
+                content: `${this.envState}`
+            });
         }
 
-        if (this.profile.outputFormat) {
-            prompt += `## OUTPUT FORMAT REQUIREMENTS\n${this.profile.outputFormat}\n\n`;
+        if (this.projectedBodyId && this.projectedEnvState) {
+            sections.push({
+                index: PromptSectionIndex.ENVIRONMENT_STATE + 0.1,
+                content: `[PROJECTION SENSORY (${this.projectedBodyId})]\n${this.projectedEnvState}`
+            });
         }
 
-        return prompt.trim();
+        if (profile.identity) {
+            sections.push({
+                index: PromptSectionIndex.IDENTITY,
+                content: `## IDENTITY\n${profile.identity}`
+            });
+        }
+
+        if (profile.capabilities || profile.action_guidelines) {
+            let tacticalPrompt = '';
+            if (profile.capabilities && profile.capabilities.length > 0) {
+                tacticalPrompt += `## CAPABILITIES\n`;
+                profile.capabilities.forEach(c => tacticalPrompt += `- ${c}\n`);
+                tacticalPrompt += `\n`;
+            }
+            if (profile.action_guidelines && profile.action_guidelines.length > 0) {
+                tacticalPrompt += `## ACTION GUIDELINES\n`;
+                profile.action_guidelines.forEach(g => tacticalPrompt += `- ${g}\n`);
+            }
+            sections.push({ index: PromptSectionIndex.TACTICAL_GUIDELINE, content: tacticalPrompt.trim() });
+        }
+
+        if (profile.outputFormat) {
+            sections.push({
+                index: PromptSectionIndex.TOOL_USAGE,
+                content: `## OUTPUT FORMAT REQUIREMENTS\n${profile.outputFormat}`
+            });
+        }
+
+        return sections;
     }
 
     // ==========================================
@@ -300,30 +432,93 @@ export abstract class BaseAgent {
     /**
      * 預設的業務處理邏輯 (處理收到的 DataBlock)
      * 從歷史還原上下文、格式化 Prompt、呼叫 LLM，最後將結果回覆給最後一個發送者。
-     * 子類別可依需求 Override (例如 SubAgent 實作 PDCA)
+     * 子類別可依需求 Override (例如 TaskAgent 實作 PDCA)
      */
     protected async processInbox(messages: DataBlock[]): Promise<void> {
         this.logger.info(`Processing ${messages.length} messages.`);
+        
+        // TODO: 效能優化
 
-        // 1. 從倉儲載入完整對話歷史 (包含剛被 SessionManager 寫入的最新 DataBlock)
+        // 1. 從倉儲載入完整對話歷史
+        let allHistoryBlocks = await this.dataBlockRepo.findByAgent(this.sessionId, this.isClone && this.parentAgentId ? this.parentAgentId : this.id);
+
+        // 如果目前處於接管狀態，產生的新記憶與回覆歸屬於軀殼自己，等待結束時再由大腦主動 Sync 回去
         const historyTargetId = this.isClone && this.parentAgentId ? this.parentAgentId : this.id;
-        const allHistoryBlocks = await this.dataBlockRepo.findByAgent(this.sessionId, historyTargetId);
-        const historyMessages = allHistoryBlocks.map((m: DataBlock<any>) => m.toMessage(this.id));
+
+        // 如果目前是軀殼且被接管，主動合併大腦記憶並借用大腦的人設與工具
+        let effectiveProfile = this.profile;
+        let effectiveTools = this.tools;
+        let effectivePreset = this.profile?.llmPreset;
+
+        if (this.remoteControllerId) {
+            this.logger.info(`Consciousness is projected by ${this.remoteControllerId}. Fetching controller memory and profile...`);
+            
+            // 透過 AgentManager 取得大腦的實體
+            if (this.agentManager) {
+                const controller = this.agentManager.getAgent(this.remoteControllerId);
+                if (controller) {
+                    effectiveProfile = controller.getProfile() || effectiveProfile;
+                    effectivePreset = effectiveProfile?.llmPreset;
+                    // 將大腦的工具借走，並與軀殼原本環境專屬的工具合併
+                    effectiveTools = [...this.tools, ...controller.getTools()];
+                }
+            }
+
+            // 合併大腦與軀殼的歷史記憶
+            const controllerBlocks = await this.dataBlockRepo.findByAgent(this.sessionId, this.remoteControllerId);
+            allHistoryBlocks = [...allHistoryBlocks, ...controllerBlocks].sort((a, b) => a.timestamp - b.timestamp);
+        }
+
+        // 應用 max_context_window 限制歷史訊息長度，避免超出 LLM Token 上限
+        const maxWindow = this.config.agent.max_context_window;
+        if (allHistoryBlocks.length > maxWindow) {
+            allHistoryBlocks = allHistoryBlocks.slice(-maxWindow);
+            this.logger.debug(`Context window truncated to latest ${maxWindow} messages.`);
+        }
+
+        const saveTokens = this.config.agent.save_tokens;
+        const uncompressedTail = this.config.agent.uncompressed_tail;
+
+        const shouldCompress = (index: number) => {
+            return saveTokens && (index < allHistoryBlocks.length - uncompressedTail);
+        }
+
+        const historyMessages = allHistoryBlocks.map((m: DataBlock<any>, index: number) => {
+            return m.toMessage(this.id, shouldCompress(index));
+        });
 
         this.logger.debug(`Aggregated input for LLM: ${historyMessages.length} historical messages`);
 
-        // 2. 利用基礎設施轉譯為 LangChain Messages
-        const systemPrompt = this.formatProfileToSystemPrompt();
-        const lcMessages = await this.compileMessages(systemPrompt, undefined, {}, { 
-            history: historyMessages,
-            envPrompt: this.envPrompt 
+        // 觸發 BEFORE_AGENT_STEP Hook，允許外部或本身注入額外的 Context 與覆寫人設
+        const contextPayload = {
+            agentId: this.id,
+            remoteControllerId: this.remoteControllerId,
+            injectedPrompts: [] as IPromptSection[]
+        };
+        await this.eventBus.publishAsync({
+            type: HookEvent.BeforeAgentStep,
+            timestamp: Date.now(),
+            sessionId: this.sessionId,
+            payload: contextPayload
+        });
+
+        // 2. 組合所有 Prompt (靜態設定 + 動態 Hook 注入)
+        const staticSections = this.buildProfilePromptSections(effectiveProfile);
+        const allSections = [...staticSections, ...contextPayload.injectedPrompts];
+
+        // 依 index 嚴格排序
+        allSections.sort((a, b) => a.index - b.index);
+        const systemPrompt = allSections.map(p => p.content).join('\n\n');
+
+        const lcMessages = await this.compileMessages(systemPrompt, undefined, {}, {
+            history: historyMessages
         });
 
         // 3. 呼叫模型
         this.logger.debug(`Invoking LLM...`);
-        const replyText = await this.callModel(lcMessages);
+        const replyText = await this.callModel(lcMessages, { presetName: effectivePreset, overrideTools: effectiveTools });
 
-        this.logger.debug(`LLM Response: ${replyText}`);
+        this.logger.debug(`LLM Respond.`);
 
         // 4. 將決策傳回給最後的發送者
         const lastMessage = messages[messages.length - 1];
@@ -356,7 +551,6 @@ export abstract class BaseAgent {
         userTemplate?: string,
         variables: Record<string, any> = {},
         options?: {
-            envPrompt?: string;
             history?: BaseMessage[];
         }
     ): Promise<BaseMessage[]> {
@@ -365,12 +559,7 @@ export abstract class BaseAgent {
         // 1. 系統提示詞
         promptTemplates.push(['system', systemTemplate]);
 
-        // 2. 注入具身智能環境上下文 (若有)
-        if (options?.envPrompt) {
-            promptTemplates.push(['system', `[ENVIRONMENT CONTEXT]\n${options.envPrompt}`]);
-        }
-
-        // 3. 建立 ChatPromptTemplate
+        // 2. 建立 ChatPromptTemplate
         const chatPrompt = ChatPromptTemplate.fromMessages(promptTemplates);
         const formattedMessages = await chatPrompt.formatMessages(variables);
 
@@ -402,6 +591,7 @@ export abstract class BaseAgent {
         options?: {
             maxRetries?: number;
             presetName?: string;
+            overrideTools?: BaseTool[];
         }
     ): Promise<string> {
         const presetName = options?.presetName ?? this.config.llm.default_preset;
@@ -415,10 +605,12 @@ export abstract class BaseAgent {
         const startTime = Date.now();
         try {
             let finalMessage: AIMessage;
+            const activeTools = options?.overrideTools ? options.overrideTools : this.tools;
 
-            if (this.tools.length > 0) {
-                if (!this.cachedReactAgent) {
-                    const lcTools = this.tools.map(t => t.toLangChainTool({
+            if (activeTools.length > 0) {
+                // 如果有注入 overrideTools，強制不使用快取的 ReactAgent
+                if (!this.cachedReactAgent || options?.overrideTools) {
+                    const lcTools = activeTools.map(t => t.toLangChainTool({
                         sessionId: this.sessionId,
                         agentId: this.id,
                         eventBus: this.eventBus
@@ -428,7 +620,7 @@ export abstract class BaseAgent {
                         model: modelWithRetry,
                         tools: lcTools
                     });
-                    this.logger.debug(`Compiled and cached new ReactAgent with ${lcTools.length} tools.`);
+                    this.logger.debug(`Compiled new ReactAgent with ${lcTools.length} tools.`);
                 }
 
                 const result = await this.cachedReactAgent.invoke({ messages });
@@ -506,7 +698,7 @@ export abstract class BaseAgent {
         const oldState = this.state;
         this.logger.debug(`State transition: ${oldState} -> ${newState}`);
         this.state = newState;
-        
+
         // 發布狀態改變事件，讓 SessionManager 等外部控制器能進行 Inbox 檢查與資源回收
         this.eventBus.publish({
             type: AgentEvent.AgentStateChanged,
@@ -543,7 +735,11 @@ export abstract class BaseAgent {
             isClone: this.isClone,
             parentAgentId: this.parentAgentId,
             profile: this.profile ? JSON.parse(JSON.stringify(this.profile)) : undefined,
-            workspaceType: this.workspaceType
+            emotionalState: this.emotionalState ? JSON.parse(JSON.stringify(this.emotionalState)) : undefined,
+            workspaceType: this.workspaceType,
+            remoteControllerId: this.remoteControllerId,
+            projectedBodyId: this.projectedBodyId,
+            projectionStartTime: this.projectionStartTime
         };
     }
 
@@ -558,6 +754,18 @@ export abstract class BaseAgent {
         this.usageStats = data.usageStats ? { ...data.usageStats } : { promptTokens: 0, completionTokens: 0, durationMs: 0 };
         if (data.profile) {
             this.profile = JSON.parse(JSON.stringify(data.profile));
+        }
+        if (data.emotionalState) {
+            this.emotionalState = JSON.parse(JSON.stringify(data.emotionalState));
+        }
+        if (data.remoteControllerId !== undefined) {
+            this.remoteControllerId = data.remoteControllerId;
+        }
+        if (data.projectedBodyId !== undefined) {
+            this.projectedBodyId = data.projectedBodyId;
+        }
+        if (data.projectionStartTime !== undefined) {
+            this.projectionStartTime = data.projectionStartTime;
         }
         this.logger.debug(`Agent state hydrated from snapshot.`);
     }

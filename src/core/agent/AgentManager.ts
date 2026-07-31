@@ -3,11 +3,13 @@ import { LogManager } from '../infra/LogManager';
 import { IWorkspaceManager } from '../infra/persistence';
 import { IAgentStateRepository, IDataBlockRepository } from '../infra/persistence/IRepository';
 import { ILifecycle } from '../lifecycle/ILifecycle';
-import { IEventBus } from '../messaging/IBus';
+import { HookEvent, IEvent, IEventBus } from '../messaging/IBus';
+import { BaseTool } from './';
 import { AgentOptions, AgentType, BaseAgent } from './BaseAgent';
 import { EmbodiedAgent } from './EmbodiedAgent';
 import { MainAgent } from './MainAgent';
-import { SubAgent } from './SubAgent';
+import { TaskAgent } from './TaskAgent';
+import { SendMessageTool, ToggleProjectionTool } from './tool/AgentTools';
 
 /**
  * 代理人管理器 (AgentManager)
@@ -33,6 +35,31 @@ export class AgentManager implements ILifecycle {
 
     public async initialize(): Promise<void> {
         this.logger.info('[AgentManager] Initialized.');
+
+        // 註冊全局 Hook，在每個 Agent 思考前注入隊友狀態
+        this.eventBus.subscribe(HookEvent.BeforeAgentStep, async (event: IEvent<HookEvent.BeforeAgentStep>) => {
+            const payload = event.payload;
+            if (!payload || !payload.agentId || !payload.injectedPrompts) return;
+
+            const agentId = payload.agentId;
+            const agent = this.activeAgents.get(agentId);
+            if (!agent) return;
+
+            const teamMembers = [];
+            for (const [id, a] of this.activeAgents.entries()) {
+                if (a.sessionId === agent.sessionId && id !== agentId) {
+                    teamMembers.push(`- [${id}] (Type: ${a.type})`);
+                }
+            }
+
+            if (teamMembers.length > 0) {
+                payload.injectedPrompts.push({
+                    index: 4.5, // 介於 ENVIRONMENT_STATE(4) 與 EMOTIONAL_STATE(5) 之間
+                    content: `[NETWORK STATE]\nActive Agents in your session that you can communicate with:\n${teamMembers.join('\n')}`
+                });
+            }
+
+        });
     }
 
     public async start(): Promise<void> {
@@ -63,13 +90,14 @@ export class AgentManager implements ILifecycle {
         sessionId: string,
         options?: AgentOptions
     ): BaseAgent {
+        const mergedOptions = { ...options, agentManager: this };
         switch (type) {
             case AgentType.MAIN:
-                return new MainAgent(id, sessionId, this.eventBus, this.config, this.dataBlockRepo, options);
-            case AgentType.SUB:
-                return new SubAgent(id, sessionId, this.eventBus, this.config, this.dataBlockRepo, options);
+                return new MainAgent(id, sessionId, this.eventBus, this.config, this.dataBlockRepo, mergedOptions);
+            case AgentType.TASK:
+                return new TaskAgent(id, sessionId, this.eventBus, this.config, this.dataBlockRepo, mergedOptions);
             case AgentType.EMBODIED:
-                return new EmbodiedAgent(id, sessionId, this.eventBus, this.config, this.dataBlockRepo, options);
+                return new EmbodiedAgent(id, sessionId, this.eventBus, this.config, this.dataBlockRepo, mergedOptions);
             default:
                 throw new Error(`[AgentManager] Unsupported AgentType: ${type}`);
         }
@@ -96,19 +124,30 @@ export class AgentManager implements ILifecycle {
 
         try {
             // 掛載工作區與工具
-            await this.workspaceManager.initWorkspace(sessionId, id);
-            agent.updateTools(this.workspaceManager.loadTools(sessionId, id));
+            const parentAgentId = options?.parentAgent?.id;
+            const workspaceType = options?.workspaceType || 'PERSISTENT';
+            await this.workspaceManager.initWorkspace(sessionId, id, workspaceType as any, { parentAgentId });
+
+            const tools: BaseTool[] = [];
+
+            if (type === AgentType.MAIN) {
+                tools.push(new ToggleProjectionTool());
+            }
+
+            if (type === AgentType.MAIN || type === AgentType.TASK) {
+                tools.push(...this.workspaceManager.loadTools(sessionId, id));
+            }
+            tools.push(new SendMessageTool());
+
+            agent.updateTools(tools);
 
             // 初始化完成，切換為就緒狀態
             agent.setReady();
 
             // 初始存檔
-            const data = agent.serialize();
-            await this.stateRepo.saveAgentState(sessionId, id, data, {
-                isClone: data.isClone,
-                parentAgentId: data.parentAgentId
-            });
+            await this.saveAgent(id);
         } catch (err) {
+            await agent.destroy();
             this.activeAgents.delete(id);
             throw err;
         }
@@ -130,17 +169,34 @@ export class AgentManager implements ILifecycle {
         // 呼叫實體方法進入掛起狀態，但不直接做檔案 I/O
         agent.suspend();
 
-        // 序列化並存檔
+        // 寫入持久化
+        try {
+            await this.saveAgent(agentId);
+        } finally {
+            // 實體銷毀並從池中移除
+            await agent.destroy();
+            this.activeAgents.delete(agentId);
+        }
+        this.logger.debug(`[AgentManager] Agent ${agentId} dehydrated.`);
+    }
+
+    /**
+     * 儲存特定 Agent 的狀態快照，但不掛起/銷毀它
+     * 適用於對話進行中、工具執行完畢後的即時存檔
+     */
+    public async saveAgent(agentId: string): Promise<void> {
+        const agent = this.activeAgents.get(agentId);
+        if (!agent) {
+            this.logger.warn(`[AgentManager] Cannot save agent ${agentId}, not found in active pool.`);
+            return;
+        }
+
         const data = agent.serialize();
         await this.stateRepo.saveAgentState(agent.sessionId, agentId, data, {
             isClone: data.isClone,
             parentAgentId: data.parentAgentId
         });
-
-        // 實體銷毀並從池中移除
-        await agent.destroy();
-        this.activeAgents.delete(agentId);
-        this.logger.debug(`[AgentManager] Agent ${agentId} dehydrated.`);
+        this.logger.debug(`[AgentManager] Agent ${agentId} state saved.`);
     }
 
     /**
@@ -176,6 +232,18 @@ export class AgentManager implements ILifecycle {
         return count;
     }
 
+    public getAgent(agentId: string): BaseAgent | undefined {
+        return this.activeAgents.get(agentId);
+    }
+
+    public getProjectedBodyId(agentId: string, sessionId: string): string | null {
+        const agent = this.activeAgents.get(agentId);
+        if (agent && agent.sessionId === sessionId) {
+            return agent.projectedBodyId;
+        }
+        return null;
+    }
+
     /**
      * 喚醒 (從持久化讀取並還原到記憶體)
      */
@@ -201,8 +269,18 @@ export class AgentManager implements ILifecycle {
         agent.hydrate(data);
 
         // 掛載工作區與工具
-        await this.workspaceManager.initWorkspace(sessionId, agentId);
-        agent.updateTools(this.workspaceManager.loadTools(sessionId, agentId));
+        await this.workspaceManager.initWorkspace(sessionId, agentId, data.workspaceType || 'PERSISTENT', { parentAgentId: data.parentAgentId });
+
+        const tools: any[] = [];
+        if (data.type === AgentType.MAIN) {
+            tools.push(new ToggleProjectionTool());
+        }
+        if (data.type === AgentType.MAIN || data.type === AgentType.TASK) {
+            tools.push(...this.workspaceManager.loadTools(sessionId, agentId));
+        }
+        tools.push(new SendMessageTool());
+
+        agent.updateTools(tools);
 
         // 加回活躍池
         this.activeAgents.set(agentId, agent);

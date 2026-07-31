@@ -1,6 +1,6 @@
 export * from './BaseAgent';
 export * from './MainAgent';
-export * from './SubAgent';
+export * from './TaskAgent';
 export * from './EmbodiedAgent';
 export * from './AgentManager';
 export * from './tool/BaseTool';
