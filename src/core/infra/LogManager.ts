@@ -31,7 +31,6 @@ export interface ILogEntry {
     trace_id?: string;
     task_id?: string;
     span_id?: string;       // 新增：當前執行片段 ID
-    parent_span_id?: string; // 新增：父執行片段 ID
     message: string;
     payload?: any;          // 原始數據
 }

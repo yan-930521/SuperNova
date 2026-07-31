@@ -1,4 +1,4 @@
-import { WorkspaceType, WorkspaceOptions } from './IWorkspaceManager';
+import { WorkspaceType } from './IWorkspaceManager';
 
 /**
  * 儲存驅動者介面 (IStorageDriver)
@@ -16,10 +16,9 @@ export interface IStorageDriver {
    * @param sessionId 會話 ID
    * @param agentId 代理/任務 ID
    * @param type 類型
-   * @param options 初始化選項 (如 parentAgentId)
    * @returns 該儲存路徑的絕對路徑
    */
-  init(sessionId: string, agentId: string, type: WorkspaceType, options?: WorkspaceOptions): Promise<string>;
+  init(sessionId: string, agentId: string, type: WorkspaceType): Promise<string>;
 
   /**
    * 寫入檔案

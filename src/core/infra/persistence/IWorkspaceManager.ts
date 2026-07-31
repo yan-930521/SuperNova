@@ -2,10 +2,6 @@ import { BaseTool } from '../../agent/tool/BaseTool';
 
 export type WorkspaceType = 'VOLATILE' | 'PERSISTENT';
 
-export interface WorkspaceOptions {
-  parentAgentId?: string;
-}
-
 /**
  * 工作區與版本控制管理器介面 (WorkspaceManager)
  * 負責為每個 Session 建立、管理隔離的雙層工作區。
@@ -16,10 +12,9 @@ export interface IWorkspaceManager {
    * @param sessionId 會話 ID (Session 中央倉庫)
    * @param agentId 代理/任務 ID (若為 Session 根倉庫，可與 sessionId 相同或省略)
    * @param type 工作區類型
-   * @param options 初始化選項 (例如從哪個 parentAgentId 分支)
    * @returns 該專屬工作區的絕對路徑
    */
-  initWorkspace(sessionId: string, agentId: string, type: WorkspaceType, options?: WorkspaceOptions): Promise<string>;
+  initWorkspace(sessionId: string, agentId: string, type: WorkspaceType): Promise<string>;
 
   /**
    * 檢查該 Session 的工作空間是否存在且完整

@@ -3,7 +3,7 @@ import * as path from 'path';
 
 import { LogManager } from '../../LogManager';
 import { IStorageDriver } from '../IStorageDriver';
-import { WorkspaceType, WorkspaceOptions } from '../IWorkspaceManager';
+import { WorkspaceType } from '../IWorkspaceManager';
 
 /**
  * 記憶體虛擬檔案系統 (VOLATILE) 儲存驅動器
@@ -17,7 +17,7 @@ export class MemoryVfsStorageDriver implements IStorageDriver {
   /**
    * 初始化虛擬工作區目錄
    */
-  public async init(sessionId: string, agentId: string, type: WorkspaceType, options?: WorkspaceOptions): Promise<string> {
+  public async init(sessionId: string, agentId: string, type: WorkspaceType): Promise<string> {
     if (type !== 'VOLATILE') {
       throw new Error(`[MemoryVfsStorageDriver] Unsupported workspace type: ${type}`);
     }

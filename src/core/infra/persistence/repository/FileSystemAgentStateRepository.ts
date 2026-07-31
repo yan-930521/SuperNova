@@ -32,10 +32,9 @@ export class FileSystemAgentStateRepository implements IAgentStateRepository {
     public async saveAgentState(
         sessionId: string,
         agentId: string,
-        state: BaseAgentData,
-        options?: { isClone?: boolean; parentAgentId?: string }
+        state: BaseAgentData
     ): Promise<void> {
-        const filePath = this.getFileName(sessionId, agentId, options);
+        const filePath = this.getFileName(sessionId, agentId);
 
         try {
             const data = JSON.stringify(state, null, 2);
@@ -52,10 +51,9 @@ export class FileSystemAgentStateRepository implements IAgentStateRepository {
      */
     public async loadAgentState(
         sessionId: string,
-        agentId: string,
-        options?: { isClone?: boolean; parentAgentId?: string }
+        agentId: string
     ): Promise<BaseAgentData | null> {
-        const filePath = this.getFileName(sessionId, agentId, options);
+        const filePath = this.getFileName(sessionId, agentId);
 
         if (!existsSync(filePath)) {
             this.logger.debug(`[AgentStateRepository] State file not found: ${filePath}`);
@@ -73,10 +71,9 @@ export class FileSystemAgentStateRepository implements IAgentStateRepository {
     // --- 內部輔助方法 ---
     private getDirName(
         sessionId: string,
-        agentId: string,
-        options?: { isClone?: boolean; parentAgentId?: string }
+        agentId: string
     ): string {
-        const targetId = options?.isClone && options.parentAgentId ? options.parentAgentId : agentId;
+        const targetId = agentId;
         const agentDir = path.join(this.baseDir, sessionId, this.config.storage.agent_dir, targetId);
         if (!existsSync(agentDir)) {
             mkdirSync(agentDir, { recursive: true });
@@ -86,12 +83,9 @@ export class FileSystemAgentStateRepository implements IAgentStateRepository {
 
     private getFileName(
         sessionId: string,
-        agentId: string,
-        options?: { isClone?: boolean; parentAgentId?: string }
+        agentId: string
     ): string {
-        const targetDir = this.getDirName(sessionId, agentId, options);
-        // 若為分身，使用 agentId 區分檔案名，避免與本尊衝突
-        const fileName = options?.isClone ? `state_${agentId}.json` : this.config.storage.agent_state_file;
-        return path.join(targetDir, fileName);
+        const targetDir = this.getDirName(sessionId, agentId);
+        return path.join(targetDir, this.config.storage.agent_state_file);
     }
 }

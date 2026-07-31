@@ -66,8 +66,7 @@ export interface IAgentStateRepository extends IRepository<BaseAgentData> {
   saveAgentState(
     sessionId: string,
     agentId: string,
-    state: BaseAgentData,
-    options?: { isClone?: boolean; parentAgentId?: string }
+    state: BaseAgentData
   ): Promise<void>;
 
   /**
@@ -76,6 +75,5 @@ export interface IAgentStateRepository extends IRepository<BaseAgentData> {
   loadAgentState(
     sessionId: string,
     agentId: string,
-    options?: { isClone?: boolean; parentAgentId?: string }
   ): Promise<BaseAgentData | null>;
 }

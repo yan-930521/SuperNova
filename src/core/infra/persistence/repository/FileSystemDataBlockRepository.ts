@@ -16,6 +16,9 @@ import { IDataBlockRepository } from '../IRepository';
 export class FileSystemDataBlockRepository implements IDataBlockRepository {
     private readonly logger = LogManager.recorder;
 
+    // 記憶體快取：以 `${sessionId}:${agentId}` 為 Key
+    private readonly cache = new Map<string, DataBlock<any>[]>();
+
     constructor(
         private readonly config: Config,
         private readonly baseDir: string
@@ -41,6 +44,11 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
 
             // 覆寫寫入
             await fs.writeFile(historyFilePath, lines, 'utf-8');
+            
+            // 更新快取
+            const cacheKey = `${sessionId}:${agentId}`;
+            this.cache.set(cacheKey, [...blocks]);
+            
             this.logger.debug(`[DataBlockRepository] Overwrote history for agent ${agentId} under session ${sessionId}`);
         } catch (err: any) {
             this.logger.error(`[DataBlockRepository] Failed to save history for agent ${agentId}: ${err.message}`);
@@ -59,6 +67,13 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
 
             // 追加寫入
             await fs.appendFile(historyFilePath, line, 'utf-8');
+            
+            // 更新快取
+            const cacheKey = `${sessionId}:${agentId}`;
+            if (this.cache.has(cacheKey)) {
+                this.cache.get(cacheKey)!.push(block);
+            }
+            
             this.logger.debug(`[DataBlockRepository] Appended history for agent ${agentId} under session ${sessionId}`);
         } catch (err: any) {
             this.logger.error(`[DataBlockRepository] Failed to append history for agent ${agentId}: ${err.message}`);
@@ -70,6 +85,12 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
      * 讀取並還原特定 Agent 的所有 DataBlock 歷史 (逐行解析 JSONL)
      */
     public async findByAgent(sessionId: string, agentId: string): Promise<DataBlock<any>[]> {
+        const cacheKey = `${sessionId}:${agentId}`;
+        if (this.cache.has(cacheKey)) {
+            // 回傳淺拷貝，防止外部不小心 mutate 陣列
+            return [...this.cache.get(cacheKey)!];
+        }
+
         const historyFilePath = this.getFileName(sessionId, agentId);
 
         if (!existsSync(historyFilePath)) {
@@ -94,7 +115,11 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
                 }
             }
 
-            return blocks;
+            // 寫入快取
+            this.cache.set(cacheKey, blocks);
+
+            // 回傳淺拷貝
+            return [...blocks];
     } catch (err: any) {
             this.logger.error(`[DataBlockRepository] Failed to read history for agent ${agentId}: ${err.message}`);
             throw err;
