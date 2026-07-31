@@ -59,7 +59,6 @@ Kernel 將上述生成的 Repositories 透過建構子或 DI 容器，派發並�
 4.  **HITLGateway** `start()`: 啟用對外人機交互監聽。
 5.  **SessionManager** `start()` (*會話自動恢復*):
     *   掃描持久層中狀態為 `ACTIVE` 或 `INTERRUPTED` 的歷史會話。
-    *   對未完成的會話，通知 `AgentManager` 透過 ID 召回（Rehydrate）其 `MainAgent`，重組 TaskDAG 狀態以恢復執行，確保系統斷電重啟後的自愈能力。
 
 ### 3.4. 優雅停機順序 (Graceful Shutdown Sequence)
 當系統捕獲 `SIGINT` 或 `SIGTERM` 停機信號時， `Kernel.stop()` 被呼叫，系統按照「**先凍結高階邏輯與狀態，再關閉底層儲存與通信**」的順序，**由高向底**（與啟動相反）優雅關閉：
@@ -69,10 +68,7 @@ Kernel 將上述生成的 Repositories 透過建構子或 DI 容器，派發並�
 4.  **WorkspaceManager** `stop()`: 
     *   對所有開啟的工作區執行自動 Commit（以 `"Graceful Shutdown Auto-Save"` 為訊息）。
     *   卸載工作區目錄，釋放實體檔案鎖，確保工作空間處於乾淨狀態。
-5.  **EventBus** `stop()` (*Worker 立即中斷機制*):
     *   停止路由新事件。
-    *   **立即中斷處置**：向佇列中正在運行的 Worker 發送 `AbortSignal`（中斷訊號）強制終止其執行，並將其當前對應的 Task 狀態退回 `PENDING`，以便下次重啟時由 `SessionManager` 的恢復流重新指派執行。
-    *   等待當前 Worker 資源釋放，關閉事件循環。
 
 ## 4. 基礎設施與可觀測性 (Infra & Telemetry - `src/core/infra/`)
 *   **日誌管理 (`LogManager.ts` & `transports/`)**：
@@ -83,7 +79,6 @@ Kernel 將上述生成的 Repositories 透過建構子或 DI 容器，派發並�
     *   **控制反轉 (IoC) 的路徑管理**：底層僅保留純粹寫檔的 `FileTransport`。Agent 內部的運行日誌與 Oplog，統一由 `BaseAgent` 配置寫入專屬的**實體日誌目錄**（如 `{log_dir}/agents/{agent_id}/`），**完全與 `WorkspaceManager` 解耦**，不再受限於任務虛擬檔案系統或分支狀態。
     *   *(依據開發規範：系統層級日誌內容強制使用英文，以利後續與外部監控系統整合。)*
 *   **全局 ID 生成器 (`IdGenerator.ts`)**：
-    *   **語義化前綴 (Semantic Prefixes)**：為了在 Oplog 與除錯時具備極高的辨識度，所有實體 ID 均設計為帶有語義前綴。例如：`block_3c7a` (DataBlock)、`agt_sub_64af` (SubAgent)、`wkr_f8e7` (Worker)。
 *   **持久化儲存 (`persistence/`)**：
     *   底層儲存與工作區抽象目錄。集中管理 `WorkspaceManager` (工作區隔離) 與 `InboxBuffer` 快取的儲存介面，隱藏具體資料庫與實體檔案系統的實作細節。
 

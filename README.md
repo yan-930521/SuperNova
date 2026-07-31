@@ -15,11 +15,11 @@ SuperNova 是一個專為長期任務設計的 **AI Runtime (執行時)**。它�
 
 *   **AgentManager 與三層 Agent 體系**：
     *   `AgentManager`：統一掌管所有 Agent 的靜態實例化與狀態脫水/喚醒 (Dehydrate & Rehydrate)。
-    *   `MainAgent`：全局統籌與大腦，擁有上帝視角，負責拆解總體目標。
-    *   `SubAgent`：負責單一目標的 PDCA 迴圈，採用 ID 召回與狀態休眠機制，不佔用常駐記憶體。
-    *   `EmbodiedAgent`：常駐型實體，能動態注入 `Body` (環境 Prompt 與 ActionTools) 並與外部環境 (如 Discord、Shell) 進行互動。
-*   **非同步事件總線 (EventBus) 與排程 (DAGScheduler)**：
-    *   全面捨棄同步等待。Agent 規劃出任務 DAG 後即主動掛起休眠，由排程器依賴關係自動流轉與分發，節省 Token 與 CPU。
+    *   `MainAgent` (中樞與情感大腦)：系統的最高決策中心，負責與人類自然交流。具備動態情緒引擎，並能將 `EmbodiedAgent` 認知為自己在物理世界的真實身軀。對於繁瑣運算，她會主動進行上下文隔離。
+    *   `TaskAgent` (領域戰術核心層)：無情的任務執行機器。負責解題、代碼審查與解析大檔案 (<Pointer>)。透過接收 `send_message` 任務並在獨立的 Git Worktree 隔離環境中運算，確保主大腦的思緒敏捷不被 Token 淹沒。支援分身併發模式 (Auto-Concurrency)。
+    *   `EmbodiedAgent` (物理與感知神經)：主大腦在物理世界 (如 Minecraft) 中的實體手腳與感官。支援「意識投影 (Consciousness Projection)」，能被主大腦直接接管，共享歷史記憶與工具進行物理操作。
+*   **非同步事件總線 (EventBus) 與排程**：
+    *   全面捨棄同步等待。Agent 透過 `send_message` 發佈任務後即主動掛起休眠，由 EventBus 依賴關係自動流轉與分發，節省 Token 與 CPU。
     *   **高可靠與安全隔離**：EventBus 支援 `sessionId` 會話租戶隔離、異步 Promise 錯誤安全邊界（阻斷 reject 崩潰）、`publishAsync` 並發等待協調，以及支持 Agent 休眠喚醒的宣告式訂閱。
 *   **去中心化記憶與工作區 (WorkspaceManager)**：
     *   **原生 Git 整合**：每個 Agent 與 Task 都有專屬的隔離目錄。Oplog (操作日誌) 與程式變更直接存入專屬目錄。解決併發衝突的同時，更提供了實體檔案層級的歷史回滾能力。
@@ -31,7 +31,7 @@ SuperNova 是一個專為長期任務設計的 **AI Runtime (執行時)**。它�
 ## 📂 目錄架構與依賴規範 (Project Directory & Boundaries)
 
 為了保持系統的演進彈性，程式碼嚴格實行 **「內核/基礎設施與業務應用解耦」** 的單向依賴邊界規範：
-*   **`src/core/` (核心與基礎設施層)**：包含內核引擎 (`RuntimeKernel`)、EventBus、持久化儲存庫，以及所有 Agent 的大腦實體（包含 `BaseAgent` 抽象類別，以及 `MainAgent`、`SubAgent`、`EmbodiedAgent` 等核心實作）和負責統籌的 `AgentManager`。核心模組通過 `src/core/index.ts` 統一對外導出。
+*   **`src/core/` (核心與基礎設施層)**：包含內核引擎 (`RuntimeKernel`)、EventBus、持久化儲存庫，以及所有 Agent 的大腦實體（包含 `BaseAgent` 抽象類別，以及 `MainAgent`、`TaskAgent`、`EmbodiedAgent` 等核心實作）和負責統籌的 `AgentManager`。核心模組通過 `src/core/index.ts` 統一對外導出。
 *   **`src/package/` (業務擴充與外掛層)**：包含特定領域的延伸應用、專案自訂邏輯或是外部系統對接適配器。
 *   **依賴規則**：`src/package/` 必須且只能通過 `src/core/index.ts` 的接口引用核心功能與大腦，核心層嚴禁反向引用業務擴充層，從而保證核心底座的純粹與高內聚。
 
@@ -54,18 +54,19 @@ graph TD
             AgentManager[AgentManager.ts<br>大腦統籌管理]:::file
             BaseAgent[BaseAgent.ts<br>基礎抽象大腦]:::file
             MainAgent[MainAgent.ts<br>主節點大腦]:::file
-            SubAgent[SubAgent.ts<br>子節點大腦]:::file
+            TaskAgent[TaskAgent.ts<br>戰術核心大腦]:::file
             EmbodiedAgent[EmbodiedAgent.ts<br>具身智能大腦]:::file
             
             subgraph DirTool [src/core/agent/tool/]
                 BaseTool[BaseTool.ts<br>工具基底]:::file
+                AgentTools[AgentTools.ts<br>代理人專屬工具]:::file
                 WorkspaceTools[WorkspaceTools.ts<br>工作區工具]:::file
             end
         end
         
         AgentManager --> BaseAgent
         BaseAgent --> MainAgent
-        BaseAgent --> SubAgent
+        BaseAgent --> TaskAgent
         BaseAgent --> EmbodiedAgent
         BaseAgent -.-> BaseTool
     end

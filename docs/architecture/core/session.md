@@ -19,7 +19,7 @@ related_docs:
 
 在工業級的 Agent 執行環境中，單次的請求-回應是不夠的。我們引入 `Session` 與 `Thread` 兩層抽象來組織長週期的 Agent 協作：
 
-*   **`Session` (會話 / 任務階段)**：**代表一個與 `MainAgent` 的新對話**。當用戶發起新對話時，即建立一個獨立的 Session。所有由此對話中衍生派生出的 `SubAgent` 與 `Worker` 都強制依附於此 Session 中運行，共享同一個 `sessionId`，以實現生命週期與資源邊界的嚴格綁定。
+*   **`Session` (會話 / 任務階段)**：**代表一個與 `MainAgent` 的新對話**。當用戶發起新對話時，即建立一個獨立的 Session。所有由此對話中衍生派生出的 `TaskAgent` 與 `Worker` 都強制依附於此 Session 中運行，共享同一個 `sessionId`，以實現生命週期與資源邊界的嚴格綁定。
 *   **`Thread` (執行緒 / 分支對話)**：一個 Session 下的特定討論分支或並行任務。例如在修復 bug 時，創建一個 Thread 用於「分析程式碼」，另一個 Thread 用於「寫單元測試」。
 
 ---
@@ -28,7 +28,7 @@ related_docs:
 
 每個 Session 都有其明確的生命週期狀態 (`SessionState`)：
 
-*   **`ACTIVE`**：會話處於活躍狀態，Agents 與 Workers 正在並發執行。
+*   **`ACTIVE`**：會話處於活躍狀態，Agents s 正在並發執行。
 *   **`SUSPENDED` (掛起)**：系統在優雅停機或維護時主動凍結的狀態。此時所有活躍 Agent 均已脫水（Dehydrate）寫入存檔，重啟後可透過恢復流自動還原執行。
 *   **`INTERRUPTED` (人機協同掛起)**：遭遇高危操作或資訊不足，Session 被掛起並釋放記憶體，等待外部人類（HITL）點擊「同意」或給予反饋。
 *   **`COMPLETED`**：任務順利達成，Session 歸檔。
@@ -56,6 +56,10 @@ related_docs:
     *   `type: 'system'` (系統事實) $\rightarrow$ `toMarkdown()` 輸出包含事件意圖、發送者與指標的結構化 Markdown 系統事實，並在 `toMessage()` 中實例化為 LangChain `SystemMessage`。
     *   `type !== 'system'`（如 `'message'` 或 `'tool'`） $\rightarrow$ `toMarkdown()` 直接輸出其 `controlPayload` 原始資料（若為字串則直接返回，若為物件則返回其完整 JSON 序列化字串，不做任何欄位過濾與裝飾），並在 `toMessage()` 中實例化為對應的 LangChain `HumanMessage` 或 `ToolMessage` (自動配對 `tool_call_id`)。
 
+### D. 意識投影狀態管理 (Projection State Management)
+*   **狀態歸屬**：代理人之間的接管關係 (例如 `MainAgent` 意識投影到 `EmbodiedAgent`) 屬於會話層級的環境脈絡。因此，投影的連結元數據 (`metadata.projections`) 儲存於 `Session` 實體中，而非 Agent 本身。這確保了系統斷電重啟後，接管狀態能隨會話 (Dehydrate -> Rehydrate) 無縫還原。
+*   **動態攔截與組裝**：`SessionManager` 監聽 `ProjectionToggled` 事件並自動更新會話狀態。在進行 `dispatchInboxForAgent` 派發信件時，若發現目標大腦正在投影，將動態喚醒軀殼，並當場組裝出無狀態的中介層 `ProjectionHandler` 來接管執行流，達成了 Agent 實體間的絕對解耦。
+
 ---
 
 ## 4. 資源與多租戶隔離 (Multi-Tenancy & Resource Isolation)
@@ -70,10 +74,10 @@ related_docs:
 
 ## 5. 人機協同閘道 (HITL Session Gateway)
 
-當 `BaseAgent` 的子類別（如 `SubAgent`）需要人類確認時（例如調用高危工具）：
+當 `BaseAgent` 的子類別（如 `TaskAgent`）需要人類確認時（例如調用高危工具）：
 
 1.  Agent 調用系統 API 發佈 `INTERRUPT` 類型的 `DataBlock`。
-2.  `SessionManager` 捕獲此事件，將該 Session 狀態變更為 `INTERRUPTED`，並呼叫 `saveState()` 將當前狀態序列化存檔，隨後釋放相關 Agent 與 Worker 實例。
+2.  `SessionManager` 捕獲此事件，將該 Session 狀態變更為 `INTERRUPTED`，並呼叫 `saveState()` 將當前狀態序列化存檔，隨後釋放相關 Agent  實例。
 3.  外部 UI / API 接收到待審批通知。
 4.  人類審批通過（或提供反饋內容）後，外部系統向 `SessionManager` 送入一個 `RESUME` 訊號。
 5.  `SessionManager` 依據 `sessionId` 反序列化還原 Agents，將審批結果包裝為 `DataBlock` 塞入 Agent 收件箱，Agent 恢復 BUSY 狀態繼續運作。
@@ -89,7 +93,6 @@ related_docs:
 2.  **目標恢復會話篩選**：
     篩選出狀態為 `ACTIVE` 或 `SUSPENDED` 的會話資料。
 3.  **Workspace 容錯驗證 (Fault-Tolerance Policy - 方案 B)**：
-    *   **健康會話**：若該會話對應的 Workspace 目錄完整且健康，調用 `WorkspaceManager.initWorkspace(sessionId)` 恢復掛載儲存驅動，通知 `AgentManager` 透過 ID 召回（Rehydrate）其 `MainAgent` 實例，重組 TaskDAG 以重啟執行。
     *   **損毀會話**：若偵測到該會話的 Workspace 物理目錄遺失、損毀或發生 Git 損壞，**系統採取容錯跳過策略**：
         *   將該會話在磁碟中的 `session.json` 狀態強制更新標記為 `FAILED`。
         *   在系統日誌中發布 `WARNING` 級別的日誌，警告管理員該 Workspace 已毀損。
@@ -116,10 +119,9 @@ workspace/
             ├── <agentId_A>/
             │   ├── state.json             # IAgentStateRepository 儲存的狀態快照
             │   └── history.jsonl          # IDataBlockRepository 儲存的歷史紀錄
-            └── <parentAgentId>/           
-                ├── state.json             # 獨立模式狀態快照
-                ├── state_<cloneId>.json   # 分身模式下的隔離狀態快照
-                └── history.jsonl          # 歷史紀錄
+            └── <agentId_B>/           
+                ├── state.json             
+                └── history.jsonl          
 ```
 
 ### B. 會話元數據儲存 (`ISessionRepository`)
@@ -130,6 +132,8 @@ workspace/
 
 ### C. 訊息與對話歷史儲存 (`IDataBlockRepository`)
 *   **介面特點**：繼承自 `IRepository<DataBlock>` 泛型，同時擴充專屬的高效讀寫 API。
+*   **雙向同步快取 (In-Memory Cache)**：
+    為了解決頻繁對話與平行投影代理產生的磁碟 I/O 瓶頸，實作層 (`FileSystemDataBlockRepository`) 內建了以 `sessionId:agentId` 為鍵值的 LRU 記憶體快取。讀取操作「零 I/O」且回傳淺拷貝 (Shallow Copy) 防止外部污染；寫入與覆寫則採用雙向同步更新，讓代理人在頻繁調閱 Oplog 時達到極致效能。
 *   **物理格式優勢 (JSON Lines / JSONL)**：
     每一行代表一個獨立 JSON 化的 `DataBlock` 記錄。在寫入時無須讀取舊檔，直接以常數時間 $O(1)$ 的 `fs.appendFile` 追加寫入，極大地降低了高頻事件與長對話下的磁碟 I/O 損耗。
 *   **Agent 級別物理隔離**：
@@ -146,8 +150,8 @@ workspace/
 *   **無狀態與去贅肉設計 (No Inbox inside Agent)**：
     Agent 內部**不維護任何 inbox 記憶體陣列**。收件箱資料的流轉與持久化完全交給 `SessionManager` 與 `EventBus` 協同維護。這使得 `BaseAgentData` 無須序列化緩存 inbox，極大地減輕了 Agent 掛起與溫啟動的磁碟 I/O 開銷，保證了 Agent 的輕量與高可用性。
 *   **二階定址強語意 API**：
-    1.  `saveAgentState(sessionId, agentId, state, options)`：將 Agent 狀態（`BaseAgentData`）保存至 `{sessionId}/agents/{parentAgentId}/` 目錄下。若為分身（isClone），則自動命名為 `state_${cloneId}.json`，防止併發快照互相覆蓋。
-    2.  `loadAgentState(sessionId, agentId, options)`：讀取並反序列化該 Agent 的狀態數據。
+    1.  `saveAgentState(sessionId, agentId, state)`：將 Agent 狀態（`BaseAgentData`）保存至 `{sessionId}/agents/{agentId}/` 目錄下的 `state.json` 中。無狀態併發機制保證了單一實體只需要一份狀態快照。
+    2.  `loadAgentState(sessionId, agentId)`：讀取並反序列化該 Agent 的狀態數據。
 *   **Repository 物理細節封裝**：
     `BaseAgent` 本身僅傳入 `sessionId` 與 `agentId` 進行狀態存取，不再涉及任何本機 `fs` 或路徑拼接代碼，完美達成了高低層依賴解耦。
 

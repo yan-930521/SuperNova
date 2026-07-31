@@ -18,12 +18,10 @@ related_docs:
 ## 核心組件
 
 ### `DataBlock` (動態狀態區塊)
-*   **職責**：系統內所有節點（Agent 與 Worker）之間傳遞資訊與狀態的通用載體，同時也是系統事件的 Message 封裝。
 *   **行為與資料結構**：
     1. **雙軸語意編碼 (Dual-Axis Semantics)**：
        *   **`type` (Message 角色類型)**：為強型別 Enum，限定為 `'message' | 'tool' | 'system'`。此欄位直接與大模型的 Message 角色（Human, Tool, System）完美對齊，決定了 DataBlock 在被時序插針投影給 LLM 時的 Message Role。
        *   **`intent` (業務意圖名稱)**：一個字串（e.g. `'TASK_SUCCESS'`, `'GIT_CONFLICT'`, `'HITL_APPROVED'`），用以標記具體發生的系統或業務事件。
-    2. **靈活路由**：不僅用於封裝 Worker 的執行結果，無論是 `SubAgent` 或 `Worker`，都能將資訊包裝成 `DataBlock` 發送給上級，或透過指定**唯一 ID** 點對點傳送給特定的 Agent。
     3. **控制面與資料面分離 (Control/Data Plane Separation)**：為避免 `EventBus` 遭遇巨量負載，`DataBlock` 僅可夾帶巨型資料的**指標 (Pointer) 或 URI**（指向 `WorkspaceManager` 中的實體檔案或外部快取），真正的資料本體交由底層資料面處理。
     4. **Claim Check Pattern (資料指標模式)**：當 `DataBlock` 乘載的 `controlPayload` 內部字串過大（例如超出 Token 安全閾值）時，系統會自動將該長字串抽離，寫入實體 Blob 檔案，並在原位置替換為 `DataPointer` (例如 `{"_type": "DataPointer", "blobId": "..."}`)，確保歷史紀錄 (Oplog) 不會因龐大資料而崩潰。
 
@@ -89,6 +87,6 @@ related_docs:
 ## 4. 工程防護機制 (Engineering Safeguards)
 
 ### 4.1. 安全熔斷器 (Circuit Breaker)
-除了排程器的 Timeout 防死鎖機制外，針對 `SubAgent` 層級設有熔斷保護：
+除了排程器的 Timeout 防死鎖機制外，針對 `TaskAgent` 層級設有熔斷保護：
 *   **觸發條件**：單次任務的**最大連續錯誤修補深度大於 3 層**（Depth > 3），或單一 DataBlock **鎖定解析時間過長**。
-*   **處置動作**：系統將強制切斷該 `SubAgent` 的 PDCA 循環，拋出不可恢復之錯誤 (Fatal Error)，並直接向 `MainAgent` 進行異常回報，防止 Token 被無限消耗。
+*   **處置動作**：系統將強制切斷該 `TaskAgent` 的 PDCA 循環，拋出不可恢復之錯誤 (Fatal Error)，並直接向 `MainAgent` 進行異常回報，防止 Token 被無限消耗。

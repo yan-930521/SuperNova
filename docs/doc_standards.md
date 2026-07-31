@@ -16,7 +16,6 @@ docs/
 │
 ├── architecture/                     # 正式系統架構與模組設計說明 (與 src/ 對應)
 │   ├── core/                         # 基礎設施層 (EventBus, Memory, Session, Security, Base)
-│   └── agent/                        # 代理執行層 (Agent, Worker, Task)
 │
 ├── spec/                             # 系統規格與詳細設計說明書專區 (包含歷史與正在討論的 Spec)
 │   └── YYYY-MM-DD-topic-design.md
@@ -52,7 +51,6 @@ last_updated: 2026-07-14
 author: Antigravity & User
 related_codes:
   - ../../src/core/task/Task.ts
-  - ../../src/core/task/TaskDAG.ts
 related_docs:
   - ../architecture/core/memory.md
 ---

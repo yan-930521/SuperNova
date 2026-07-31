@@ -19,13 +19,12 @@ related_docs:
 詳細的組件設計與規格，請參閱各子文件：
 
 ## 1. 代理層與執行層 (Agent & Execution Layer)
-*   [Agent 系統設計 (docs/architecture/agent/agent.md)](./architecture/agent/agent.md)：包含 `BaseAgent` 的型態聲明 (`AgentType`, `canClone`, `WorkspaceType`)、**結構化大腦設定 (AgentProfile JSON)**、生命週期管理、引入 `AgentManager` 的機制，以及目前**直接引入 LangChain 生態的大腦串接策略**。支援有界限的工作池 (Bounded Worker Pool)，透過 `max_clones_per_agent` 參數限制分身派生上限，防止資源耗盡。
-*   [Worker 執行單元 (`docs/architecture/agent/worker.md`)](./architecture/agent/worker.md)：定義無狀態原子執行單元的行為模式。
-*   [Task 任務系統 (`docs/architecture/agent/task.md`)](./architecture/agent/task.md)：定義系統最小排程與執行單位 `Task` 及拓撲結構 `TaskDAG` 的資料模型，包含排程控制、去硬編碼配置與 `DataBlock` 資料流。
+*   [Agent 系統設計 (docs/architecture/agent/agent.md)](./architecture/agent/agent.md)：引入**雙腦意識架構 (Dual-Brain Consciousness)**。包含 `MainAgent` 作為具備動態情緒引擎 (Emotion Engine) 與注意力分配器的情感感知中樞，以及 `TaskAgent` 作為專注 IDE 邏輯與任務執行的左腦，和 `EmbodiedAgent` 作為專注 3D 空間與 CLI 操作的右腦。包含 `BaseAgent` 基礎設施、**PromptSectionIndex 大一統渲染機制** 與生命週期管理。
 *   [工具系統設計 (`docs/architecture/agent/tool.md`)](./architecture/agent/tool.md)：定義 `BaseTool` 抽象基底、強型別參數驗證 (Zod) 與執行上下文 (ToolContext) 的沙盒隔離與**工具執行透明化追蹤機制**。
 
 ## 2. 調度與事件層 (Scheduling & Event Layer)
-*   [EventBus 與排程器 (`docs/architecture/core/event_bus.md`)](./architecture/core/event_bus.md)：包含 `EventBus` (會話安全隔離、publishAsync 異步等待與宣告式訂閱)、`DAGScheduler` (任務依賴解析與 TTL 監控)、**事件分類規範 (SystemEvent 與 HookEvent 預定義)**，以及底層提供給 Agent 的系統工具 API 邊界。
+*   [EventBus (`docs/architecture/core/event_bus.md`)](./architecture/core/event_bus.md)：包含 `EventBus` (會話安全隔離、publishAsync 異步等待與宣告式訂閱)、**事件分類規範** (SystemEvent、HookEvent、AgentEvent)。
+    *   **解耦神經網絡設計**：透過 `WorldUpdated` 事件將外界物理狀態寫入右腦記憶，並由 Package 邊緣運算層負責解析，主動發送 `EmotionTriggered` 神經衝擊訊號，觸發中樞 `MainAgent` 的情緒波動 (Amygdala Hijack 杏仁核劫持機制)。
 
 ## 3. 狀態與記憶層 (State & Memory Layer)
 *   [記憶與狀態管理 (docs/architecture/core/memory.md)](./architecture/core/memory.md)：包含 `DataBlock` (資料載體)、`InboxBuffer` (收件箱)、`ContextManager` (Oplog 日誌)、`WorkspaceManager` (工作空間控制面，Session 獨占與多驅動擴充)，以及系統安全熔斷機制 (Circuit Breaker)。支援 `DataPointer` 大資料卸載與延遲加載機制。
@@ -33,17 +32,16 @@ related_docs:
 
 ## 4. 系統基礎建設與安全 (Infrastructure & Security)
 *   [基礎建設與配置 (`docs/architecture/core/base.md`)](./architecture/core/base.md)：包含配置管理、**Kernel (依賴注入中樞，統一宣告與派發 Repositories)**、系統日誌與監控 (Telemetry)、儲存層抽象 (Storage) 以及外掛註冊機制 (Registry)。
-*   [零信任安全架構 (`docs/architecture/core/security.md`)](./architecture/core/security.md)：定義防止 Prompt 注入、Worker 隔離沙盒 (基於 WebAssembly/WASI 實現毫秒級啟動與實體目錄掛載) 與高危操作的人工審批 (HITL) 權限閘道。
+*   [零信任安全架構 (`docs/architecture/core/security.md`)](./architecture/core/security.md)：定義防止 Prompt 注入、與高危操作的人工審批 (HITL) 權限閘道。
 
 ---
 
 ## 5. 綜合模擬場景 (Scenarios)
-*   [Minecraft 具身智能沙盒 (`docs/examples/scenario_minecraft_embodied.md`)](./examples/scenario_minecraft_embodied.md)：展示 `EmbodiedAgent` 如何與外部環境 (mineflayer) 透過 EventBus 與 DataBlock 解耦雙向通訊。
+*   [Minecraft 具身智能沙盒 (`docs/examples/scenario_minecraft_embodied.md`)](./examples/scenario_minecraft_embodied.md)：展示 `EmbodiedAgent` 如何與外部環境 (mineflayer) 透過 EventBus 與 DataBlock 解耦雙向通訊。同時遵循 **物理世界優先 (Physical World First)** 原則，確保外部軀殼實體連線且就緒 (spawned) 後，系統才能開始介入調度。
 
 ---
 
 ## 6. 目錄架構與依賴邊界 (Directory Structure & Boundaries)
 系統程式碼嚴格劃分基礎設施與業務邏輯的邊界：
-*   **`src/core/` (核心與基礎設施層)**：包含底層通用組件與內核骨架（如 `EventBus`、`DataBlock`、`LogManager`、以及核心的 `BaseAgent`、`MainAgent`、`SubAgent`、`EmbodiedAgent` 等大腦實體，還有負責統籌的 `AgentManager`）。`core` 目錄下的所有對外公開模組已統一透過 `src/core/index.ts` 匯出 (Export Boundary)。
+*   **`src/core/` (核心與基礎設施層)**：包含底層通用組件與內核骨架（如 `EventBus`、`DataBlock`、`LogManager`、以及核心的 `BaseAgent`、`MainAgent`、`TaskAgent`、`EmbodiedAgent` 等大腦實體，還有負責統籌的 `AgentManager`）。`core` 目錄下的所有對外公開模組已統一透過 `src/core/index.ts` 匯出 (Export Boundary)。
 *   **`src/package/` (業務擴充與外掛層)**：包含特定領域的延伸應用與自訂邏輯。業務邏輯層**必須**透過 `src/core/index.ts` 引用內核與核心大腦，嚴禁繞過 index 進行深層耦合。
-    *   [Underworld Bot CLI 重構設計 (`src/package/underworld/doc.md`)](../src/package/underworld/doc.md)：規範 Mineflayer Bot 的指令層任務管理、Zod 驗證路由與響應標準化。

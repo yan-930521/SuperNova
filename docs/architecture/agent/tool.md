@@ -13,7 +13,7 @@ related_docs:
 
 # 工具系統設計 (Tool System Design)
 
-本系統為了讓 Agent (特別是 `SubAgent` 與 `EmbodiedAgent`) 具備與環境互動及執行具體操作的能力，引入了強型別與沙盒隔離的工具系統。我們採用與 LLM 框架 (如 LangChain) 適度解耦的設計，確保核心業務邏輯的獨立性。
+本系統為了讓 Agent (特別是 `TaskAgent` 與 `EmbodiedAgent`) 具備與環境互動及執行具體操作的能力，引入了強型別與沙盒隔離的工具系統。我們採用與 LLM 框架 (如 LangChain) 適度解耦的設計，確保核心業務邏輯的獨立性。
 
 ## 1. 核心抽象類別 (BaseTool)
 

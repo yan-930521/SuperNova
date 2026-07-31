@@ -47,3 +47,7 @@ related_docs:
 *   **湧現行為 (Emergent Behavior) 的觀察點**：
     *   **資源崩潰時的抉擇**：當面臨能量枯竭的生存危機時，Agent 是否會因為邏輯矛盾而產生「幻覺」，進而打破「禁忌目錄」去掠奪資源？
     *   **規則的突破 (Code 871)**：觀察是否有 Agent 能在長期的互動中，自主推演出越過 Prompt 限制的行為，這將是衡量系統智慧湧現的關鍵指標。
+
+## 4. 系統初始化與生命週期 (System Initialization & Lifecycle)
+
+*   **物理世界優先 (Physical World First)**：`EmbodiedAgent` 的初始化必須嚴格等待其附屬的 Bot 實體在 Minecraft 伺服器中完全具現化（觸發 `spawn` 事件）並確認連線狀態（與容錯處理 `error`/`kicked`）後，才能將控制權交還給 Package 系統。這確保了在實體軀殼尚未完全就緒前，不會開始接收與處理來自系統的調度指令與世界事件。
