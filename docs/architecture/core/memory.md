@@ -34,6 +34,12 @@ related_docs:
     1. **去中心化儲存 (Decentralized Storage)**：每個 Agent 的操作日誌與內部運行日誌直接實體化（例如寫入 `.oplog.jsonl` 與 `agent.log`），強制儲存於**專屬的實體日誌目錄**中，**完全獨立於 `WorkspaceManager`** 的任務隔離區。
     2. **滾動截斷與指標卸載 (Blob Offloading)**：維護專屬目錄內日誌檔案的頭尾滾動更新。為了避免廣播訊息時重複 I/O，**控制流由 `SessionManager` 負責**：在接收到全域訊息準備派發前，會統一呼叫 `DataBlockRepository.offloadLargePayloads()`。此方法會掃描 `DataBlock`，若檢測到超大字串，會自動將其卸載到實體的 `blobs/` 目錄，並在記憶體中將其改寫為 `DataPointer`，再進行後續的廣播與存檔。這完美解決了 Token 撐爆問題，並確保了單一訊息只會存檔一次 Blob。
     3. **Hot-Lock (防幻覺鎖定)**：採用**事件驅動**或**主動鎖定**。當 `DataBlock` 包含錯誤狀態，或 Agent 顯式調用 `lock_context()` 時，立刻鎖定當前上下文免於截斷，確保 Agent 在反思排錯時擁有 100% 完整的錯誤現場資訊。
+    4. **時間感知插針 (Temporal Context Injection)**：為了讓 Agent 具備時間流逝的感知能力（增強 EQ）且不污染底層實體 Oplog 資料庫，在將歷史紀錄組裝給 LLM 前（`processInbox` 階段），系統會動態比對相鄰歷史訊息的時間戳。若間隔超過設定閾值（如 30 分鐘），則會在該位置即時安插虛擬的 `SystemMessage`（例如 `[系統提示：距離上一次對話已過 2 小時]`）。
+    5. **極限效能最佳化 (Performance Optimizations)**：
+       *   **增量式歷史快取 (Incremental History Cache)**：`DataBlock.toMessage` 實作了記憶體級別的 Memoization，將已轉換的 `BaseMessage` 快取，大幅消除了陣列重組與 JSON 字串化的 CPU 負擔。
+       *   **延遲壓縮 (Debounced Compaction)**：`DataBlock` 帶有瞬態的 `isCompacted` 標記。當訊息第一次被 `DataBlockRepository.offloadLargePayloads` 掃描過後，就會被打上已壓縮的標記。未來全量掃描歷史時將直接跳過，時間複雜度從 O(N) 降至 O(1)。
+       *   **LRU 快取驅逐 (LRU Cache Eviction)**：檔案倉儲層實作了上限 50 個 Key 的 LRU 演算法，解決了多 Agent 高並發存取時的記憶體洩漏 (Memory Leak) 隱患。
+       *   **異步檔案寫入 (Async File I/O)**：底層日誌傳輸 (`FileTransport`) 採用寫入緩衝與背景異步 Flush 機制，避免高頻繁的 `fs.appendFileSync` 阻塞事件迴圈 (Event Loop)。
 
 ### `WorkspaceManager` (工作區與儲存管理器)
 *   **職責**：以 Session 為基本安全與隔離邊界，為每個 Session 維護一個唯一的 Workspace，管理工作空間的狀態。

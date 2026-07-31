@@ -142,8 +142,10 @@ workspace/
     1.  `saveForAgent(sessionId, agentId, blocks)`：整份覆寫該 Agent 的歷史（用於時空旅行倒帶）。
     2.  `appendForAgent(sessionId, agentId, block)`：以 $O(1)$ 常數時間向 `history.jsonl` 追加單筆 DataBlock。
     3.  `findByAgent(sessionId, agentId)`：讀取並逐行反序列化解析 `history.jsonl`，還原為強型別 `DataBlock[]`。
-*   **集中式派發與存檔 (Mediator-Driven Save & Dispatch)**：
-    `BaseAgent` 本身不直接訂閱 `EventBus` 的收件匣事件。收發與存檔職責統一收攏至 `SessionManager` (集中式中介者模式)。當 `EventBus` 廣播 `AgentMessage` 時，`SessionManager` 負責攔截，先客觀寫入發送者與接收者的 `history.jsonl` (Oplog)，接著將新訊息推入會話級的 `Session.inboxBuffer` 中。最後，若目標 Agent 處於 `IDLE` 或 `SUSPENDED` 狀態，則主動將信件抽出並呼叫 `agent.resume(messages)` 喚醒它。若為 `BUSY` 則信件保留於 Session 中，絕不漏接。
+*   **集中式派發與管線化併行 (Pipelined Dispatch & I/O)**：
+    `BaseAgent` 本身不直接訂閱 `EventBus` 的收件匣事件。收發與存檔職責統一收攏至 `SessionManager` (集中式中介者模式)。為達極致效能，當攔截到全域訊息時，會將「發送者 Oplog 寫入與平行壓縮」以及「所有目標接收者的 Oplog 寫入與派發」封裝為獨立的 Promise，並以 `Promise.all` 管線化平行執行。這徹底解決了傳統串列 await 造成的事件迴圈阻塞。
+*   **零開銷唯讀檢查 (Zero-Cost Peek Filter) 與狀態阻塞**：
+    在進行派發時，`SessionManager` 會嚴格檢查 `AgentState.BUSY`，若 Agent 正在執行則信件安全保留於 Inbox。同時，為了避免大量低優先級訊息造成無謂的陣列切割 (Pop & Push-back) 浪費，新增了 `hasActionableMessages` 唯讀檢查。只有確認信箱中包含具行動價值的信件，才會真正切割陣列並透過 `Promise.all` 雙重喚醒大腦與軀殼，將 I/O 延遲壓到最低。
 
 ### D. 代理人狀態儲存 (`IAgentStateRepository`)
 *   **介面特點**：繼承自通用 `IRepository<BaseAgentData>` 介面。
