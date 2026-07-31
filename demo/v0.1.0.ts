@@ -38,13 +38,15 @@ async function main() {
     try {
         await sessionManager.loadSession(sessionId);
         console.log(`[系統] 載入既有會話: ${sessionId}`);
-    } catch (e) {
-        const MainAgent = await agentManager.spawnAgent(AgentType.MAIN, MainAgentId, sessionId);
-        
-        await sessionManager.createSession(MainAgentId, sessionId, 'PERSISTENT');
-        await sessionManager.saveSession(sessionId);
-        
-        console.log(`[系統] 成功建立新會話: ${sessionId}`);
+    } catch (e: any) {
+        if (e.message && e.message.includes('Session not found')) {
+            await sessionManager.createSession(MainAgentId, sessionId, 'PERSISTENT');
+            await sessionManager.saveSession(sessionId);
+            console.log(`[系統] 成功建立新會話: ${sessionId}`);
+        } else {
+            console.error(`[系統] 讀取既有會話失敗，可能是檔案損毀，為避免覆寫已中斷啟動。錯誤: ${e.message}`);
+            process.exit(1);
+        }
     }
 
     // 4. 設定終端機對話
@@ -90,10 +92,13 @@ async function main() {
     // 3. 訂閱全局 AgentMessage 來接收夏沫的回覆
     eventBus.subscribe(AgentEvent.AgentMessage, (event: IEvent<AgentEvent.AgentMessage>) => {
         const dataBlock = event.payload;
-        if (dataBlock && dataBlock.senderId === MainAgentId) {
-            console.log(`\n[${MainAgentId}]: ${dataBlock.controlPayload}`);
-            // 收到回覆後再繼續提問
-            setTimeout(ask, 100);
+        if (dataBlock && dataBlock.senderId !== 'USER') {
+            console.log(`\n[${dataBlock.senderId} -> ${dataBlock.targetId || 'NONE'}]:\n${dataBlock.toMarkdown()}`);
+            
+            // 當 MainAgent 回覆給 USER 時，重新顯示提問框
+            if (dataBlock.senderId === MainAgentId && (dataBlock.targetId === 'USER' || !dataBlock.targetId)) {
+                setTimeout(ask, 100);
+            }
         }
     });
 

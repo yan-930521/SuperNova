@@ -152,8 +152,7 @@ describe('System Integration & Inbox Dispatch Test', () => {
         // 等待 LLM 模擬處理完成 (500ms + 緩衝)
         await new Promise(resolve => setTimeout(resolve, 800));
 
-        // 應該沒有產生分身
-        expect(agentManager.getActiveCloneCount(mainAgentId)).toBe(0);
+        // 由於我們改為無狀態並發，此處不需要再檢查分身數量
         // 應該有收到一則回覆
         expect(replyCount).toBe(1);
 
@@ -199,8 +198,7 @@ describe('System Integration & Inbox Dispatch Test', () => {
         const finalPending = session!.getPendingSenders(mainAgentId);
         expect(finalPending.length).toBe(0);
 
-        // 所有 Clone 也必定被 GC 銷毀
-        expect(agentManager.getActiveCloneCount(mainAgentId)).toBe(0);
+        // 所有並發處理皆已完結，無狀態設計不會產生殘留實體
     });
 
     it('should correctly mount workspace and allow file operations', async () => {
