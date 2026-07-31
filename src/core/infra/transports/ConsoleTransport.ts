@@ -30,7 +30,8 @@ export class ConsoleTransport implements ILogTransport {
         console.log(formattedMessage);
         // 如果是結果類型的日誌，額外印出 payload 以便在控制台看到工具產出
         if (entry.type === 'RESULT' && entry.payload) {
-          console.log('   └─ Result:', JSON.stringify(entry.payload.result || entry.payload, null, 2));
+          console.log('   └─ Result:');
+          console.dir(entry.payload.result || entry.payload, { depth: 4, colors: true });
         }
         break;
       case 'WARN':

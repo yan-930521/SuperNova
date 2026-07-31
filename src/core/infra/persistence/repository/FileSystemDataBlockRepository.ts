@@ -18,6 +18,21 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
 
     // 記憶體快取：以 `${sessionId}:${agentId}` 為 Key
     private readonly cache = new Map<string, DataBlock<any>[]>();
+    private readonly cacheKeyAccessOrder: string[] = [];
+    private readonly MAX_CACHE_KEYS = 50;
+
+    private touchCache(key: string) {
+        const idx = this.cacheKeyAccessOrder.indexOf(key);
+        if (idx !== -1) {
+            this.cacheKeyAccessOrder.splice(idx, 1);
+        }
+        this.cacheKeyAccessOrder.push(key);
+
+        if (this.cacheKeyAccessOrder.length > this.MAX_CACHE_KEYS) {
+            const lruKey = this.cacheKeyAccessOrder.shift()!;
+            this.cache.delete(lruKey);
+        }
+    }
 
     constructor(
         private readonly config: Config,
@@ -48,6 +63,7 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
             // 更新快取
             const cacheKey = `${sessionId}:${agentId}`;
             this.cache.set(cacheKey, [...blocks]);
+            this.touchCache(cacheKey);
             
             this.logger.debug(`[DataBlockRepository] Overwrote history for agent ${agentId} under session ${sessionId}`);
         } catch (err: any) {
@@ -72,6 +88,7 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
             const cacheKey = `${sessionId}:${agentId}`;
             if (this.cache.has(cacheKey)) {
                 this.cache.get(cacheKey)!.push(block);
+                this.touchCache(cacheKey);
             }
             
             this.logger.debug(`[DataBlockRepository] Appended history for agent ${agentId} under session ${sessionId}`);
@@ -87,6 +104,7 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
     public async findByAgent(sessionId: string, agentId: string): Promise<DataBlock<any>[]> {
         const cacheKey = `${sessionId}:${agentId}`;
         if (this.cache.has(cacheKey)) {
+            this.touchCache(cacheKey);
             // 回傳淺拷貝，防止外部不小心 mutate 陣列
             return [...this.cache.get(cacheKey)!];
         }
@@ -130,7 +148,13 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
      * 檢查並將超大字串卸載為 DataPointer，並回傳更新後的 DataBlock。
      */
     public async offloadLargePayloads(sessionId: string, block: DataBlock<any>, thresholdBytes: number = 2000): Promise<DataBlock<any>> {
+        // 增量標記：若已處理過則直接跳過
+        if (block.isCompacted) {
+            return block;
+        }
+
         if (block.validateSize(thresholdBytes)) {
+            block.isCompacted = true;
             return block; // 大小合格，不需要卸載
         }
 
@@ -175,7 +199,9 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
         const blockData = block.toJSON();
         blockData.controlPayload = newPayload;
         blockData.dataPointers = newDataPointers;
-        return DataBlock.fromJSON(blockData);
+        const newBlock = DataBlock.fromJSON(blockData);
+        newBlock.isCompacted = true;
+        return newBlock;
     }
 
     // --- 內部輔助方法 ---

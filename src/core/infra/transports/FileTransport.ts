@@ -25,28 +25,53 @@ export class FileTransport implements ILogTransport {
     }
   }
 
+  private writeQueue: Record<string, string[]> = {};
+  private isFlushing: Record<string, boolean> = {};
+
+  private async flush(filePath: string) {
+    if (this.isFlushing[filePath]) return;
+    this.isFlushing[filePath] = true;
+    
+    while (this.writeQueue[filePath] && this.writeQueue[filePath].length > 0) {
+      const batch = this.writeQueue[filePath].join('');
+      this.writeQueue[filePath] = [];
+      try {
+        await fs.promises.appendFile(filePath, batch, 'utf8');
+      } catch (err) {
+        process.stderr.write(`[FileTransport] Failed to write log: ${err}\n`);
+      }
+    }
+    
+    this.isFlushing[filePath] = false;
+  }
+
+  private enqueue(filePath: string, line: string) {
+    if (!this.writeQueue[filePath]) {
+        this.writeQueue[filePath] = [];
+    }
+    this.writeQueue[filePath].push(line);
+    this.flush(filePath);
+  }
+
   send(entry: ILogEntry): void {
     try {
       const line = JSON.stringify(entry) + '\n';
       
-      // 如果有指定明確的檔名 (例如 Agent 的 .oplog.jsonl)
       if (this.logFileName) {
-        fs.appendFileSync(path.join(this.logDir, this.logFileName), line, 'utf8');
+        this.enqueue(path.join(this.logDir, this.logFileName), line);
         return;
       }
 
-      // 否則寫入當天全量日誌 (系統全域行為)
       const dateStr = new Date().toISOString().split('T')[0];
       const dailyFilePath = path.join(this.logDir, `${dateStr}.jsonl`);
-      fs.appendFileSync(dailyFilePath, line, 'utf8');
+      this.enqueue(dailyFilePath, line);
 
-      // 如果有 session_id，額外保留對 session 的追蹤
       if (entry.session_id) {
         const sessionFilePath = path.join(this.logDir, `${entry.session_id}.jsonl`);
-        fs.appendFileSync(sessionFilePath, line, 'utf8');
+        this.enqueue(sessionFilePath, line);
       }
     } catch (err) {
-      process.stderr.write(`[FileTransport] Failed to write log: ${err}\n`);
+      process.stderr.write(`[FileTransport] Failed to enqueue log: ${err}\n`);
     }
   }
 }
