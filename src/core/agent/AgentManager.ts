@@ -124,9 +124,8 @@ export class AgentManager implements ILifecycle {
 
         try {
             // 掛載工作區與工具
-            const parentAgentId = options?.parentAgent?.id;
             const workspaceType = options?.workspaceType || 'PERSISTENT';
-            await this.workspaceManager.initWorkspace(sessionId, id, workspaceType as any, { parentAgentId });
+            await this.workspaceManager.initWorkspace(sessionId, id, workspaceType as any);
 
             const tools: BaseTool[] = [];
 
@@ -192,10 +191,7 @@ export class AgentManager implements ILifecycle {
         }
 
         const data = agent.serialize();
-        await this.stateRepo.saveAgentState(agent.sessionId, agentId, data, {
-            isClone: data.isClone,
-            parentAgentId: data.parentAgentId
-        });
+        await this.stateRepo.saveAgentState(agent.sessionId, agentId, data);
         this.logger.debug(`[AgentManager] Agent ${agentId} state saved.`);
     }
 
@@ -218,30 +214,8 @@ export class AgentManager implements ILifecycle {
         this.logger.info(`[AgentManager] Agent ${agentId} terminated (GC).`);
     }
 
-    /**
-     * 計算特定 Agent 當前在記憶體中活躍的分身數量
-     */
-    public getActiveCloneCount(parentAgentId: string): number {
-        let count = 0;
-        for (const agent of this.activeAgents.values()) {
-            const data = agent.serialize();
-            if (data.isClone && data.parentAgentId === parentAgentId) {
-                count++;
-            }
-        }
-        return count;
-    }
-
     public getAgent(agentId: string): BaseAgent | undefined {
         return this.activeAgents.get(agentId);
-    }
-
-    public getProjectedBodyId(agentId: string, sessionId: string): string | null {
-        const agent = this.activeAgents.get(agentId);
-        if (agent && agent.sessionId === sessionId) {
-            return agent.projectedBodyId;
-        }
-        return null;
     }
 
     /**
@@ -254,9 +228,7 @@ export class AgentManager implements ILifecycle {
         }
 
         // 從儲存庫讀取
-        const isClone = options?.isClone;
-        const parentAgentId = options?.parentAgentId;
-        const data = await this.stateRepo.loadAgentState(sessionId, agentId, { isClone, parentAgentId });
+        const data = await this.stateRepo.loadAgentState(sessionId, agentId);
 
         if (!data) {
             throw new Error(`[AgentManager] Failed to rehydrate agent ${agentId}: State data not found.`);
@@ -269,7 +241,7 @@ export class AgentManager implements ILifecycle {
         agent.hydrate(data);
 
         // 掛載工作區與工具
-        await this.workspaceManager.initWorkspace(sessionId, agentId, data.workspaceType || 'PERSISTENT', { parentAgentId: data.parentAgentId });
+        await this.workspaceManager.initWorkspace(sessionId, agentId, data.workspaceType || 'PERSISTENT');
 
         const tools: any[] = [];
         if (data.type === AgentType.MAIN) {

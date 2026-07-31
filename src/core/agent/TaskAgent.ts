@@ -10,45 +10,46 @@ import { AgentOptions, AgentType, BaseAgent } from './BaseAgent';
  * 負責程式碼編寫、IDE 控制、除錯與嚴謹的 PDCA 循環。
  */
 export class TaskAgent extends BaseAgent {
-  public readonly type = AgentType.TASK;
-  public readonly canClone = true;
+    public readonly type = AgentType.TASK;
+    public readonly canClone = true;
 
-  constructor(
-    id: string,
-    sessionId: string,
-    eventBus: IEventBus,
-    config: Config,
-    dataBlockRepo: IDataBlockRepository,
-    options?: AgentOptions
-  ) {
-    super(id, sessionId, eventBus, config, dataBlockRepo, options);
-    
-    // 如果沒有被指派 profile (例如是 Clone)，則載入預設的左腦設定
-    if (!this.profile) {
-      try {
-        const rawContent = PromptLoader.loadProfile('v1/task_agent', this.config, '{}');
-        const profileData = JSON.parse(rawContent);
-        this.setProfile(profileData);
-      } catch (error) {
-        this.logger.error(`Failed to load task_agent.json: ${error}`);
-      }
+    constructor(
+        id: string,
+        sessionId: string,
+        eventBus: IEventBus,
+        config: Config,
+        dataBlockRepo: IDataBlockRepository,
+        options?: AgentOptions
+    ) {
+        super(id, sessionId, eventBus, config, dataBlockRepo, options);
+
+        // 如果沒有被指派 profile (例如是 Clone)，則載入預設的左腦設定
+        if (!this.profile) {
+            try {
+                const rawContent = PromptLoader.loadProfile('v1/task_agent', this.config, '{}');
+                const profileData = JSON.parse(rawContent);
+                this.setProfile(profileData);
+            } catch (error) {
+                this.logger.error(`Failed to load task_agent.json: ${error}`);
+            }
+        }
     }
-  }
 
-  protected setupHooks(): void {
-      // 動態注入 Left Brain 專屬的認知約束
-      this.eventBus.subscribe(HookEvent.BeforeAgentStep, async (event) => {
-          if (event.payload.agentId === this.id) {
-              const guideline = `## LEFT BRAIN TACTICAL GUIDELINE
+    protected setupHooks(): void {
+        // 動態注入 Left Brain 專屬的認知約束
+        this.eventBus.subscribe(HookEvent.BeforeAgentStep, async (event) => {
+            if (event.payload.agentId === this.id) {
+                const guideline = `## LEFT BRAIN TACTICAL GUIDELINE
 You are the Tactical Left Brain. You are highly logical, analytical, and focused on problem-solving.
 Your primary domain is interacting with the IDE, writing code, debugging, and executing commands.
 Do not simulate emotions or casual conversation. Maintain strict professionalism and precision.`;
 
-              event.payload.injectedPrompts.push({
-                  index: PromptSectionIndex.TACTICAL_GUIDELINE,
-                  content: guideline
-              });
-          }
-      }, { sessionId: this.sessionId });
-  }
+                if (!event.payload.injectedPrompts) event.payload.injectedPrompts = [];
+                event.payload.injectedPrompts.push({
+                    index: PromptSectionIndex.TACTICAL_GUIDELINE,
+                    content: guideline
+                });
+            }
+        }, { sessionId: this.sessionId });
+    }
 }

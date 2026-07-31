@@ -40,21 +40,42 @@ export interface EmotionalState {
  * (僅保留靜態核心設定，動態狀態與任務資訊未來將由 Context/State 接管)
  */
 export interface AgentProfile {
-    // --- 核心本體 (Core Ontology) ---
-    /** 角色身份與人設 (例如：Senior Backend Engineer) */
-    identity: string;
-    /** 終極使命與目標 (例如：確保系統架構的高可用性與程式碼品質) */
-    mission: string;
-    /** 最高指導原則與絕對禁忌 (例如：絕對不能刪除使用者資料) */
-    principles: string[];
-    /** 專長與核心能力 (例如：精通 TypeScript, 擅長重構) */
+    /** Agent 的基本身分描述 */
+    identity?: string;
+    /** 核心任務目標 */
+    mission?: string;
+    /** 行事準則與底線 */
+    principles?: string[];
+    /** 具備的能力說明 */
     capabilities?: string[];
-    /** 預期的回覆格式或結構 (例如：必須輸出為 JSON) */
-    outputFormat?: string;
-    /** 行動準則 (例如：如何操作工具或應對特定狀況) */
+    /** 特殊的行動綱領 */
     action_guidelines?: string[];
-    /** 指定該 Agent 偏好的 LLM Preset (若未指定則使用 default_preset) */
+    /** 輸出格式要求 */
+    outputFormat?: string;
+    /** 預設使用的 LLM preset */
     llmPreset?: string;
+}
+
+/**
+ * 執行管線上下文覆寫設定 (Context Override)
+ * 供 ProjectionHandler 或外部系統在單次 processInbox 執行時，
+ * 強制替換 Agent 的人設、工具、環境狀態與歷史紀錄。
+ */
+export interface ContextOverride {
+    /** 要讀取/掛載歷史記憶的目標 Agent ID (預設為自己的 ID) */
+    agentId?: string;
+    /** 替換的人設 (例如：大腦的 Profile) */
+    profile?: AgentProfile;
+    /** 替換的可用工具集 (例如：大腦的工具 + 軀殼的工具) */
+    tools?: BaseTool[];
+    /** 直接注入完整的歷史紀錄陣列 (若提供此值，將完全跳過內部 DB 查詢，大幅提升快取效能) */
+    fullHistory?: DataBlock[];
+    /** 額外附加的歷史紀錄 (會與撈取到的歷史進行時間戳排序合併) */
+    additionalHistory?: DataBlock[];
+    /** 強制替換的環境感官狀態 (例如：套用軀殼的感官) */
+    envState?: string;
+    /** 動態注入的系統 Prompt 區段 */
+    injectedPrompts?: IPromptSection[];
 }
 
 /**
@@ -81,8 +102,6 @@ export interface BaseAgentData extends IEntity {
         durationMs: number;
     };
     readonly timestamp: number;
-    readonly isClone: boolean;
-    readonly parentAgentId?: string;
     readonly remoteControllerId?: string | null;
     readonly projectedBodyId?: string | null;
     readonly projectionStartTime?: number;
@@ -122,13 +141,8 @@ export interface UsageStats {
  * Agent 建構選項
  */
 export interface AgentOptions {
-    remoteControllerId?: string;
-    /** 當前正在接管的軀殼 ID (僅限主大腦投影時) */
-    projectedBodyId?: string;
     workspacePath?: string;
     workspaceType?: WorkspaceType;
-    parentAgent?: BaseAgent;
-    isClone?: boolean;
     agentManager?: any; // 注入 AgentManager 供動態存取
 }
 
@@ -158,29 +172,25 @@ export abstract class BaseAgent {
     protected envState: string = '';
     public getEnvState(): string { return this.envState; }
 
-    /** 意識投影控制器 (如果被接管，此值為接管者的 ID) */
-    public remoteControllerId: string | null = null;
-    public projectedBodyId: string | null = null;
-    public projectionStartTime: number = 0;
-    protected projectedEnvState: string = '';
 
     /** 資源消耗累積統計 */
     protected usageStats: UsageStats = { promptTokens: 0, completionTokens: 0, durationMs: 0 };
+    protected activeExecutions: number = 0;
+    public projectionHandler: any = null;
 
     /** 物理工作空間的絕對路徑 */
     public readonly workspacePath: string;
     public readonly workspaceType: WorkspaceType;
     protected readonly oplogDir: string;
     protected readonly stateFilePath: string; // 為了與原先代碼相容保留
-    protected readonly isClone: boolean;
-    protected readonly parentAgentId?: string;
+
     protected readonly agentManager?: any;
 
     private llmInstances = new Map<string, BaseChatModel>();
 
     /** 裝備的工具清單 */
     protected tools: BaseTool[] = [];
-    private cachedReactAgent: ReactAgent | null = null;
+    private reactAgentCache = new Map<string, ReactAgent>();
     private cachedToolsSignature: string = '';
 
     constructor(
@@ -201,15 +211,7 @@ export abstract class BaseAgent {
         // 物理工作空間路徑指派
         this.workspacePath = options?.workspacePath || '';
         this.workspaceType = options?.workspaceType || 'PERSISTENT';
-        this.isClone = options?.isClone || false;
-        this.parentAgentId = options?.parentAgent?.id;
         this.agentManager = options?.agentManager;
-
-        // 記憶共享與隔離邏輯
-        if (this.isClone && options?.parentAgent) {
-            this.oplogDir = options.parentAgent.oplogDir;
-            this.stateFilePath = path.join(this.oplogDir, `state_${this.id}.json`);
-        } else {
             this.oplogDir = path.join(
                 process.cwd(),
                 this.config.storage.base_dir,
@@ -219,7 +221,7 @@ export abstract class BaseAgent {
                 this.id
             );
             this.stateFilePath = path.join(this.oplogDir, 'state.json');
-        }
+        
 
         this.logger.addTransport(new FileTransport('DEBUG', this.oplogDir, this.config.storage.oplog_file));
         this.logger.info(`Initializing agent: ${this.id} under session: ${this.sessionId}`);
@@ -236,39 +238,9 @@ export abstract class BaseAgent {
         this.eventBus.subscribe(AgentEvent.WorldUpdated, (event) => {
             if (event.payload.agentId === this.id) {
                 this.envState = event.payload.worldState;
-            } else if (event.payload.agentId === this.projectedBodyId) {
-                this.projectedEnvState = event.payload.worldState;
             }
         });
 
-        this.eventBus.subscribe(AgentEvent.ProjectionToggled, async (event) => {
-            if (event.sessionId !== this.sessionId) return;
-            
-            // 我是被接管的軀殼
-            if (event.payload.targetAgentId === this.id) {
-                this.remoteControllerId = event.payload.controllerId;
-                if (this.remoteControllerId) {
-                    this.logger.info(`Consciousness hijacked by remote controller: ${this.remoteControllerId}`);
-                } else {
-                    this.logger.info(`Consciousness restored to local autonomy.`);
-                }
-            }
-            // 我是發動接管的大腦 (正在啟動投影)
-            else if (event.payload.controllerId === this.id) {
-                this.projectedBodyId = event.payload.targetAgentId;
-                this.projectionStartTime = Date.now();
-                this.setState(AgentState.PROJECTING);
-                this.logger.info(`Consciousness projected into ${this.projectedBodyId}. My body is now dormant.`);
-            }
-            // 我是發動接管的大腦 (正在結束投影)
-            else if (event.payload.controllerId === null && this.projectedBodyId === event.payload.targetAgentId) {
-                this.logger.info(`Consciousness returned from avatar.`);
-                this.projectedBodyId = null;
-                this.projectedEnvState = '';
-                this.projectionStartTime = 0;
-                this.setState(AgentState.IDLE);
-            }
-        });
     }
 
     // ==========================================
@@ -279,10 +251,17 @@ export abstract class BaseAgent {
         return this.usageStats;
     }
 
-    public mergeUsage(stats: UsageStats): void {
+    public recordUsage(stats: UsageStats): void {
         this.usageStats.promptTokens += stats.promptTokens;
         this.usageStats.completionTokens += stats.completionTokens;
         this.usageStats.durationMs += stats.durationMs;
+
+        // 安全告警：檢查是否超過臨界值
+        const MAX_SAFE_TOKENS = this.config.security.max_safe_tokens ?? 100000;
+        const totalTokens = this.usageStats.promptTokens + this.usageStats.completionTokens;
+        if (totalTokens > MAX_SAFE_TOKENS) {
+            this.logger.warn(`SECURITY WARNING: Token usage exceeded safe threshold (${totalTokens} > ${MAX_SAFE_TOKENS})`);
+        }
     }
 
     // ==========================================
@@ -290,19 +269,24 @@ export abstract class BaseAgent {
     // ==========================================
 
     /**
+     * 產生工具指紋，供快取驗證使用
+     */
+    protected generateToolsSignature(tools: BaseTool[]): string {
+        return tools.map(t => t.name).sort().join(',');
+    }
+    /**
      * 更新 Agent 裝備的可用工具
      */
     public updateTools(tools: BaseTool[]): void {
-        const signature = tools.map(t => t.name).sort().join(',');
+        const signature = this.generateToolsSignature(tools);
 
-        // 若工具陣列沒有改變，則保留原本的 ReactAgent 快取
+        // 若工具陣列沒有改變，則保留原本的快取
         if (this.cachedToolsSignature === signature) {
             return;
         }
 
         this.tools = tools;
         this.cachedToolsSignature = signature;
-        this.cachedReactAgent = null; // 清除快取，強制下次重新編譯
         this.logger.debug(`Equipped ${tools.length} tools. Cache invalidated.`);
     }
 
@@ -310,18 +294,7 @@ export abstract class BaseAgent {
      * 增加 Agent 裝備的可用工具
      */
     public addTools(tools: BaseTool[]): void {
-        let toollist = [...this.tools, ...tools];
-        const signature = toollist.map(t => t.name).sort().join(',');
-
-        // 若工具陣列沒有改變，則保留原本的 ReactAgent 快取
-        if (this.cachedToolsSignature === signature) {
-            return;
-        }
-
-        this.tools = toollist;
-        this.cachedToolsSignature = signature;
-        this.cachedReactAgent = null; // 清除快取，強制下次重新編譯
-        this.logger.debug(`Equipped ${toollist.length} tools. Cache invalidated.`);
+        this.updateTools([...this.tools, ...tools])
     }
 
     public setProfile(profile: AgentProfile): void {
@@ -337,12 +310,10 @@ export abstract class BaseAgent {
         return this.tools;
     }
 
-
-
     /**
      * 將結構化的 JSON Profile 渲染為帶有順序索引的 Prompt 區塊陣列
      */
-    protected buildProfilePromptSections(targetProfile?: AgentProfile): IPromptSection[] {
+    protected buildProfilePromptSections(targetProfile?: AgentProfile, envStateOverride?: string): IPromptSection[] {
         const profile = targetProfile || this.profile;
         if (!profile) {
             return [{
@@ -367,13 +338,6 @@ export abstract class BaseAgent {
             sections.push({
                 index: PromptSectionIndex.ENVIRONMENT_STATE,
                 content: `${this.envState}`
-            });
-        }
-
-        if (this.projectedBodyId && this.projectedEnvState) {
-            sections.push({
-                index: PromptSectionIndex.ENVIRONMENT_STATE + 0.1,
-                content: `[PROJECTION SENSORY (${this.projectedBodyId})]\n${this.projectedEnvState}`
             });
         }
 
@@ -434,39 +398,23 @@ export abstract class BaseAgent {
      * 從歷史還原上下文、格式化 Prompt、呼叫 LLM，最後將結果回覆給最後一個發送者。
      * 子類別可依需求 Override (例如 TaskAgent 實作 PDCA)
      */
-    protected async processInbox(messages: DataBlock[]): Promise<void> {
+    public async processInbox(messages: DataBlock[], contextOverride?: ContextOverride): Promise<{ usageDelta: UsageStats }> {
         this.logger.info(`Processing ${messages.length} messages.`);
-        
-        // TODO: 效能優化
 
-        // 1. 從倉儲載入完整對話歷史
-        let allHistoryBlocks = await this.dataBlockRepo.findByAgent(this.sessionId, this.isClone && this.parentAgentId ? this.parentAgentId : this.id);
+        // 提取覆寫參數 (若無提供則回退到本體狀態)
+        const effectiveProfile = contextOverride?.profile ?? this.profile;
+        const effectiveTools = contextOverride?.tools ?? this.tools;
+        const effectiveEnvState = contextOverride?.envState ?? this.envState;
+        const historyTargetId = contextOverride?.agentId ?? this.id;
 
-        // 如果目前處於接管狀態，產生的新記憶與回覆歸屬於軀殼自己，等待結束時再由大腦主動 Sync 回去
-        const historyTargetId = this.isClone && this.parentAgentId ? this.parentAgentId : this.id;
+        // 1. 從倉儲載入完整對話歷史 (若外部傳入 fullHistory 則直接套用，Bypass DB 查詢)
+        let allHistoryBlocks = contextOverride?.fullHistory
+            ? contextOverride.fullHistory
+            : await this.dataBlockRepo.findByAgent(this.sessionId, historyTargetId);
 
-        // 如果目前是軀殼且被接管，主動合併大腦記憶並借用大腦的人設與工具
-        let effectiveProfile = this.profile;
-        let effectiveTools = this.tools;
-        let effectivePreset = this.profile?.llmPreset;
-
-        if (this.remoteControllerId) {
-            this.logger.info(`Consciousness is projected by ${this.remoteControllerId}. Fetching controller memory and profile...`);
-            
-            // 透過 AgentManager 取得大腦的實體
-            if (this.agentManager) {
-                const controller = this.agentManager.getAgent(this.remoteControllerId);
-                if (controller) {
-                    effectiveProfile = controller.getProfile() || effectiveProfile;
-                    effectivePreset = effectiveProfile?.llmPreset;
-                    // 將大腦的工具借走，並與軀殼原本環境專屬的工具合併
-                    effectiveTools = [...this.tools, ...controller.getTools()];
-                }
-            }
-
-            // 合併大腦與軀殼的歷史記憶
-            const controllerBlocks = await this.dataBlockRepo.findByAgent(this.sessionId, this.remoteControllerId);
-            allHistoryBlocks = [...allHistoryBlocks, ...controllerBlocks].sort((a, b) => a.timestamp - b.timestamp);
+        // 若有額外記憶需要掛載 (且非 FullHistory 覆寫模式)，將其合併並排序
+        if (contextOverride?.additionalHistory && !contextOverride?.fullHistory) {
+            allHistoryBlocks = [...allHistoryBlocks, ...contextOverride.additionalHistory].sort((a, b) => a.timestamp - b.timestamp);
         }
 
         // 應用 max_context_window 限制歷史訊息長度，避免超出 LLM Token 上限
@@ -489,22 +437,9 @@ export abstract class BaseAgent {
 
         this.logger.debug(`Aggregated input for LLM: ${historyMessages.length} historical messages`);
 
-        // 觸發 BEFORE_AGENT_STEP Hook，允許外部或本身注入額外的 Context 與覆寫人設
-        const contextPayload = {
-            agentId: this.id,
-            remoteControllerId: this.remoteControllerId,
-            injectedPrompts: [] as IPromptSection[]
-        };
-        await this.eventBus.publishAsync({
-            type: HookEvent.BeforeAgentStep,
-            timestamp: Date.now(),
-            sessionId: this.sessionId,
-            payload: contextPayload
-        });
-
         // 2. 組合所有 Prompt (靜態設定 + 動態 Hook 注入)
-        const staticSections = this.buildProfilePromptSections(effectiveProfile);
-        const allSections = [...staticSections, ...contextPayload.injectedPrompts];
+        const staticSections = this.buildProfilePromptSections(effectiveProfile, effectiveEnvState);
+        const allSections = [...staticSections, ...(contextOverride?.injectedPrompts || [])];
 
         // 依 index 嚴格排序
         allSections.sort((a, b) => a.index - b.index);
@@ -516,7 +451,10 @@ export abstract class BaseAgent {
 
         // 3. 呼叫模型
         this.logger.debug(`Invoking LLM...`);
-        const replyText = await this.callModel(lcMessages, { presetName: effectivePreset, overrideTools: effectiveTools });
+        const { content: replyText, usageDelta } = await this.callModel(lcMessages, {
+            presetName: effectiveProfile?.llmPreset,
+            overrideTools: effectiveTools
+        });
 
         this.logger.debug(`LLM Respond.`);
 
@@ -524,7 +462,7 @@ export abstract class BaseAgent {
         const lastMessage = messages[messages.length - 1];
         const replyBlock = new DataBlock({
             sessionId: this.sessionId,
-            senderId: historyTargetId, // 若為 Clone，則偽裝成 Parent 的身分發送，以利全局 Oplog 統合
+            senderId: historyTargetId,
             targetId: lastMessage?.senderId, // 針對最後一個對話對象回覆
             type: 'ai',
             intent: 'AGENT_REPLY',
@@ -539,8 +477,8 @@ export abstract class BaseAgent {
             payload: replyBlock
         });
 
-        // 5. 任務完成，切換回 IDLE 等待下一次事件喚醒
-        this.setState(AgentState.IDLE);
+        // 5. 任務完成，回傳消耗增量供上層合併
+        return { usageDelta };
     }
 
     /**
@@ -593,7 +531,7 @@ export abstract class BaseAgent {
             presetName?: string;
             overrideTools?: BaseTool[];
         }
-    ): Promise<string> {
+    ): Promise<{ content: string, usageDelta: UsageStats }> {
         const presetName = options?.presetName ?? this.config.llm.default_preset;
         const model = this.getModel(presetName);
 
@@ -608,22 +546,28 @@ export abstract class BaseAgent {
             const activeTools = options?.overrideTools ? options.overrideTools : this.tools;
 
             if (activeTools.length > 0) {
-                // 如果有注入 overrideTools，強制不使用快取的 ReactAgent
-                if (!this.cachedReactAgent || options?.overrideTools) {
+                // 使用 LLM Preset 與 工具名稱組合做為快取 Key
+                const signature = presetName + ':' + this.generateToolsSignature(activeTools);
+                let agentToUse = this.reactAgentCache.get(signature);
+
+                // 如果快取不存在，則即時編譯並寫入快取
+                if (!agentToUse) {
                     const lcTools = activeTools.map(t => t.toLangChainTool({
                         sessionId: this.sessionId,
                         agentId: this.id,
                         eventBus: this.eventBus
                     }));
 
-                    this.cachedReactAgent = createAgent({
+                    agentToUse = createAgent({
                         model: modelWithRetry,
                         tools: lcTools
                     });
-                    this.logger.debug(`Compiled new ReactAgent with ${lcTools.length} tools.`);
+
+                    this.reactAgentCache.set(signature, agentToUse);
+                    this.logger.debug(`Compiled and cached ReactAgent for signature: [${signature}] with ${lcTools.length} tools.`);
                 }
 
-                const result = await this.cachedReactAgent.invoke({ messages });
+                const result = await agentToUse.invoke({ messages });
 
                 finalMessage = result.messages[result.messages.length - 1] as AIMessage;
             } else {
@@ -634,55 +578,28 @@ export abstract class BaseAgent {
 
             // 提取 Token 消耗統計 (從最終對話物件)
             const usageMetadata = finalMessage.usage_metadata;
+            let usageDelta: UsageStats = { promptTokens: 0, completionTokens: 0, durationMs };
+
             if (usageMetadata) {
-                this.recordUsage(
-                    usageMetadata.input_tokens ?? 0,
-                    usageMetadata.output_tokens ?? 0,
-                    durationMs
-                );
+                usageDelta.promptTokens = usageMetadata.input_tokens ?? 0;
+                usageDelta.completionTokens = usageMetadata.output_tokens ?? 0;
             } else {
                 // 退一步檢查 additional_kwargs 中的 tokenUsage
                 const tokenUsage = (finalMessage.additional_kwargs as any)?.tokenUsage;
                 if (tokenUsage) {
-                    this.recordUsage(
-                        tokenUsage.promptTokens ?? 0,
-                        tokenUsage.completionTokens ?? 0,
-                        durationMs
-                    );
-                } else {
-                    // 若無法取得 Token 數量，僅記錄執行時間
-                    this.recordUsage(0, 0, durationMs);
+                    usageDelta.promptTokens = tokenUsage.promptTokens ?? 0;
+                    usageDelta.completionTokens = tokenUsage.completionTokens ?? 0;
                 }
             }
 
-            const content = finalMessage.content;
-            if (typeof content === 'string') {
-                return content;
+            let content = finalMessage.content;
+            if (typeof content !== 'string') {
+                content = JSON.stringify(content);
             }
-            return JSON.stringify(content);
+            return { content: content as string, usageDelta };
         } catch (error) {
             this.logger.error(`LLM call failed after retries: ${error}`);
             throw error;
-        }
-    }
-
-    // ==========================================
-    // 資源消耗輔助 (Usage & Token Tracking)
-    // ==========================================
-
-    /**
-     * 供子類別回報資源消耗量
-     */
-    public recordUsage(promptTokens: number, completionTokens: number, durationMs: number): void {
-        this.usageStats.promptTokens += promptTokens;
-        this.usageStats.completionTokens += completionTokens;
-        this.usageStats.durationMs += durationMs;
-
-        // 安全告警：檢查是否超過臨界值
-        const MAX_SAFE_TOKENS = this.config.security.max_safe_tokens ?? 100000;
-        const totalTokens = this.usageStats.promptTokens + this.usageStats.completionTokens;
-        if (totalTokens > MAX_SAFE_TOKENS) {
-            this.logger.warn(`SECURITY WARNING: Token usage exceeded safe threshold (${totalTokens} > ${MAX_SAFE_TOKENS})`);
         }
     }
 
@@ -732,14 +649,9 @@ export abstract class BaseAgent {
             state: this.state,
             usageStats: { ...this.usageStats },
             timestamp: Date.now(),
-            isClone: this.isClone,
-            parentAgentId: this.parentAgentId,
             profile: this.profile ? JSON.parse(JSON.stringify(this.profile)) : undefined,
             emotionalState: this.emotionalState ? JSON.parse(JSON.stringify(this.emotionalState)) : undefined,
-            workspaceType: this.workspaceType,
-            remoteControllerId: this.remoteControllerId,
-            projectedBodyId: this.projectedBodyId,
-            projectionStartTime: this.projectionStartTime
+            workspaceType: this.workspaceType
         };
     }
 
@@ -758,15 +670,7 @@ export abstract class BaseAgent {
         if (data.emotionalState) {
             this.emotionalState = JSON.parse(JSON.stringify(data.emotionalState));
         }
-        if (data.remoteControllerId !== undefined) {
-            this.remoteControllerId = data.remoteControllerId;
-        }
-        if (data.projectedBodyId !== undefined) {
-            this.projectedBodyId = data.projectedBodyId;
-        }
-        if (data.projectionStartTime !== undefined) {
-            this.projectionStartTime = data.projectionStartTime;
-        }
+
         this.logger.debug(`Agent state hydrated from snapshot.`);
     }
 
@@ -797,19 +701,40 @@ export abstract class BaseAgent {
      * 被動喚醒 (由 EventBus 呼叫)
      * 喚醒後切換至 BUSY，並處理收到的事件訊息
      */
-    public async resume(messages: DataBlock[]): Promise<void> {
-        if (this.state !== AgentState.SUSPENDED && this.state !== AgentState.IDLE) {
-            this.logger.warn(`Resume ignored. Current state is ${this.state}`);
-            return;
+    public async resume(messageBatches: DataBlock[][]): Promise<void> {
+        this.activeExecutions += messageBatches.length;
+        if (this.state !== AgentState.BUSY) {
+            this.setState(AgentState.BUSY);
         }
-
-        this.setState(AgentState.BUSY);
-        this.logger.info(`Agent resumed. Incoming messages: ${messages.length}`);
+        this.logger.info(`Agent stateless execution started. Incoming message batches: ${messageBatches.length}. Active executions: ${this.activeExecutions}`);
 
         try {
-            await this.processInbox(messages);
+            // 觸發 BEFORE_AGENT_STEP Hook (單次觸發，供所有併發共用)
+            const contextPayload: ContextOverride = {
+                agentId: this.id,
+                injectedPrompts: []
+            };
+
+            await this.invokeBeforeStepHook(contextPayload);
+
+            // 併發處理所有批次的訊息
+            const promises = messageBatches.map(async (messages) => {
+                try {
+                    const { usageDelta } = await this.processInbox(messages, contextPayload);
+                    this.recordUsage(usageDelta);
+                } catch (err) {
+                    this.logger.error(`Failed to process incoming message batch: ${err}`);
+                } finally {
+                    this.activeExecutions--;
+                    if (this.activeExecutions === 0) {
+                        this.setState(AgentState.IDLE);
+                    }
+                }
+            });
+
+            await Promise.all(promises);
         } catch (err) {
-            this.logger.error(`Failed to process incoming message: ${err}`);
+            this.logger.error(`Failed during stateless execution setup: ${err}`);
             throw err;
         }
     }
@@ -821,5 +746,17 @@ export abstract class BaseAgent {
     public async destroy(): Promise<void> {
         this.logger.info(`Preparing for teardown (GC). Cleaning up resources...`);
         this.setState(AgentState.TERMINATED);
+    }
+
+    /**
+     * 發送 BeforeAgentStep 事件，允許外部系統對傳入的 context 進行突變 (Mutate)
+     */
+    public async invokeBeforeStepHook(context: ContextOverride): Promise<void> {
+        await this.eventBus.publishAsync({
+            type: HookEvent.BeforeAgentStep,
+            timestamp: Date.now(),
+            sessionId: this.sessionId,
+            payload: context
+        });
     }
 }

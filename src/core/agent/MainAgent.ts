@@ -49,7 +49,7 @@ export class MainAgent extends BaseAgent {
         this.eventBus.subscribe(HookEvent.BeforeAgentStep, async (event) => {
             if (event.payload.agentId === this.id && this.emotionalState) {
                 const { energy, intimacy, joy, distress, anxiety, fear, pride, stress, excitement, socialNeed } = this.emotionalState;
-                
+
                 let prompt = `## CURRENT INTERNAL STATE & EMOTIONS\n`;
                 prompt += `You must adapt your tone and responses based on the following internal states:\n`;
                 prompt += `- Energy (Fatigue): ${energy.toFixed(1)}/100 (Below 20 means exhausted)\n`;
@@ -59,6 +59,7 @@ export class MainAgent extends BaseAgent {
                 prompt += `  * Distress: ${distress.toFixed(1)}, Anxiety: ${anxiety.toFixed(1)}, Fear: ${fear.toFixed(1)}, Stress: ${stress.toFixed(1)}\n`;
                 prompt += `  * Social Need (Loneliness): ${socialNeed.toFixed(1)}\n`;
 
+                if (!event.payload.injectedPrompts) event.payload.injectedPrompts = [];
                 event.payload.injectedPrompts.push({
                     index: PromptSectionIndex.EMOTIONAL_STATE,
                     content: prompt
@@ -71,7 +72,7 @@ export class MainAgent extends BaseAgent {
             const block = event.payload;
             if (block.senderId === 'USER' && typeof block.controlPayload === 'string') {
                 const text = block.controlPayload.toLowerCase();
-                
+
                 // TODO: 實作真正邏輯
                 if (text.includes('讚') || text.includes('謝謝') || text.includes('好') || text.includes('good') || text.includes('thanks')) {
                     this.appraiseEvent({ joy: 20, intimacy: 5, socialNeed: -30 });
@@ -115,7 +116,7 @@ export class MainAgent extends BaseAgent {
                     this.emotionalState.pride = decay(this.emotionalState.pride);
                     this.emotionalState.stress = decay(this.emotionalState.stress);
                     this.emotionalState.excitement = decay(this.emotionalState.excitement);
-                    
+
                     // 社交需求隨時間上升 (冷落超過一段時間)
                     this.emotionalState.socialNeed = Math.min(100, this.emotionalState.socialNeed + 2);
 
@@ -163,7 +164,7 @@ export class MainAgent extends BaseAgent {
                     const oldVal = this.emotionalState[emotionKey] as number;
                     const newVal = clamp(oldVal + (impactValue * personalityWeight));
                     (this.emotionalState as any)[emotionKey] = newVal;
-                    
+
                     // 臨界點閾值檢查 (Threshold Checks)
                     if (newVal > 80 && oldVal <= 80) {
                         shiftTriggered = true;
