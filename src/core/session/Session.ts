@@ -1,5 +1,5 @@
 import { IEntity } from '../infra/persistence/IRepository';
-import { DataBlock, DataBlockData } from '../messaging/DataBlock';
+import { DataBlock, DataBlockData, MessagePriority } from '../messaging/DataBlock';
 
 /**
  * SessionState
@@ -134,6 +134,22 @@ export class Session implements IEntity {
       senders.add(b.senderId);
     }
     return Array.from(senders);
+  }
+
+  /**
+   * 唯讀檢查 (Peek)：判斷指定發送者的 Inbox 中是否含有具備行動價值的訊息 ( priority > LOW 或 達到 forceWakeup 閾值 )
+   * 不會搬動或改變任何 Inbox 資料結構。
+   */
+  public hasActionableMessages(agentId: string, senderId: string, forceWakeupThreshold: number): boolean {
+    const allBlocks = this.inboxBuffer.get(agentId) || [];
+    let count = 0;
+    for (const b of allBlocks) {
+      if (b.senderId === senderId) {
+        if (b.priority > MessagePriority.LOW) return true;
+        count++;
+      }
+    }
+    return count >= forceWakeupThreshold;
   }
 
   /**

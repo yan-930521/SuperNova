@@ -2,7 +2,7 @@ import { createAgent, ReactAgent } from 'langchain';
 import * as path from 'path';
 
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import { AIMessage, BaseMessage } from '@langchain/core/messages';
+import { AIMessage, BaseMessage, SystemMessage } from '@langchain/core/messages';
 import { ChatPromptTemplate } from '@langchain/core/prompts';
 import { ChatOpenAI } from '@langchain/openai';
 
@@ -14,7 +14,7 @@ import { ConsoleTransport } from '../infra/transports/ConsoleTransport';
 import { FileTransport } from '../infra/transports/FileTransport';
 import { DataBlock, MessagePriority } from '../messaging/DataBlock';
 import {
-    AgentEvent, HookEvent, IEventBus, IPromptSection, PromptSectionIndex
+    AgentEvent, HookEvent, IEventBus, IPromptSection, PromptSectionIndex, GlobalEventMap, IEvent
 } from '../messaging/IBus';
 import { BaseTool } from './tool/BaseTool';
 
@@ -192,6 +192,7 @@ export abstract class BaseAgent {
     protected tools: BaseTool[] = [];
     private reactAgentCache = new Map<string, ReactAgent>();
     private cachedToolsSignature: string = '';
+    protected eventSubscriptions: Array<{type: string, handler: any}> = [];
 
     constructor(
         public readonly id: string,
@@ -235,12 +236,23 @@ export abstract class BaseAgent {
      * 預設為空，供子類別 Override 來實作各自的事件監聽邏輯
      */
     protected setupHooks(): void {
-        this.eventBus.subscribe(AgentEvent.WorldUpdated, (event) => {
+        this.subscribeEvent(AgentEvent.WorldUpdated, (event: any) => {
             if (event.payload.agentId === this.id) {
                 this.envState = event.payload.worldState;
             }
         });
+    }
 
+    /**
+     * 安全訂閱事件，並在 destroy 時自動清理，防止殭屍監聽器
+     */
+    protected subscribeEvent<T extends Extract<keyof GlobalEventMap, string>>(
+        type: T,
+        handler: (event: IEvent<T>) => void | Promise<void>,
+        options?: { sessionId?: string }
+    ): void {
+        this.eventBus.subscribe(type, handler, options);
+        this.eventSubscriptions.push({ type, handler });
     }
 
     // ==========================================
@@ -431,9 +443,7 @@ export abstract class BaseAgent {
             return saveTokens && (index < allHistoryBlocks.length - uncompressedTail);
         }
 
-        const historyMessages = allHistoryBlocks.map((m: DataBlock<any>, index: number) => {
-            return m.toMessage(this.id, shouldCompress(index));
-        });
+        const historyMessages = this.buildHistoryMessages(allHistoryBlocks, shouldCompress);
 
         this.logger.debug(`Aggregated input for LLM: ${historyMessages.length} historical messages`);
 
@@ -479,6 +489,42 @@ export abstract class BaseAgent {
 
         // 5. 任務完成，回傳消耗增量供上層合併
         return { usageDelta };
+    }
+
+    /**
+     * 負責將原始的 DataBlock 轉換為 LangChain 的 BaseMessage，並支援動態的時間感知插針
+     */
+    protected buildHistoryMessages(blocks: DataBlock[], shouldCompress: (index: number) => boolean): BaseMessage[] {
+        const historyMessages: BaseMessage[] = [];
+        const enableTemporalInjection = this.config.agent.enable_temporal_injection ?? true;
+        const temporalThresholdMs = this.config.agent.temporal_threshold_ms;
+
+        for (let i = 0; i < blocks.length; i++) {
+            const m = blocks[i];
+
+            // 進行時間插針 (Temporal Context Injection)
+            if (enableTemporalInjection && i > 0) {
+                const prevM = blocks[i - 1];
+                const timeDiff = m.timestamp - prevM.timestamp;
+                
+                if (timeDiff > temporalThresholdMs) {
+                    const minutes = Math.floor(timeDiff / 60000);
+                    const hours = Math.floor(minutes / 60);
+                    const days = Math.floor(hours / 24);
+
+                    let timeStr = '';
+                    if (days > 0) timeStr = `${days} 天 ${hours % 24} 小時`;
+                    else if (hours > 0) timeStr = `${hours} 小時 ${minutes % 60} 分鐘`;
+                    else timeStr = `${minutes} 分鐘`;
+
+                    historyMessages.push(new SystemMessage(`[系統提示：距離上一次對話已過 ${timeStr}]`));
+                }
+            }
+
+            historyMessages.push(m.toMessage(this.id, shouldCompress(i)));
+        }
+
+        return historyMessages;
     }
 
     /**
@@ -649,8 +695,8 @@ export abstract class BaseAgent {
             state: this.state,
             usageStats: { ...this.usageStats },
             timestamp: Date.now(),
-            profile: this.profile ? JSON.parse(JSON.stringify(this.profile)) : undefined,
-            emotionalState: this.emotionalState ? JSON.parse(JSON.stringify(this.emotionalState)) : undefined,
+            profile: this.profile ? structuredClone(this.profile) : undefined,
+            emotionalState: this.emotionalState ? structuredClone(this.emotionalState) : undefined,
             workspaceType: this.workspaceType
         };
     }
@@ -665,10 +711,10 @@ export abstract class BaseAgent {
         this.state = (data.state as AgentState) ?? AgentState.INITIALIZING;
         this.usageStats = data.usageStats ? { ...data.usageStats } : { promptTokens: 0, completionTokens: 0, durationMs: 0 };
         if (data.profile) {
-            this.profile = JSON.parse(JSON.stringify(data.profile));
+            this.profile = structuredClone(data.profile);
         }
         if (data.emotionalState) {
-            this.emotionalState = JSON.parse(JSON.stringify(data.emotionalState));
+            this.emotionalState = structuredClone(data.emotionalState);
         }
 
         this.logger.debug(`Agent state hydrated from snapshot.`);
@@ -746,6 +792,12 @@ export abstract class BaseAgent {
     public async destroy(): Promise<void> {
         this.logger.info(`Preparing for teardown (GC). Cleaning up resources...`);
         this.setState(AgentState.TERMINATED);
+        
+        for (const sub of this.eventSubscriptions) {
+            this.eventBus.unsubscribe(sub.type, sub.handler);
+        }
+        this.eventSubscriptions = [];
+        this.logger.debug(`Cleaned up ${this.eventSubscriptions.length} event subscriptions.`);
     }
 
     /**

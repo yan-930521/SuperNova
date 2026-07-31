@@ -20,6 +20,29 @@ export class AgentManager implements ILifecycle {
 
     // 記憶體中的活躍 Agent 池 (Key: agentId)
     private readonly activeAgents: Map<string, BaseAgent> = new Map();
+    private readonly sessionAgents: Map<string, Set<string>> = new Map();
+
+    private addAgentToPool(agent: BaseAgent) {
+        this.activeAgents.set(agent.id, agent);
+        if (!this.sessionAgents.has(agent.sessionId)) {
+            this.sessionAgents.set(agent.sessionId, new Set());
+        }
+        this.sessionAgents.get(agent.sessionId)!.add(agent.id);
+    }
+
+    private removeAgentFromPool(agentId: string) {
+        const agent = this.activeAgents.get(agentId);
+        if (agent) {
+            this.activeAgents.delete(agentId);
+            const sessionSet = this.sessionAgents.get(agent.sessionId);
+            if (sessionSet) {
+                sessionSet.delete(agentId);
+                if (sessionSet.size === 0) {
+                    this.sessionAgents.delete(agent.sessionId);
+                }
+            }
+        }
+    }
 
     constructor(
         private readonly config: Config,
@@ -46,9 +69,13 @@ export class AgentManager implements ILifecycle {
             if (!agent) return;
 
             const teamMembers = [];
-            for (const [id, a] of this.activeAgents.entries()) {
-                if (a.sessionId === agent.sessionId && id !== agentId) {
-                    teamMembers.push(`- [${id}] (Type: ${a.type})`);
+            const peers = this.sessionAgents.get(agent.sessionId);
+            if (peers) {
+                for (const id of peers) {
+                    if (id !== agentId) {
+                        const a = this.activeAgents.get(id);
+                        if (a) teamMembers.push(`- [${id}] (Type: ${a.type})`);
+                    }
                 }
             }
 
@@ -120,7 +147,7 @@ export class AgentManager implements ILifecycle {
         const agent = this.createAgentInstance(type, id, sessionId, options);
 
         // 放入活躍池
-        this.activeAgents.set(id, agent);
+        this.addAgentToPool(agent);
 
         try {
             // 掛載工作區與工具
@@ -147,7 +174,7 @@ export class AgentManager implements ILifecycle {
             await this.saveAgent(id);
         } catch (err) {
             await agent.destroy();
-            this.activeAgents.delete(id);
+            this.removeAgentFromPool(id);
             throw err;
         }
 
@@ -174,7 +201,7 @@ export class AgentManager implements ILifecycle {
         } finally {
             // 實體銷毀並從池中移除
             await agent.destroy();
-            this.activeAgents.delete(agentId);
+            this.removeAgentFromPool(agentId);
         }
         this.logger.debug(`[AgentManager] Agent ${agentId} dehydrated.`);
     }
@@ -210,7 +237,7 @@ export class AgentManager implements ILifecycle {
         await agent.destroy();
 
         // 從活躍池中移除
-        this.activeAgents.delete(agentId);
+        this.removeAgentFromPool(agentId);
         this.logger.info(`[AgentManager] Agent ${agentId} terminated (GC).`);
     }
 
@@ -254,8 +281,10 @@ export class AgentManager implements ILifecycle {
 
         agent.updateTools(tools);
 
-        // 加回活躍池
-        this.activeAgents.set(agentId, agent);
+        agent.setReady();
+        
+        // 放入活躍池
+        this.addAgentToPool(agent);
 
         this.logger.debug(`[AgentManager] Agent ${agentId} rehydrated successfully.`);
         return agent;

@@ -37,7 +37,7 @@ export class TaskAgent extends BaseAgent {
 
     protected setupHooks(): void {
         // 動態注入 Left Brain 專屬的認知約束
-        this.eventBus.subscribe(HookEvent.BeforeAgentStep, async (event) => {
+        this.subscribeEvent(HookEvent.BeforeAgentStep, async (event) => {
             if (event.payload.agentId === this.id) {
                 const guideline = `## LEFT BRAIN TACTICAL GUIDELINE
 You are the Tactical Left Brain. You are highly logical, analytical, and focused on problem-solving.

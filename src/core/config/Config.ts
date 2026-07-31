@@ -35,6 +35,12 @@ export interface AgentConfig {
 
     /** 最大上下文窗口 */
     readonly max_context_window: number;
+
+    /** 是否開啟對話時間感知插針 */
+    readonly enable_temporal_injection: boolean;
+
+    /** 觸發時間感知插針的時間間隔閾值 (毫秒) */
+    readonly temporal_threshold_ms: number;
 }
 
 /**

@@ -280,13 +280,16 @@ export class SessionManager implements ILifecycle {
         // 1. 在寫入任何歷史或派發前，先處理真正超大型字串 (如 > 50KB 的 base64 圖片) 以免記憶體與 I/O 崩潰，但保留一般長度的工具回報
         const processedBlock = await this.dataBlockRepo.offloadLargePayloads(block.sessionId, block, 50000);
 
-        // 2. 若發送者是系統內的 Agent，客觀寫入發送者的歷史紀錄
+        // 2. 若發送者是系統內的 Agent，客觀寫入發送者的歷史紀錄與壓縮 (背景非同步執行)
+        let senderTask = Promise.resolve();
         if (session.registeredAgentIds.has(processedBlock.senderId)) {
-            await this.dataBlockRepo.appendForAgent(processedBlock.sessionId, processedBlock.senderId, processedBlock).catch(e => {
-                this.logger.error(`[SessionManager] Failed to append sender history: ${e}`);
-            });
-            // 同步執行舊紀錄的壓縮卸載 (保留最新 20 筆，其餘套用嚴格的 1000 bytes 壓縮閾值)
-            await this.compactAgentHistory(processedBlock.sessionId, processedBlock.senderId);
+            senderTask = (async () => {
+                await this.dataBlockRepo.appendForAgent(processedBlock.sessionId, processedBlock.senderId, processedBlock).catch(e => {
+                    this.logger.error(`[SessionManager] Failed to append sender history: ${e}`);
+                });
+                // 同步執行舊紀錄的壓縮卸載 (保留最新 20 筆，其餘套用嚴格的 1000 bytes 壓縮閾值)
+                await this.compactAgentHistory(processedBlock.sessionId, processedBlock.senderId);
+            })();
         }
 
         // 3. 決定接收對象 (Target)
@@ -296,22 +299,25 @@ export class SessionManager implements ILifecycle {
             targets = [processedBlock.targetId];
         }
 
-        // 4. 執行派發迴圈
-        for (const targetId of targets) {
+        // 4. 執行派發迴圈 (管線化並行派發)
+        const targetTasks = targets.map(async (targetId) => {
             // 只有註冊在系統內的 Agent，我們才幫它維護專屬歷史與 Inbox
-            if (session.registeredAgentIds.has(targetId)) {
+            if (session!.registeredAgentIds.has(targetId)) {
                 // (a) 寫入目標的歷史 Oplog
                 await this.dataBlockRepo.appendForAgent(processedBlock.sessionId, targetId, processedBlock).catch(e => {
                     this.logger.error(`[SessionManager] Failed to append target history for ${targetId}: ${e}`);
                 });
 
                 // (b) 推入會話層級的 InboxBuffer
-                session.pushToInbox(targetId, processedBlock);
+                session!.pushToInbox(targetId, processedBlock);
 
                 // (c) 嘗試分派 Inbox 內的任務給該 Agent
-                await this.dispatchInboxForAgent(session, targetId);
+                await this.dispatchInboxForAgent(session!, targetId);
             }
-        }
+        });
+
+        // 等待所有 I/O 作業與派發完成
+        await Promise.all([senderTask, ...targetTasks]);
     }
 
     /**
@@ -374,7 +380,13 @@ export class SessionManager implements ILifecycle {
     private async dispatchInboxForAgent(session: Session, agentId: string): Promise<void> {
         // TODO: 效能優化
         try {
-            const mainAgent = await this.agentManager.rehydrate(agentId, session.id);
+            // 併行優化 C：雙重喚醒 (Double Rehydrate)
+            const projectedBodyId = session.getProjectedBodyId(agentId);
+            
+            const [mainAgent, bodyAgent] = await Promise.all([
+                this.agentManager.rehydrate(agentId, session.id),
+                projectedBodyId ? this.agentManager.rehydrate(projectedBodyId, session.id) : Promise.resolve(null)
+            ]);
 
             // 排隊機制：如果 Agent 正在忙碌，則不派發，讓訊息留在 Inbox 內。
             // 系統會透過 handleAgentStateChanged 監聽 IDLE 事件並再次觸發 dispatch。
@@ -389,18 +401,15 @@ export class SessionManager implements ILifecycle {
             const messageBatches: DataBlock[][] = [];
 
             for (const senderId of pendingSenders) {
-                const messages = session.popFromInboxBySender(agentId, senderId);
-                if (messages.length === 0) continue;
-
-                // 優先度過濾：如果這批訊息全部都是 LOW 優先度，則不喚醒 Agent (靜默)
-                const hasActionableMessage = messages.some(m => m.priority > MessagePriority.LOW);
-                if (!hasActionableMessage && messages.length < this.config.agent.force_wakeup_threshold) {
-                    this.logger.debug(`[SessionManager] Ignored ${messages.length} LOW priority messages for agent ${agentId} from ${senderId}. Agent will not be resumed.`);
-                    for (const m of messages) {
-                        session.pushToInbox(agentId, m);
-                    }
+                // 邏輯謬誤修正：唯讀檢查 (Peek) 取代 Pop & Push-back
+                if (!session.hasActionableMessages(agentId, senderId, this.config.agent.force_wakeup_threshold)) {
+                    this.logger.debug(`[SessionManager] Ignored LOW priority messages for agent ${agentId} from ${senderId}. Agent will not be resumed.`);
                     continue;
                 }
+
+                // 確定有足夠價值後，才真正 Pop 出來
+                const messages = session.popFromInboxBySender(agentId, senderId);
+                if (messages.length === 0) continue;
 
                 messageBatches.push(messages);
             }
@@ -408,13 +417,11 @@ export class SessionManager implements ILifecycle {
             if (messageBatches.length === 0) return;
 
             let workerAgent = mainAgent;
-            const projectedBodyId = session.getProjectedBodyId(agentId);
 
             // 若本尊正在投影 (靈魂轉移)，透過 ProjectionHandler 產生合成的執行器處理 Inbox
-            if (projectedBodyId) {
+            if (projectedBodyId && bodyAgent) {
                 if (!mainAgent.projectionHandler || mainAgent.projectionHandler.body.id !== projectedBodyId) {
                     this.logger.info(`[SessionManager] Agent ${agentId} is projecting into ${projectedBodyId}. Initializing stateful ProjectionHandler!`);
-                    const bodyAgent = await this.agentManager.rehydrate(projectedBodyId, session.id);
                     mainAgent.projectionHandler = new ProjectionHandler(mainAgent, bodyAgent, this.dataBlockRepo);
                 }
                 workerAgent = mainAgent.projectionHandler as any;
@@ -454,18 +461,20 @@ export class SessionManager implements ILifecycle {
             const allBlocks = await this.dataBlockRepo.findByAgent(sessionId, agentId);
             if (allBlocks.length <= this.config.agent.uncompressed_tail) return;
 
-            let changed = false;
             const limit = allBlocks.length - this.config.agent.uncompressed_tail;
 
-            for (let i = 0; i < limit; i++) {
-                const originalBlock = allBlocks[i];
+            const offloadPromises = allBlocks.slice(0, limit).map(async (originalBlock, i) => {
                 // 對於舊歷史，使用極其嚴格的 1000 bytes 閾值進行檔案卸載
                 const processedBlock = await this.dataBlockRepo.offloadLargePayloads(sessionId, originalBlock, 1000);
                 if (processedBlock !== originalBlock) {
                     allBlocks[i] = processedBlock;
-                    changed = true;
+                    return true;
                 }
-            }
+                return false;
+            });
+
+            const results = await Promise.all(offloadPromises);
+            const changed = results.some(r => r === true);
 
             if (changed) {
                 // 如果有任何改變，覆寫回檔案

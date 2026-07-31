@@ -46,7 +46,7 @@ export class MainAgent extends BaseAgent {
      */
     protected setupHooks(): void {
         // 1. 動態注入情緒模型到 System Prompt
-        this.eventBus.subscribe(HookEvent.BeforeAgentStep, async (event) => {
+        this.subscribeEvent(HookEvent.BeforeAgentStep, async (event) => {
             if (event.payload.agentId === this.id && this.emotionalState) {
                 const { energy, intimacy, joy, distress, anxiety, fear, pride, stress, excitement, socialNeed } = this.emotionalState;
 
@@ -68,7 +68,7 @@ export class MainAgent extends BaseAgent {
         }, { sessionId: this.sessionId });
 
         // 2. 玩家行為觸發 (Player Interaction Triggers)
-        this.eventBus.subscribe(AgentEvent.AgentMessage, (event) => {
+        this.subscribeEvent(AgentEvent.AgentMessage, (event) => {
             const block = event.payload;
             if (block.senderId === 'USER' && typeof block.controlPayload === 'string') {
                 const text = block.controlPayload.toLowerCase();
@@ -86,23 +86,23 @@ export class MainAgent extends BaseAgent {
         }, { sessionId: this.sessionId });
 
         // 3. 工作區環境觸發 (Workstation Triggers)
-        this.eventBus.subscribe(SystemEvent.TaskFinished, (event) => {
+        this.subscribeEvent(SystemEvent.TaskFinished, (event) => {
             this.appraiseEvent({ joy: 20, pride: 15 });
         }, { sessionId: this.sessionId });
 
-        this.eventBus.subscribe(SystemEvent.TaskFailed, (event) => {
+        this.subscribeEvent(SystemEvent.TaskFailed, (event) => {
             this.appraiseEvent({ distress: 20, stress: 15 });
         }, { sessionId: this.sessionId });
 
         // 4. 接收下級代理 (左右腦) 傳遞上來的神經情緒訊號
-        this.eventBus.subscribe(AgentEvent.EmotionTriggered, (event) => {
+        this.subscribeEvent(AgentEvent.EmotionTriggered, (event) => {
             this.appraiseEvent(event.payload.impacts);
         }, { sessionId: this.sessionId });
 
         // 5. 時間自然觸發 (Passive Decay & Fatigue)
         // TODO: 此處實作 30 秒跑一次遞減假設 Tick 每秒觸發一次 請於config設定
         let tickCounter = 0;
-        this.eventBus.subscribe(SystemEvent.Tick, (event) => {
+        this.subscribeEvent(SystemEvent.Tick, (event) => {
             tickCounter++;
             if (tickCounter >= 30) {
                 tickCounter = 0;
