@@ -176,16 +176,11 @@ export class EventBus implements IEventBus {
      * 獲取匹配的 callback 監聽器，實施 sessionId 隔離過濾
      */
     private getTargetCallbackRegistrations(eventType: string, eventSessionId?: string): ICallbackRegistration[] {
-        const specific = this.callbackSubscribers.get(eventType) || new Set();
-        const wildcard = this.callbackSubscribers.get('*') || new Set();
-
-        const all = new Set([...specific, ...wildcard]);
+        const specific = this.callbackSubscribers.get(eventType);
+        const wildcard = this.callbackSubscribers.get('*');
         const matched: ICallbackRegistration[] = [];
 
-        for (const reg of all) {
-            // 隔離規則：
-            // 1. 若事件限定了 sessionId：監聽器必須是同一個 sessionId，或是全局監聽器 (無 sessionId)
-            // 2. 若事件未限定 sessionId (全局公共事件)：派發給所有監聽器
+        const addMatched = (reg: ICallbackRegistration) => {
             if (eventSessionId) {
                 if (!reg.sessionId || reg.sessionId === eventSessionId) {
                     matched.push(reg);
@@ -193,7 +188,16 @@ export class EventBus implements IEventBus {
             } else {
                 matched.push(reg);
             }
+        };
+
+        if (specific) specific.forEach(addMatched);
+        if (wildcard) {
+            wildcard.forEach(reg => {
+                // Ensure no duplicate if wildcard happens to be registered in specific too
+                if (!specific || !specific.has(reg)) addMatched(reg);
+            });
         }
+
         return matched;
     }
 

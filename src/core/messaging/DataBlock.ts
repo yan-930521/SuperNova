@@ -93,6 +93,9 @@ export class DataBlock<TControlPayload = Record<string, any>> {
     /** 資料指標陣列 (巨型資料隔離) */
     public readonly dataPointers: IDataPointer[];
 
+    /** 記憶體內的瞬態標記，用於標示是否已經通過壓縮檢查，避免重複掃描 */
+    public isCompacted: boolean = false;
+
     constructor(params: {
         id?: string;
         sessionId: string;
@@ -271,6 +274,8 @@ export class DataBlock<TControlPayload = Record<string, any>> {
         return lines.join('\n');
     }
 
+    private _messageCache = new Map<string, BaseMessage>();
+
     /**
      * 將 DataBlock 轉換為 LangChain 規格的 BaseMessage 物件。
      * 自動進行角色對齊與 LangChain 強型別物件實例化。
@@ -278,25 +283,31 @@ export class DataBlock<TControlPayload = Record<string, any>> {
      * @param saveTokens 是否啟用省 token 模式
      */
     public toMessage(readerId?: string, saveTokens: boolean = false): BaseMessage {
+        const cacheKey = `${readerId || 'none'}:${saveTokens}`;
+        if (this._messageCache.has(cacheKey)) {
+            return this._messageCache.get(cacheKey)!;
+        }
+
         const content = this.toMarkdown(saveTokens);
 
+        let msg: BaseMessage;
         if (this.type === 'system' || this.type === 'tool') {
-            return new SystemMessage({ content });
-        }
-
-        if (this.type === 'human') {
-            return new HumanMessage({ content });
-        }
-
-        if (this.type === 'ai') {
+            msg = new SystemMessage({ content });
+        } else if (this.type === 'human') {
+            msg = new HumanMessage({ content });
+        } else if (this.type === 'ai') {
             // 如果這則 AI 訊息不是讀取者自己發的，代表是來自其他 Agent，轉換為 SystemMessage 傳遞
             if (readerId && this.senderId !== readerId) {
-                return new SystemMessage({ content: `[Message from ${this.senderId}]:\n${content}` });
+                msg = new SystemMessage({ content: `[Message from ${this.senderId}]:\n${content}` });
+            } else {
+                msg = new AIMessage({ content });
             }
-            return new AIMessage({ content });
+        } else {
+            throw new Error(`[DataBlock] Unsupported message type for LangChain conversion: ${this.type}`);
         }
 
-        throw new Error(`[DataBlock] Unsupported message type for LangChain conversion: ${this.type}`);
+        this._messageCache.set(cacheKey, msg);
+        return msg;
     }
 
     /**
