@@ -1,5 +1,5 @@
 import { LogManager } from '../infra/LogManager';
-import { IDeclarativeSubscriber, IEvent, IEventBus, GlobalEventMap } from './IBus';
+import { GlobalEventMap, IDeclarativeSubscriber, IEvent, IEventBus } from './IBus';
 
 interface ICallbackRegistration {
     handler: (event: IEvent<any>) => void | Promise<void>;
@@ -87,7 +87,12 @@ export class EventBus implements IEventBus {
             }
         });
 
-        return Promise.allSettled(promises);
+        const results = await Promise.allSettled(promises);
+        const rejected = results.find(r => r.status === 'rejected');
+        if (rejected) {
+            throw (rejected as PromiseRejectedResult).reason;
+        }
+        return results;
     }
 
     /**
@@ -119,7 +124,7 @@ export class EventBus implements IEventBus {
             handler,
             sessionId: options?.sessionId
         });
-        this.logger.info(`[EventBus] Callback subscribed to: ${type}${options?.sessionId ? ` (Session: ${options.sessionId})` : ''}`, { type: 'SYSTEM' });
+        this.logger.debug(`[EventBus] Callback subscribed to: ${type}${options?.sessionId ? ` (Session: ${options.sessionId})` : ''}`, { type: 'SYSTEM' });
     }
 
     /**

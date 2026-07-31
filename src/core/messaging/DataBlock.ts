@@ -3,6 +3,7 @@ import {
 } from '@langchain/core/messages';
 
 import { ToolControlPayload } from '../agent';
+import { LogManager } from '../infra';
 import { IdGenerator } from '../utils/IdGenerator';
 
 /**
@@ -123,12 +124,17 @@ export class DataBlock<TControlPayload = Record<string, any>> {
      * 若 controlPayload 經過 JSON.stringify 後超過 thresholdBytes，回傳 false 並拋出警告
      */
     public validateSize(thresholdBytes: number = 100 * 1024): boolean {
-        const payloadSize = Buffer.byteLength(JSON.stringify(this.controlPayload) || '', 'utf8');
-        if (payloadSize >= thresholdBytes) {
-            console.warn(`[WARNING] DataBlock ${this.id} payload size (${payloadSize} bytes) exceeds limit of ${thresholdBytes} bytes!`);
-            return false; // 過大，無效
+        try {
+            const payloadSize = Buffer.byteLength(JSON.stringify(this.controlPayload) || '', 'utf8');
+            if (payloadSize >= thresholdBytes) {
+                LogManager.recorder.warn(`[WARNING] DataBlock ${this.id} payload size (${payloadSize} bytes) exceeds limit of ${thresholdBytes} bytes!`);
+                return false; // 過大，無效
+            }
+            return true; // 大小合格
+        } catch (error) {
+            LogManager.recorder.warn(`[WARNING] DataBlock ${this.id} payload could not be stringified for size validation: ${error}`);
+            return false;
         }
-        return true; // 大小合格
     }
 
     /**
@@ -183,7 +189,7 @@ export class DataBlock<TControlPayload = Record<string, any>> {
      * - 若 type !== 'system'：直接回傳 controlPayload 中的純文字內容（text/content/stdout），不附加任何系統裝飾。
      * - 若 type === 'system' || type === 'tool'：回傳精美的結構化 Markdown 系統事件回報。
      */
-    public toMarkdown(): string {
+    public toMarkdown(saveTokens: boolean = false): string {
         if ((this.type !== 'system') && (this.type !== 'tool')) {
             if (typeof this.controlPayload === 'string') {
                 return this.controlPayload;
@@ -195,45 +201,55 @@ export class DataBlock<TControlPayload = Record<string, any>> {
         const dateStr = new Date(this.timestamp).toISOString();
 
         if (this.type === "system") {
-            lines.push(`### [EVENT: ${this.intent.toUpperCase()}]`);
-            lines.push(`- **Sender**: \`${this.senderId}\``);
-            if (this.priority > MessagePriority.NORMAL) {
-                lines.push(`- **Priority**: ⚠️ \`URGENT / HIGH\``);
+            if (saveTokens) {
+                lines.push(`[SYS: ${this.intent.toUpperCase()}]`);
+                if (this.priority > MessagePriority.NORMAL) lines.push(`(!URGENT!)`);
+            } else {
+                lines.push(`### [EVENT: ${this.intent.toUpperCase()}]`);
+                lines.push(`- **Sender**: \`${this.senderId}\``);
+                if (this.priority > MessagePriority.NORMAL) {
+                    lines.push(`- **Priority**: \`URGENT / HIGH\``);
+                }
+                lines.push(`- **Time**: \`${dateStr}\``);
             }
-            lines.push(`- **Time**: \`${dateStr}\``);
 
             if (this.controlPayload && Object.keys(this.controlPayload).length > 0) {
-                lines.push(`\n**Payload**:`);
+                if (!saveTokens) lines.push(`\n**Payload**:`);
                 lines.push('```json');
-                lines.push(JSON.stringify(this.controlPayload, null, 2));
+                lines.push(JSON.stringify(this.controlPayload, null, saveTokens ? 0 : 2));
                 lines.push('```');
             }
-        } else if (this.type === "tool") {
+        }
+        else if (this.type === "tool") {
             const payload = this.controlPayload as ToolControlPayload;
             const toolName = payload.toolName || 'UNKNOWN_TOOL';
             const isError = this.intent === 'TOOL_ERROR' || payload.error;
             const statusIcon = isError ? 'ERROR' : 'SUCCESS';
 
-            lines.push(`### 🛠️ [TOOL: ${toolName}]`);
-            lines.push(`- **Status**: ${statusIcon}`);
-            lines.push(`- **Time**: \`${dateStr}\``);
+            if (saveTokens) {
+                lines.push(`[TOOL: ${toolName}] ${statusIcon}`);
+            } else {
+                lines.push(`### 🛠️ [TOOL: ${toolName}]`);
+                lines.push(`- **Status**: ${statusIcon}`);
+                lines.push(`- **Time**: \`${dateStr}\``);
+            }
 
             if (payload.args && Object.keys(payload.args).length > 0) {
-                lines.push(`\n**Arguments**:`);
+                if (!saveTokens) lines.push(`\n**Arguments**:`);
                 lines.push('```json');
-                lines.push(JSON.stringify(payload.args, null, 2));
+                lines.push(JSON.stringify(payload.args, null, saveTokens ? 0 : 2));
                 lines.push('```');
             }
 
             if (isError && payload.error) {
-                lines.push(`\n**Error Details**:`);
+                if (!saveTokens) lines.push(`\n**Error Details**:`);
                 lines.push('```text');
                 lines.push(String(payload.error));
                 lines.push('```');
             } else if (payload.result !== undefined) {
-                lines.push(`\n**Result**:`);
+                if (!saveTokens) lines.push(`\n**Result**:`);
                 const resultStr = typeof payload.result === 'object'
-                    ? JSON.stringify(payload.result, null, 2)
+                    ? JSON.stringify(payload.result, null, saveTokens ? 0 : 2)
                     : String(payload.result);
                 const format = typeof payload.result === 'object' ? 'json' : 'text';
                 lines.push(`\`\`\`${format}\n${resultStr}\n\`\`\``);
@@ -241,10 +257,14 @@ export class DataBlock<TControlPayload = Record<string, any>> {
         }
 
         if (this.dataPointers && this.dataPointers.length > 0) {
-            lines.push(`\n**Data Pointers**:`);
+            if (!saveTokens) lines.push(`\n**Data Pointers**:`);
             for (const ptr of this.dataPointers) {
                 const metadataStr = ptr.metadata ? ` (metadata: ${JSON.stringify(ptr.metadata)})` : '';
-                lines.push(`- **${ptr.type}**: [${ptr.uri}](${ptr.uri})${metadataStr}`);
+                if (saveTokens) {
+                    lines.push(`[PTR:${ptr.type}] ${ptr.uri}${metadataStr}`);
+                } else {
+                    lines.push(`- **${ptr.type}**: [${ptr.uri}](${ptr.uri})${metadataStr}`);
+                }
             }
         }
 
@@ -255,9 +275,10 @@ export class DataBlock<TControlPayload = Record<string, any>> {
      * 將 DataBlock 轉換為 LangChain 規格的 BaseMessage 物件。
      * 自動進行角色對齊與 LangChain 強型別物件實例化。
      * @param readerId 當前讀取這則訊息的 Agent ID (用於判斷是否為自身發送)
+     * @param saveTokens 是否啟用省 token 模式
      */
-    public toMessage(readerId?: string): BaseMessage {
-        const content = this.toMarkdown();
+    public toMessage(readerId?: string, saveTokens: boolean = false): BaseMessage {
+        const content = this.toMarkdown(saveTokens);
 
         if (this.type === 'system' || this.type === 'tool') {
             return new SystemMessage({ content });
