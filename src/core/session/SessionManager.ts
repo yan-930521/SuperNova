@@ -6,6 +6,7 @@ import { ISessionRepository } from '../infra/persistence';
 import { IAgentStateRepository, IDataBlockRepository } from '../infra/persistence/IRepository';
 import { IWorkspaceManager, WorkspaceType } from '../infra/persistence/IWorkspaceManager';
 import { ILifecycle } from '../lifecycle/ILifecycle';
+import { MessagePriority } from '../messaging/DataBlock';
 import { AgentEvent, IEvent, IEventBus } from '../messaging/IBus';
 import { IdGenerator } from '../utils/IdGenerator';
 import { Session, SessionState } from './Session';
@@ -19,6 +20,7 @@ import { Session, SessionState } from './Session';
 export class SessionManager implements ILifecycle {
     private readonly logger = LogManager.recorder;
     private activeSessions: Map<string, Session> = new Map();
+    private activeTaskPromises: Set<Promise<void>> = new Set();
     constructor(
         private readonly config: Config,
         private readonly sessionRepo: ISessionRepository,
@@ -54,7 +56,7 @@ export class SessionManager implements ILifecycle {
 
         try {
             const dirs = await this.sessionRepo.list();
-            
+
             // 使用 Promise.all 並行恢復所有會話，大幅加速啟動時間
             const recoveryPromises = dirs.map(async (sessionId) => {
                 try {
@@ -113,7 +115,14 @@ export class SessionManager implements ILifecycle {
      * 實作 ILifecycle 停止方法 (優雅停機凍結)
      */
     public async stop(): Promise<void> {
-        this.logger.info('[SessionManager] Stopping SessionManager and freezing active sessions...');
+        this.logger.info('[SessionManager] Stopping SessionManager. Waiting for background tasks to complete...');
+
+        if (this.activeTaskPromises.size > 0) {
+            this.logger.info(`[SessionManager] Waiting for ${this.activeTaskPromises.size} active agent tasks...`);
+            await Promise.all(Array.from(this.activeTaskPromises));
+        }
+
+        this.logger.info('[SessionManager] All agent tasks finished. Freezing active sessions...');
 
         // 遍歷所有記憶體中活躍的會話，更新為 SUSPENDED 凍結狀態並保存至磁碟
         // 使用 Promise.all 並行寫入，加速停機流程
@@ -142,7 +151,8 @@ export class SessionManager implements ILifecycle {
     public async createSession(
         mainAgentId: string,
         customSessionId?: string,
-        workspaceType: WorkspaceType = 'PERSISTENT'
+        workspaceType: WorkspaceType = 'PERSISTENT',
+        agentType: AgentType = AgentType.MAIN
     ): Promise<Session> {
         const sessionId = customSessionId || IdGenerator.session();
         const session = new Session({
@@ -156,11 +166,11 @@ export class SessionManager implements ILifecycle {
         await this.workspaceManager.initWorkspace(sessionId, sessionId, workspaceType);
 
         this.activeSessions.set(sessionId, session);
-        
-        // 建立會話時，一併註冊與建立 MainAgent
-        await this.agentManager.spawnAgent(AgentType.MAIN, mainAgentId, sessionId);
 
-        this.logger.info(`[SessionManager] Created new session: ${sessionId} (${workspaceType}) for main agent: ${mainAgentId}`);
+        // 建立會話時，一併註冊與建立 MainAgent (強制預期此時不應存在同名 Agent)
+        await this.agentManager.spawnAgent(agentType, mainAgentId, sessionId);
+
+        this.logger.info(`[SessionManager] Created new session: ${sessionId} (${workspaceType}) for agent: ${mainAgentId} of type: ${agentType}`);
         return session;
     }
 
@@ -265,15 +275,16 @@ export class SessionManager implements ILifecycle {
             }
         }
 
-        // 1. 在寫入任何歷史或派發前，先卸載超大字串至 DataPointer，避免重複 I/O 與發送方/接收方 Token 撐爆
-        const processedBlock = await this.dataBlockRepo.offloadLargePayloads(block.sessionId, block, 1000);
+        // 1. 在寫入任何歷史或派發前，先處理真正超大型字串 (如 > 50KB 的 base64 圖片) 以免記憶體與 I/O 崩潰，但保留一般長度的工具回報
+        const processedBlock = await this.dataBlockRepo.offloadLargePayloads(block.sessionId, block, 50000);
 
         // 2. 若發送者是系統內的 Agent，客觀寫入發送者的歷史紀錄
-        // (如果是 USER 或外部 Env 發送則略過寫入，避免產生多餘的 history.jsonl)
         if (session.registeredAgentIds.has(processedBlock.senderId)) {
             await this.dataBlockRepo.appendForAgent(processedBlock.sessionId, processedBlock.senderId, processedBlock).catch(e => {
                 this.logger.error(`[SessionManager] Failed to append sender history: ${e}`);
             });
+            // 同步執行舊紀錄的壓縮卸載 (保留最新 20 筆，其餘套用嚴格的 1000 bytes 壓縮閾值)
+            await this.compactAgentHistory(processedBlock.sessionId, processedBlock.senderId);
         }
 
         // 3. 決定接收對象 (Target)
@@ -332,22 +343,39 @@ export class SessionManager implements ILifecycle {
                 const messages = session.popFromInboxBySender(agentId, senderId);
                 if (messages.length === 0) continue;
 
-                let workerAgent = mainAgent;
+                // 優先度過濾：如果這批訊息全部都是 LOW 優先度，則不喚醒 Agent (靜默)
+                // 訊息已經在 handleAgentMessage 被寫入 Oplog，下次 Agent 醒來時還是會看到
+                const hasActionableMessage = messages.some(m => m.priority > MessagePriority.LOW);
+                if (!hasActionableMessage && messages.length < this.config.agent.force_wakeup_threshold) {
+                    this.logger.debug(`[SessionManager] Ignored ${messages.length} LOW priority messages for agent ${agentId} from ${senderId}. Agent will not be resumed.`);
+                    for (const m of messages) {
+                        session.pushToInbox(agentId, m);
+                    }
+                    continue; // 跳過，等下次 IDLE 觸發
+                }
 
+                let workerAgent = mainAgent;
+                const projectedBodyId = this.agentManager.getProjectedBodyId(agentId, session.id);
+
+                // 若本尊正在投影 (靈魂轉移)，直接將喚醒訊號與 Inbox 處理權交給軀殼！
+                if (projectedBodyId) {
+                    this.logger.info(`[SessionManager] Agent ${agentId} is projecting into ${projectedBodyId}. Routing inbox directly to EmbodiedAgent!`);
+                    workerAgent = await this.agentManager.rehydrate(projectedBodyId, session.id);
+                }
                 // 若本尊空閒，直接交由本尊處理
                 // (注意：若是我們改變了狀態，後續迴圈的下一個 sender 就會遇到 BUSY，從而觸發 Clone 或退回)
-                if (mainAgent.status === 'IDLE' || mainAgent.status === 'SUSPENDED') {
+                else if (mainAgent.status === 'IDLE' || mainAgent.status === 'SUSPENDED') {
                     // workerAgent = mainAgent;
                 } else if (mainAgent.canClone) {
                     // 檢查分身數量上限
                     const activeClones = this.agentManager.getActiveCloneCount(mainAgent.id);
                     const maxClones = this.config.agent?.max_clones_per_agent ?? 5;
-                    
+
                     if (activeClones < maxClones) {
-                        // 本尊忙碌中，且未達分身上限 -> 派生 SubAgent 分身！
+                        // 本尊忙碌中，且未達分身上限 -> 派生 TaskAgent 分身！
                         this.logger.info(`[SessionManager] Spawning clone for ${mainAgent.id} (Current clones: ${activeClones}/${maxClones})`);
                         workerAgent = await this.agentManager.spawnAgent(
-                            AgentType.SUB,
+                            AgentType.TASK,
                             IdGenerator.agent('sub'),
                             session.id,
                             { isClone: true, parentAgent: mainAgent }
@@ -374,29 +402,70 @@ export class SessionManager implements ILifecycle {
                     continue; // 跳過，等下次 IDLE 觸發
                 }
 
-                const isClone = workerAgent !== mainAgent;
+                // 判斷是否為剛才建立的臨時分身 (只有 TaskAgent 分身才需要在執行後銷毀)
+                const isTemporaryClone = workerAgent !== mainAgent && workerAgent.type === 'TASK';
 
                 // 獨立非同步並行處理 (不 await，讓它在背景跑)
-                workerAgent.resume(messages).catch(e => {
+                const resumePromise = workerAgent.resume(messages).catch(e => {
                     this.logger.error(`[SessionManager] Agent ${workerAgent.id} failed to resume: ${e}`);
                 }).finally(async () => {
-                    if (isClone) {
+                    if (isTemporaryClone) {
                         // 1. 合併分身的 Token 消耗與資源統計回本尊
                         mainAgent.mergeUsage(workerAgent.getUsageStats());
 
                         // 2. 併發分身處理完畢後，立即執行垃圾回收 (GC) 徹底銷毀
                         await this.agentManager.terminateAgent(workerAgent.id);
                     }
+
+                    // 3. 確保對話結束或分身合併後，將本尊的最新狀態 (如 Token 消耗量、歷史指針) 存檔
+                    await this.agentManager.saveAgent(mainAgent.id).catch(e => {
+                        this.logger.error(`[SessionManager] Failed to save main agent ${mainAgent.id} state: ${e}`);
+                    });
+
+                    this.activeTaskPromises.delete(resumePromise);
                 });
+                this.activeTaskPromises.add(resumePromise);
             }
-            
+
             // 保存會話狀態 (更新 Inbox 狀態)
             await this.sessionRepo.save(session).catch(e => {
                 this.logger.error(`[SessionManager] Failed to save session state: ${e}`);
             });
-            
+
         } catch (e) {
             this.logger.error(`[SessionManager] Failed to dispatch inbox for agent ${agentId}: ${e}`);
+        }
+    }
+
+    /**
+     * 掃描並壓縮指定 Agent 的歷史記錄，將 20 筆以前的大型字串 (>1000 bytes) 卸載為 DataPointer。
+     * 避免剛執行的工具回報立即被壓縮導致 LLM 忘記細節，同時確保遠古歷史的空間與 Token 浪費降至最低。
+     */
+    private async compactAgentHistory(sessionId: string, agentId: string): Promise<void> {
+        try {
+            const allBlocks = await this.dataBlockRepo.findByAgent(sessionId, agentId);
+            if (allBlocks.length <= this.config.agent.uncompressed_tail) return;
+
+            let changed = false;
+            const limit = allBlocks.length - this.config.agent.uncompressed_tail;
+
+            for (let i = 0; i < limit; i++) {
+                const originalBlock = allBlocks[i];
+                // 對於舊歷史，使用極其嚴格的 1000 bytes 閾值進行檔案卸載
+                const processedBlock = await this.dataBlockRepo.offloadLargePayloads(sessionId, originalBlock, 1000);
+                if (processedBlock !== originalBlock) {
+                    allBlocks[i] = processedBlock;
+                    changed = true;
+                }
+            }
+
+            if (changed) {
+                // 如果有任何改變，覆寫回檔案
+                await this.dataBlockRepo.saveForAgent(sessionId, agentId, allBlocks);
+                this.logger.debug(`[SessionManager] Compacted and offloaded old history for agent ${agentId}`);
+            }
+        } catch (e) {
+            this.logger.error(`[SessionManager] Failed to compact history for agent ${agentId}: ${e}`);
         }
     }
 }

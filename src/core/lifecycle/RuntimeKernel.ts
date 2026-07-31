@@ -73,6 +73,8 @@ export class RuntimeKernel implements ILifecycle {
     }
   }
 
+  private tickTimer?: NodeJS.Timeout;
+
   /**
    * 啟動內核與所有核心組件，並註冊作業系統信號監聽
    */
@@ -86,7 +88,17 @@ export class RuntimeKernel implements ILifecycle {
       // 註冊作業系統關閉信號監聽 (SIGINT / SIGTERM)
       this.setupSignalHandlers();
 
-      this.logger.info('[Kernel] Kernel booted and signal handlers registered');
+      // 啟動系統心跳引擎 (Tick Engine)，每 1 秒發布一次 SystemEvent.Tick
+      const eventBus = this.container.resolve('EventBus') as EventBus;
+      this.tickTimer = setInterval(() => {
+          eventBus.publish({
+              type: 'SYSTEM_TICK', // SystemEvent.Tick
+              timestamp: Date.now(),
+              payload: { currentTime: Date.now() }
+          });
+      }, 1000);
+
+      this.logger.info('[Kernel] Kernel booted, signal handlers registered, and Tick Engine started.');
     } catch (error: any) {
       this.logger.error(`[Kernel] Kernel boot failed: ${error.message}`);
       throw error;
@@ -100,6 +112,12 @@ export class RuntimeKernel implements ILifecycle {
     this.logger.info('[Kernel] Shutting down Runtime Kernel...');
 
     try {
+      // 停止系統心跳
+      if (this.tickTimer) {
+          clearInterval(this.tickTimer);
+          this.tickTimer = undefined;
+      }
+
       // 註銷信號監聽，避免重複觸發或引發 memory leak
       this.removeSignalHandlers();
 
