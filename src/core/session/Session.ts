@@ -47,6 +47,7 @@ export class Session implements IEntity {
   public readonly registeredAgentIds: Set<string>;
   public readonly createdAt: number;
   public updatedAt: number;
+  // 扁平化的 InboxBuffer: agentId -> 該 Agent 所有的暫存訊息
   private readonly inboxBuffer: Map<string, DataBlock[]> = new Map();
 
   constructor(params: {
@@ -67,13 +68,9 @@ export class Session implements IEntity {
     this.createdAt = params.createdAt || Date.now();
     this.updatedAt = params.updatedAt || Date.now();
 
-    // 反序列化 InboxBuffer
     if (params.inboxBuffer) {
       for (const [agentId, blocks] of Object.entries(params.inboxBuffer)) {
-        this.inboxBuffer.set(
-          agentId,
-          blocks.map(b => new DataBlock(b))
-        );
+        this.inboxBuffer.set(agentId, blocks.map(b => new DataBlock(b)));
       }
     }
   }
@@ -125,64 +122,49 @@ export class Session implements IEntity {
   }
 
   /**
-   * 取得特定 Agent 的 Inbox 中有哪些不同的發送者 (SenderId)
+   * 檢查特定 Agent 的 Inbox 是否有待處理的訊息 (用於喚醒判定)
    */
-  public getPendingSenders(agentId: string): string[] {
-    const blocks = this.inboxBuffer.get(agentId) || [];
-    const senders = new Set<string>();
+  public hasPendingMessages(agentId: string): boolean {
+    const blocks = this.inboxBuffer.get(agentId);
+    return blocks !== undefined && blocks.length > 0;
+  }
+
+  /**
+   * 全域唯讀檢查 (Peek)：判斷指定 Agent 的 Inbox 中是否含有具備行動價值的訊息
+   * ( priority > LOW 或是 累積未處理的噪音訊息達到 forceWakeup 閾值 )
+   */
+  public hasAnyActionableMessages(agentId: string, forceWakeupThreshold: number): boolean {
+    const blocks = this.inboxBuffer.get(agentId);
+    if (!blocks || blocks.length === 0) return false;
+    
+    // 如果累積夠多，不管什麼優先級都該喚醒
+    if (blocks.length >= forceWakeupThreshold) return true;
+
+    // 否則檢查是否有 High/Normal 優先級的訊息
     for (const b of blocks) {
-      senders.add(b.senderId);
+      if (b.priority > MessagePriority.LOW) return true;
     }
-    return Array.from(senders);
+    return false;
   }
 
   /**
-   * 唯讀檢查 (Peek)：判斷指定發送者的 Inbox 中是否含有具備行動價值的訊息 ( priority > LOW 或 達到 forceWakeup 閾值 )
-   * 不會搬動或改變任何 Inbox 資料結構。
+   * 拉取特定 Agent 收件箱中所有的暫存訊息 (提取後從緩衝區移除)
    */
-  public hasActionableMessages(agentId: string, senderId: string, forceWakeupThreshold: number): boolean {
-    const allBlocks = this.inboxBuffer.get(agentId) || [];
-    let count = 0;
-    for (const b of allBlocks) {
-      if (b.senderId === senderId) {
-        if (b.priority > MessagePriority.LOW) return true;
-        count++;
-      }
+  public popAllFromInbox(agentId: string): DataBlock[] {
+    const blocks = this.inboxBuffer.get(agentId) || [];
+    this.inboxBuffer.delete(agentId);
+    if (blocks.length > 0) {
+      this.touch();
     }
-    return count >= forceWakeupThreshold;
-  }
-
-  /**
-   * 拉取特定 Agent 收件箱中，屬於特定發送者 (SenderId) 的暫存訊息 (提取後從緩衝區移除)
-   */
-  public popFromInboxBySender(agentId: string, senderId: string): DataBlock[] {
-    const allBlocks = this.inboxBuffer.get(agentId) || [];
-    const targetBlocks: DataBlock[] = [];
-    const remainingBlocks: DataBlock[] = [];
-
-    for (const b of allBlocks) {
-      if (b.senderId === senderId) {
-        targetBlocks.push(b);
-      } else {
-        remainingBlocks.push(b);
-      }
-    }
-
-    if (remainingBlocks.length === 0) {
-      this.inboxBuffer.delete(agentId);
-    } else {
-      this.inboxBuffer.set(agentId, remainingBlocks);
-    }
-
-    this.touch();
-    return targetBlocks;
+    return blocks;
   }
 
   /**
    * 獲取特定 Agent 收件箱的暫存訊息總數量
    */
   public getInboxSize(agentId: string): number {
-    return (this.inboxBuffer.get(agentId) || []).length;
+    const blocks = this.inboxBuffer.get(agentId);
+    return blocks ? blocks.length : 0;
   }
 
   /**

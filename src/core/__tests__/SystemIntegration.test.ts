@@ -195,8 +195,8 @@ describe('System Integration & Inbox Dispatch Test', () => {
 
         // 所有的任務處理完畢後，Inbox 必定為空
         const session = sessionManager.getSession(sessionId);
-        const finalPending = session!.getPendingSenders(mainAgentId);
-        expect(finalPending.length).toBe(0);
+        const finalPending = session!.hasPendingMessages(mainAgentId);
+        expect(finalPending).toBe(false);
 
         // 所有並發處理皆已完結，無狀態設計不會產生殘留實體
     });

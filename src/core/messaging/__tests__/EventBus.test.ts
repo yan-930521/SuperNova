@@ -88,12 +88,9 @@ describe('EventBus High-Level Features Test', () => {
 
   it('should support register and unregister of declarative subscribers', () => {
     const bus = new EventBus();
-    const sub = {
-      sessionId: 'session-1',
-      agentId: 'agent-alice'
-    };
+    const sub = (e: any) => {};
 
-    bus.subscribe('WAKEUP_EVENT', sub);
+    bus.subscribe('WAKEUP_EVENT', sub, { sessionId: 'session-1' });
 
     // 獲取私有變數來驗證，或者發佈並查看 debug 日誌。
     // 這邊我們取消訂閱並驗證

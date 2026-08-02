@@ -27,8 +27,8 @@ related_docs:
     *   **解耦神經網絡設計**：透過 `WorldUpdated` 事件將外界物理狀態寫入右腦記憶，並由 Package 邊緣運算層負責解析，主動發送 `EmotionTriggered` 神經衝擊訊號，觸發中樞 `MainAgent` 的情緒波動 (Amygdala Hijack 杏仁核劫持機制)。
 
 ## 3. 狀態與記憶層 (State & Memory Layer)
-*   [記憶與狀態管理 (docs/architecture/core/memory.md)](./architecture/core/memory.md)：包含 `DataBlock` (資料載體)、`InboxBuffer` (收件箱)、`ContextManager` (Oplog 日誌)、`WorkspaceManager` (工作空間控制面，Session 獨占與多驅動擴充)，以及系統安全熔斷機制 (Circuit Breaker)。支援 `DataPointer` 大資料卸載與延遲加載機制，並已整合增量快取與 LRU 驅逐以確保極致效能。
-*   [會話與工作階段管理 (`docs/architecture/core/session.md`)](./architecture/core/session.md)：定義 `Session` 與 `Thread` 的生命週期狀態機。負責全局訊息派發 (`SessionManager.dispatchInboxForAgent`)，透過監聽 `AgentStateChanged` 事件主動釋放積壓訊息，解決 Inbox 餓死 (Starvation) 問題。支援基於 `ISessionRepository` 等儲存庫的持久化。
+*   [記憶與狀態管理 (docs/architecture/core/memory.md)](./architecture/core/memory.md)：包含 `DataBlock` (資料載體)、`InboxBuffer` (收件箱)、`ContextManager` (Oplog 日誌)、`WorkspaceManager` (工作空間控制面，Session 獨占與多驅動擴充)，以及系統安全熔斷機制 (Circuit Breaker)。支援 `DataPointer` 大資料卸載與延遲加載機制，並已整合增量快取與獨立提取的泛型 `LRUCache` 以確保極致效能與記憶體安全。
+*   [會話與工作階段管理 (`docs/architecture/core/session.md`)](./architecture/core/session.md)：定義 `Session` 與 `Thread` 的生命週期狀態機。負責全局訊息派發 (`SessionManager.dispatchInboxForAgent`)，透過監聽 `AgentStateChanged` 事件主動釋放積壓訊息，解決 Inbox 餓死 (Starvation) 問題。已重構升級為 **「統一喚醒 (Unified Wakeup)」** 機制，消除發送者分流造成的意識分裂，使 Agent 能在單次思考中總攬全局多方訊息，並引入 **「會話廣播 (Broadcast)」** 與工具私訊的分層回覆架構。支援基於 `ISessionRepository` 等儲存庫的持久化。
 
 ## 4. 系統基礎建設與安全 (Infrastructure & Security)
 *   [基礎建設與配置 (`docs/architecture/core/base.md`)](./architecture/core/base.md)：包含配置管理、**Kernel (依賴注入中樞，統一宣告與派發 Repositories)**、系統日誌與監控 (Telemetry)、儲存層抽象 (Storage) 以及外掛註冊機制 (Registry)。

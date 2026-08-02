@@ -3,7 +3,7 @@ import { LogManager } from '../infra/LogManager';
 import { IWorkspaceManager } from '../infra/persistence';
 import { IAgentStateRepository, IDataBlockRepository } from '../infra/persistence/IRepository';
 import { ILifecycle } from '../lifecycle/ILifecycle';
-import { HookEvent, IEvent, IEventBus } from '../messaging/IBus';
+import { HookEvent, IEvent, IEventBus, PromptSectionIndex } from '../messaging/IBus';
 import { BaseTool } from './';
 import { AgentOptions, AgentType, BaseAgent } from './BaseAgent';
 import { EmbodiedAgent } from './EmbodiedAgent';
@@ -81,7 +81,7 @@ export class AgentManager implements ILifecycle {
 
             if (teamMembers.length > 0) {
                 payload.injectedPrompts.push({
-                    index: 4.5, // 介於 ENVIRONMENT_STATE(4) 與 EMOTIONAL_STATE(5) 之間
+                    index: PromptSectionIndex.ENVIRONMENT_STATE,
                     content: `[NETWORK STATE]\nActive Agents in your session that you can communicate with:\n${teamMembers.join('\n')}`
                 });
             }
@@ -290,16 +290,12 @@ export class AgentManager implements ILifecycle {
         return agent;
     }
 
-    /**
-     * 一次性將特定 Session 內的所有活躍 Agent 脫水掛起
-     */
     public async dehydrateSession(sessionId: string): Promise<void> {
-        const promises: Promise<void>[] = [];
-        for (const [agentId, agent] of this.activeAgents.entries()) {
-            if (agent.sessionId === sessionId) {
-                promises.push(this.dehydrate(agentId));
-            }
-        }
+        const agentIds = this.sessionAgents.get(sessionId);
+        if (!agentIds || agentIds.size === 0) return;
+
+        // 拷貝一份避免迭代中修改 Set
+        const promises = Array.from(agentIds).map(id => this.dehydrate(id));
         await Promise.all(promises);
         this.logger.info(`[AgentManager] All agents in session ${sessionId} have been dehydrated.`);
     }

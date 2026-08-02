@@ -15,6 +15,24 @@ export interface Config {
     readonly llm: LLMConfig;
     /** Agent 行為配置 */
     readonly agent: AgentConfig;
+    /** 快取與 TTL 相關配置 */
+    readonly cache: CacheConfig;
+}
+
+/**
+ * 快取配置子介面
+ */
+export interface CacheConfig {
+    /** 歷史訊息 LRU 快取最大數量 */
+    readonly history_lru_size: number;
+    /** 系統提示詞 LRU 快取最大數量 */
+    readonly prompt_lru_size: number;
+    /** 系統提示詞快取有效時間 (毫秒) */
+    readonly prompt_ttl_ms: number;
+    /** 意識投影歷史 LRU 快取最大數量 */
+    readonly projection_lru_size: number;
+    /** 意識投影歷史快取有效時間 (毫秒) */
+    readonly projection_ttl_ms: number;
 }
 
 /**

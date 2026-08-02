@@ -1,5 +1,7 @@
+import { Config } from '../config/Config';
 import { IDataBlockRepository, IRepository } from '../infra/persistence/IRepository';
 import { DataBlock } from '../messaging/DataBlock';
+import { LRUCache } from '../utils/LRUCache';
 import { BaseAgent, ContextOverride } from './BaseAgent';
 
 /**
@@ -10,26 +12,32 @@ import { BaseAgent, ContextOverride } from './BaseAgent';
 export class ProjectionHandler {
     public readonly id: string;
 
-    // 記憶快取
-    private cachedMergedHistory: DataBlock[] | null = null;
-    private lastCacheTime: number = 0;
-    private readonly CACHE_TTL = 5000; // 快取有效期限 (毫秒)，可依需求調整
+    // 記憶快取 (使用內建 TTL 的 LRUCache)
+    private readonly cache: LRUCache<string, DataBlock[]>;
 
     constructor(
         public readonly brain: BaseAgent,
         public readonly body: BaseAgent,
-        private readonly dataBlockRepo: IDataBlockRepository
+        private readonly dataBlockRepo: IDataBlockRepository,
+        private readonly config: Config
     ) {
         this.id = brain.id; // 對外仍以 Brain 的身分活動
+        this.cache = new LRUCache<string, DataBlock[]>(
+            this.config.cache.projection_lru_size,
+            this.config.cache.projection_ttl_ms
+        );
     }
 
     /**
      * 合併並快取雙方的記憶歷史
      */
     private async getMergedHistory(): Promise<DataBlock[]> {
-        const now = Date.now();
-        if (this.cachedMergedHistory && (now - this.lastCacheTime < this.CACHE_TTL)) {
-            return this.cachedMergedHistory;
+        const cacheKey = `${this.brain.sessionId}:${this.brain.id}:${this.body.id}`;
+        
+        // LRUCache 內部已自動處理超時，過期會回傳 undefined
+        const cached = this.cache.get(cacheKey);
+        if (cached !== undefined) {
+            return cached;
         }
 
         // 分別拉取雙方歷史
@@ -37,18 +45,17 @@ export class ProjectionHandler {
         const bodyBlocks = await this.dataBlockRepo.findByAgent(this.body.sessionId, this.body.id);
 
         // 依據時間戳合併並排序
-        this.cachedMergedHistory = [...brainBlocks, ...bodyBlocks].sort((a, b) => a.timestamp - b.timestamp);
-        this.lastCacheTime = now;
-
-        return this.cachedMergedHistory;
+        const mergedHistory = [...brainBlocks, ...bodyBlocks].sort((a, b) => a.timestamp - b.timestamp);
+        
+        this.cache.set(cacheKey, mergedHistory);
+        return mergedHistory;
     }
 
     /**
      * 清除快取 (可供外部或發送新訊息後強制觸發)
      */
     public invalidateCache(): void {
-        this.cachedMergedHistory = null;
-        this.lastCacheTime = 0;
+        this.cache.clear();
     }
 
     public async resume(messageBatches: DataBlock[][]): Promise<void> {

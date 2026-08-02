@@ -51,7 +51,7 @@ export interface IDataBlockRepository extends IRepository<DataBlock<any>> {
   /**
    * 讀取並還原特定 Agent 的所有 DataBlock 歷史
    */
-  findByAgent(sessionId: string, agentId: string): Promise<DataBlock<any>[]>;
+  findByAgent(sessionId: string, agentId: string): Promise<readonly DataBlock<any>[]>;
 }
 
 

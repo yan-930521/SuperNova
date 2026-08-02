@@ -10,6 +10,7 @@ import {
 import { WorkspaceManager } from '../infra/persistence/WorkspaceManager';
 import { EventBus } from '../messaging/EventBus';
 import { SessionManager } from '../session/SessionManager';
+import { PromptLoader } from '../utils/PromptLoader';
 import { ILifecycle } from './ILifecycle';
 
 /**
@@ -35,6 +36,9 @@ export class RuntimeKernel implements ILifecycle {
     this.logger.info('[Kernel] Initializing Runtime Kernel...');
 
     try {
+      // 0. 初始化靜態工具類別
+      PromptLoader.init(this.config);
+
       // 1. 實例化底層通信組件 - EventBus
       // EventBus 是系統的神經系統，需最先被註冊
       const eventBus = new EventBus();

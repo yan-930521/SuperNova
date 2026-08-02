@@ -152,7 +152,7 @@ describe('SessionManager Recovery and Freeze Test', () => {
       expect(loadedSession.getInboxSize('agent-sub')).toBe(1);
       
       // 6. 提取暫存訊息
-      const poppedBlocks = loadedSession.popFromInboxBySender('agent-sub', 'worker-1');
+      const poppedBlocks = loadedSession.popAllFromInbox('agent-sub');
       expect(poppedBlocks.length).toBe(1);
       expect(poppedBlocks[0].senderId).toBe('worker-1');
       expect(poppedBlocks[0].controlPayload.result).toBe('OK');

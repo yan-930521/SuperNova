@@ -294,7 +294,7 @@ export class DataBlock<TControlPayload = Record<string, any>> {
         if (this.type === 'system' || this.type === 'tool') {
             msg = new SystemMessage({ content });
         } else if (this.type === 'human') {
-            msg = new HumanMessage({ content });
+            msg = new HumanMessage({ content: `[Message from ${this.senderId}]:\n${content}` });
         } else if (this.type === 'ai') {
             // 如果這則 AI 訊息不是讀取者自己發的，代表是來自其他 Agent，轉換為 SystemMessage 傳遞
             if (readerId && this.senderId !== readerId) {

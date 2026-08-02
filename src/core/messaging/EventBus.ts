@@ -1,5 +1,5 @@
 import { LogManager } from '../infra/LogManager';
-import { GlobalEventMap, IDeclarativeSubscriber, IEvent, IEventBus } from './IBus';
+import { GlobalEventMap, IEvent, IEventBus } from './IBus';
 
 interface ICallbackRegistration {
     handler: (event: IEvent<any>) => void | Promise<void>;
@@ -13,25 +13,17 @@ interface ICallbackRegistration {
  * 1. 異步監聽 Promise 健壯性防禦與全域 Unhandled Rejection 阻斷。
  * 2. 異步等待分發 (publishAsync)。
  * 3. 基於 sessionId 的租戶安全隔離路由。
- * 4. 宣告式訂閱 (Declarative Subscriber) 支持。
  */
 export class EventBus implements IEventBus {
     private readonly logger = LogManager.recorder;
     private readonly callbackSubscribers = new Map<string, Set<ICallbackRegistration>>();
-    private readonly declarativeSubscribers = new Map<string, Set<IDeclarativeSubscriber>>();
+    private readonly handlerIndex = new Map<Function, { type: string; reg: ICallbackRegistration }>();
 
     /**
      * 發佈事件 (非同步廣播，不等待監聽器結束)
      */
     public publish<T extends Extract<keyof GlobalEventMap, string>>(event: IEvent<T>): void {
         const regs = this.getTargetCallbackRegistrations(event.type, event.sessionId);
-        const decSubs = this.getTargetDeclarativeSubscribers(event.type, event.sessionId);
-
-        // 觸發宣告式訂閱者的喚醒與訊息暫存 (TODO: 在後續協作流程中與控制面連動)
-        if (decSubs.length > 0) {
-            this.logger.debug(`[EventBus] Triggering wakeup for ${decSubs.length} declarative subscribers on event: ${event.type}`);
-        }
-
         if (regs.length === 0) return;
 
         setImmediate(() => {
@@ -65,12 +57,6 @@ export class EventBus implements IEventBus {
      */
     public async publishAsync<T extends Extract<keyof GlobalEventMap, string>>(event: IEvent<T>): Promise<PromiseSettledResult<any>[]> {
         const regs = this.getTargetCallbackRegistrations(event.type, event.sessionId);
-        const decSubs = this.getTargetDeclarativeSubscribers(event.type, event.sessionId);
-
-        if (decSubs.length > 0) {
-            this.logger.debug(`[EventBus] Triggering wakeup for ${decSubs.length} declarative subscribers on event: ${event.type}`);
-        }
-
         if (regs.length === 0) return [];
 
         this.logger.debug(`[EventBus] Async publishing event: ${event.type} to ${regs.length} callback subscribers`, { type: 'SYSTEM' });
@@ -96,34 +82,20 @@ export class EventBus implements IEventBus {
     }
 
     /**
-     * 訂閱事件 (支持回標函數、通配符及宣告式訂閱)
+     * 訂閱事件 (支持回標函數及通配符)
      */
     public subscribe(
         type: string,
-        handlerOrSubscriber: any,
+        handler: (event: IEvent<any>) => void | Promise<void>,
         options?: { sessionId?: string }
     ): void {
-        // 1. 宣告式訂閱
-        if (handlerOrSubscriber && typeof handlerOrSubscriber === 'object' && 'agentId' in handlerOrSubscriber) {
-            const sub = handlerOrSubscriber as IDeclarativeSubscriber;
-            if (!this.declarativeSubscribers.has(type)) {
-                this.declarativeSubscribers.set(type, new Set());
-            }
-            this.declarativeSubscribers.get(type)!.add(sub);
-            this.logger.info(`[EventBus] Declarative subscriber registered: Session ${sub.sessionId}, Agent ${sub.agentId} to: ${type}`);
-            return;
-        }
-
-        // 2. 回調函數與通配符訂閱
-        const handler = handlerOrSubscriber as (event: IEvent<any>) => void;
         if (!this.callbackSubscribers.has(type)) {
             this.callbackSubscribers.set(type, new Set());
         }
 
-        this.callbackSubscribers.get(type)!.add({
-            handler,
-            sessionId: options?.sessionId
-        });
+        const reg: ICallbackRegistration = { handler, sessionId: options?.sessionId };
+        this.callbackSubscribers.get(type)!.add(reg);
+        this.handlerIndex.set(handler, { type, reg });
         this.logger.debug(`[EventBus] Callback subscribed to: ${type}${options?.sessionId ? ` (Session: ${options.sessionId})` : ''}`, { type: 'SYSTEM' });
     }
 
@@ -132,40 +104,16 @@ export class EventBus implements IEventBus {
      */
     public unsubscribe(
         type: string,
-        handlerOrSubscriber: any
+        handler: (event: IEvent<any>) => void | Promise<void>
     ): void {
-        // 1. 宣告式訂閱取消
-        if (handlerOrSubscriber && typeof handlerOrSubscriber === 'object' && 'agentId' in handlerOrSubscriber) {
-            const sub = handlerOrSubscriber as IDeclarativeSubscriber;
-            const subs = this.declarativeSubscribers.get(type);
-            if (subs) {
-                for (const item of subs) {
-                    if (item.sessionId === sub.sessionId && item.agentId === sub.agentId) {
-                        subs.delete(item);
-                        break;
-                    }
-                }
-                if (subs.size === 0) {
-                    this.declarativeSubscribers.delete(type);
-                }
-                this.logger.info(`[EventBus] Declarative subscriber removed: Session ${sub.sessionId}, Agent ${sub.agentId} from: ${type}`);
+        const entry = this.handlerIndex.get(handler);
+        if (entry) {
+            const regs = this.callbackSubscribers.get(entry.type);
+            if (regs) {
+                regs.delete(entry.reg);
+                if (regs.size === 0) this.callbackSubscribers.delete(entry.type);
             }
-            return;
-        }
-
-        // 2. 回調式訂閱取消
-        const handler = handlerOrSubscriber as (event: IEvent<any>) => void;
-        const regs = this.callbackSubscribers.get(type);
-        if (regs) {
-            for (const reg of regs) {
-                if (reg.handler === handler) {
-                    regs.delete(reg);
-                    break;
-                }
-            }
-            if (regs.size === 0) {
-                this.callbackSubscribers.delete(type);
-            }
+            this.handlerIndex.delete(handler);
             this.logger.info(`[EventBus] Callback unsubscribed from: ${type}`, { type: 'SYSTEM' });
         }
     }
@@ -178,43 +126,34 @@ export class EventBus implements IEventBus {
     private getTargetCallbackRegistrations(eventType: string, eventSessionId?: string): ICallbackRegistration[] {
         const specific = this.callbackSubscribers.get(eventType);
         const wildcard = this.callbackSubscribers.get('*');
-        const matched: ICallbackRegistration[] = [];
 
-        const addMatched = (reg: ICallbackRegistration) => {
-            if (eventSessionId) {
-                if (!reg.sessionId || reg.sessionId === eventSessionId) {
+        if (!specific && !wildcard) return [];
+
+        const source = (!wildcard) ? specific!
+                     : (!specific) ? wildcard!
+                     : null;
+
+        if (source) {
+            const matched: ICallbackRegistration[] = [];
+            for (const reg of source) {
+                if (!eventSessionId || !reg.sessionId || reg.sessionId === eventSessionId) {
                     matched.push(reg);
                 }
-            } else {
-                matched.push(reg);
             }
-        };
-
-        if (specific) specific.forEach(addMatched);
-        if (wildcard) {
-            wildcard.forEach(reg => {
-                // Ensure no duplicate if wildcard happens to be registered in specific too
-                if (!specific || !specific.has(reg)) addMatched(reg);
-            });
+            return matched;
         }
 
-        return matched;
-    }
-
-    /**
-     * 獲取匹配的宣告式訂閱者，實施 sessionId 隔離過濾
-     */
-    private getTargetDeclarativeSubscribers(eventType: string, eventSessionId?: string): IDeclarativeSubscriber[] {
-        const specific = this.declarativeSubscribers.get(eventType) || new Set();
-        const matched: IDeclarativeSubscriber[] = [];
-
-        for (const sub of specific) {
-            if (eventSessionId) {
-                if (sub.sessionId === eventSessionId) {
-                    matched.push(sub);
-                }
-            } else {
-                matched.push(sub);
+        const matched: ICallbackRegistration[] = [];
+        const seen = new Set<ICallbackRegistration>();
+        for (const reg of specific!) {
+            if (!eventSessionId || !reg.sessionId || reg.sessionId === eventSessionId) {
+                matched.push(reg);
+                seen.add(reg);
+            }
+        }
+        for (const reg of wildcard!) {
+            if (!seen.has(reg) && (!eventSessionId || !reg.sessionId || reg.sessionId === eventSessionId)) {
+                matched.push(reg);
             }
         }
         return matched;

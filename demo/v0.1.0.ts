@@ -56,7 +56,7 @@ async function main() {
     });
 
     const ask = () => {
-        rl.question('\n[您]: ', (input) => {
+        rl.question('\nYou: ', (input) => {
             const text = input.trim();
             if (text.toLowerCase() === 'exit' || text.toLowerCase() === 'quit') {
                 console.log('系統關閉中，正在儲存記憶...');
@@ -92,14 +92,15 @@ async function main() {
     // 3. 訂閱全局 AgentMessage 來接收夏沫的回覆
     eventBus.subscribe(AgentEvent.AgentMessage, (event: IEvent<AgentEvent.AgentMessage>) => {
         const dataBlock = event.payload;
-        if (dataBlock && dataBlock.senderId !== 'USER') {
+        if (Array.isArray(dataBlock)) {
+            dataBlock.forEach((d) => {
+                console.log(`\n[${d.senderId} -> ${d.targetId || 'NONE'}]:\n${d.toMarkdown()}`);
+            })
+        } else {
             console.log(`\n[${dataBlock.senderId} -> ${dataBlock.targetId || 'NONE'}]:\n${dataBlock.toMarkdown()}`);
-            
-            // 當 MainAgent 回覆給 USER 時，重新顯示提問框
-            if (dataBlock.senderId === MainAgentId && (dataBlock.targetId === 'USER' || !dataBlock.targetId)) {
-                setTimeout(ask, 100);
-            }
         }
+
+        setTimeout(ask, 5000);
     });
 
     console.log(`\n[系統] ${MainAgentId} 已上線！輸入 "exit" 即可安全離開。`);

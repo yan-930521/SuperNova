@@ -3,19 +3,24 @@ import * as path from 'path';
 
 import { Config } from '../../core/config/Config';
 import { LogManager } from '../../core/infra/LogManager';
+import { LRUCache } from './LRUCache';
 
 /**
  * Prompt 加載器
  * 提供具備快取、錯誤處理與回退機制的 Prompt 讀取功能。
  */
-interface CacheEntry {
-  content: string;
-  timestamp: number;
-}
-
 export class PromptLoader {
-  private static cache: Map<string, CacheEntry> = new Map();
-  private static readonly TTL_MS = 60000; // 60 seconds
+  private static cache = new LRUCache<string, string>(100, 60000);
+
+  /**
+   * 系統初始化時注入配置
+   */
+  public static init(config: Config): void {
+      this.cache = new LRUCache<string, string>(
+        config.cache.prompt_lru_size, 
+        config.cache.prompt_ttl_ms
+      );
+  }
 
   /**
    * 加載 Prompt 檔案內容 (附帶 TTL 快取機制)
@@ -24,12 +29,11 @@ export class PromptLoader {
    */
   public static load(relativePath: string, fallback: string = ""): string {
     const absolutePath = path.resolve(process.cwd(), relativePath);
-    const now = Date.now();
 
-    // 1. 檢查快取及 TTL
+    // 1. 檢查快取及 TTL (LRUCache 內部已自動處理超時)
     const cached = this.cache.get(absolutePath);
-    if (cached && (now - cached.timestamp < this.TTL_MS)) {
-      return cached.content;
+    if (cached !== undefined) {
+      return cached;
     }
 
     try {
@@ -41,7 +45,7 @@ export class PromptLoader {
 
       // 3. 讀取內容
       const content = fs.readFileSync(absolutePath, 'utf-8');
-      this.cache.set(absolutePath, { content, timestamp: now });
+      this.cache.set(absolutePath, content);
       return content;
     } catch (error: any) {
       LogManager.recorder.error(`[PromptLoader] Failed to read prompt at ${absolutePath}: ${error.message}`, { type: 'SYSTEM' });

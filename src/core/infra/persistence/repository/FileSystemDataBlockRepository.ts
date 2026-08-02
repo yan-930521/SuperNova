@@ -5,6 +5,7 @@ import * as path from 'path';
 import { Config } from '../../../config/Config';
 import { DataBlock } from '../../../messaging/DataBlock';
 import { IdGenerator } from '../../../utils/IdGenerator';
+import { LRUCache } from '../../../utils/LRUCache';
 import { LogManager } from '../../LogManager';
 import { IDataBlockRepository } from '../IRepository';
 
@@ -17,27 +18,13 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
     private readonly logger = LogManager.recorder;
 
     // 記憶體快取：以 `${sessionId}:${agentId}` 為 Key
-    private readonly cache = new Map<string, DataBlock<any>[]>();
-    private readonly cacheKeyAccessOrder: string[] = [];
-    private readonly MAX_CACHE_KEYS = 50;
-
-    private touchCache(key: string) {
-        const idx = this.cacheKeyAccessOrder.indexOf(key);
-        if (idx !== -1) {
-            this.cacheKeyAccessOrder.splice(idx, 1);
-        }
-        this.cacheKeyAccessOrder.push(key);
-
-        if (this.cacheKeyAccessOrder.length > this.MAX_CACHE_KEYS) {
-            const lruKey = this.cacheKeyAccessOrder.shift()!;
-            this.cache.delete(lruKey);
-        }
-    }
+    private readonly cache: LRUCache<string, DataBlock<any>[]>;
 
     constructor(
         private readonly config: Config,
         private readonly baseDir: string
     ) {
+        this.cache = new LRUCache<string, DataBlock<any>[]>(this.config.cache.history_lru_size);
     }
 
     // --- ILifecycle 實作 ---
@@ -63,7 +50,6 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
             // 更新快取
             const cacheKey = `${sessionId}:${agentId}`;
             this.cache.set(cacheKey, [...blocks]);
-            this.touchCache(cacheKey);
             
             this.logger.debug(`[DataBlockRepository] Overwrote history for agent ${agentId} under session ${sessionId}`);
         } catch (err: any) {
@@ -86,9 +72,9 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
             
             // 更新快取
             const cacheKey = `${sessionId}:${agentId}`;
-            if (this.cache.has(cacheKey)) {
-                this.cache.get(cacheKey)!.push(block);
-                this.touchCache(cacheKey);
+            const existing = this.cache.get(cacheKey);
+            if (existing) {
+                existing.push(block);
             }
             
             this.logger.debug(`[DataBlockRepository] Appended history for agent ${agentId} under session ${sessionId}`);
@@ -101,12 +87,12 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
     /**
      * 讀取並還原特定 Agent 的所有 DataBlock 歷史 (逐行解析 JSONL)
      */
-    public async findByAgent(sessionId: string, agentId: string): Promise<DataBlock<any>[]> {
+    public async findByAgent(sessionId: string, agentId: string): Promise<readonly DataBlock<any>[]> {
         const cacheKey = `${sessionId}:${agentId}`;
-        if (this.cache.has(cacheKey)) {
-            this.touchCache(cacheKey);
-            // 回傳淺拷貝，防止外部不小心 mutate 陣列
-            return [...this.cache.get(cacheKey)!];
+        const cached = this.cache.get(cacheKey);
+        if (cached) {
+            // 回傳唯讀參考，零拷貝
+            return cached;
         }
 
         const historyFilePath = this.getFileName(sessionId, agentId);
@@ -136,8 +122,8 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
             // 寫入快取
             this.cache.set(cacheKey, blocks);
 
-            // 回傳淺拷貝
-            return [...blocks];
+            // 回傳唯讀參考
+            return blocks;
     } catch (err: any) {
             this.logger.error(`[DataBlockRepository] Failed to read history for agent ${agentId}: ${err.message}`);
             throw err;

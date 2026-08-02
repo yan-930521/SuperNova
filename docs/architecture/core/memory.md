@@ -38,7 +38,7 @@ related_docs:
     5. **極限效能最佳化 (Performance Optimizations)**：
        *   **增量式歷史快取 (Incremental History Cache)**：`DataBlock.toMessage` 實作了記憶體級別的 Memoization，將已轉換的 `BaseMessage` 快取，大幅消除了陣列重組與 JSON 字串化的 CPU 負擔。
        *   **延遲壓縮 (Debounced Compaction)**：`DataBlock` 帶有瞬態的 `isCompacted` 標記。當訊息第一次被 `DataBlockRepository.offloadLargePayloads` 掃描過後，就會被打上已壓縮的標記。未來全量掃描歷史時將直接跳過，時間複雜度從 O(N) 降至 O(1)。
-       *   **LRU 快取驅逐 (LRU Cache Eviction)**：檔案倉儲層實作了上限 50 個 Key 的 LRU 演算法，解決了多 Agent 高並發存取時的記憶體洩漏 (Memory Leak) 隱患。
+       *   **通用 LRU 快取機制 (LRU Cache Utility)**：系統提供繼承自原生 `Map` 的泛型 `LRUCache` 工具類別，確保在不影響原有 API 操作的情況下實現 O(1) 的淘汰策略。目前廣泛應用於檔案倉儲層 (上限 50 個 Key) 與 `PromptLoader` 中，解決了多 Agent 高並發存取時的記憶體洩漏 (Memory Leak) 隱患。
        *   **異步檔案寫入 (Async File I/O)**：底層日誌傳輸 (`FileTransport`) 採用寫入緩衝與背景異步 Flush 機制，避免高頻繁的 `fs.appendFileSync` 阻塞事件迴圈 (Event Loop)。
 
 ### `WorkspaceManager` (工作區與儲存管理器)

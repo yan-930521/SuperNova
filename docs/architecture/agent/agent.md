@@ -65,8 +65,9 @@ related_docs:
 為了快速驗證與推動功能開發，系統目前採用務實的串接策略：
 *   **結構化認知轉譯**：Agent 在處理信件 (`processInbox`) 時，會在記憶體中將 `AgentProfile` JSON 動態渲染為結構化的 LLM 系統提示詞。
 *   **角色認知嚴格劃分**：在組裝給 LLM 的訊息列隊時，嚴格對齊 LangChain 的生態。DataBlock 內部將精準區分角色為 `'human'` (使用者輸入) 或 `'ai'` (系統/代理人回覆)，並自動轉譯為 `HumanMessage` 與 `AIMessage`，徹底解決角色混淆與 LLM 嚴重幻覺問題。
-*   **直接整合 LangChain 生態**：我們暫不實作抽象包裹層，而是直接在 Agent 內部整合 `@langchain/core` 等套件。將 `DataBlock` 歷史轉譯為 `BaseMessage` 陣列後直接呼叫模型。
-*   **純文字決策 (免 Tools)**：為保持初期架構單純，暫不實作 Tool Calling (Function Calling)。Agent 透過純文字回覆進行思考與交流，結果將被封裝為新的 `DataBlock` 儲存或廣播。
+*   **直接整合 LangChain 生態與 ReAct 迴圈透明化**：我們暫不實作抽象包裹層，而是直接在 Agent 內部整合 `@langchain/core` 等套件。將 `DataBlock` 歷史轉譯為 `BaseMessage` 陣列後直接呼叫模型。
+    *   **透明化中間歷程**：針對 `createAgent` 預設將中間思考與工具呼叫過程當作黑箱的限制，`BaseAgent.callModel` 會在呼叫結束後，精準擷取這段期間新生成的 `BaseMessage[]`，並將其一一反序列化映射為強型別的 `DataBlock`（區分 `intent: AGENT_REPLY` 與 `intent: TOOL_CALL`），最後以批次陣列的形式透過 `AgentMessage` 全域廣播。這保證了每一次的工具調用、內部推論與失敗重試，都能 100% 寫入 Oplog 供系統時空旅行與除錯。
+*   **工具無狀態化與職責剝離**：底層的 `BaseTool` 僅專注於執行邏輯並回傳原生資料，不再負責自行封裝或廣播 `DataBlock`，徹底消除 LLM 視野內的雜訊標頭，實現了「工具負責做事，大腦負責記憶與廣播」的優雅職責分離。
 *   *(技術債標記)*：未來待功能驗證穩定後，將會重構抽離出 `ILLMProvider` 包裹層，徹底解除核心對 LangChain 框架的硬耦合。
 
 ---

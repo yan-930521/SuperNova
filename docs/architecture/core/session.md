@@ -142,10 +142,15 @@ workspace/
     1.  `saveForAgent(sessionId, agentId, blocks)`：整份覆寫該 Agent 的歷史（用於時空旅行倒帶）。
     2.  `appendForAgent(sessionId, agentId, block)`：以 $O(1)$ 常數時間向 `history.jsonl` 追加單筆 DataBlock。
     3.  `findByAgent(sessionId, agentId)`：讀取並逐行反序列化解析 `history.jsonl`，還原為強型別 `DataBlock[]`。
-*   **集中式派發與管線化併行 (Pipelined Dispatch & I/O)**：
-    `BaseAgent` 本身不直接訂閱 `EventBus` 的收件匣事件。收發與存檔職責統一收攏至 `SessionManager` (集中式中介者模式)。為達極致效能，當攔截到全域訊息時，會將「發送者 Oplog 寫入與平行壓縮」以及「所有目標接收者的 Oplog 寫入與派發」封裝為獨立的 Promise，並以 `Promise.all` 管線化平行執行。這徹底解決了傳統串列 await 造成的事件迴圈阻塞。
-*   **零開銷唯讀檢查 (Zero-Cost Peek Filter) 與狀態阻塞**：
-    在進行派發時，`SessionManager` 會嚴格檢查 `AgentState.BUSY`，若 Agent 正在執行則信件安全保留於 Inbox。同時，為了避免大量低優先級訊息造成無謂的陣列切割 (Pop & Push-back) 浪費，新增了 `hasActionableMessages` 唯讀檢查。只有確認信箱中包含具行動價值的信件，才會真正切割陣列並透過 `Promise.all` 雙重喚醒大腦與軀殼，將 I/O 延遲壓到最低。
+*   **統一喚醒與批次管線化併行 (Unified Wakeup & Pipelined Batch Dispatch)**：
+    `BaseAgent` 本身不直接訂閱 `EventBus` 的收件匣事件。收發與存檔職責統一收攏至 `SessionManager` (集中式中介者模式)。為達極致效能，`AgentMessage` 支援一次接收 `DataBlock[]` 陣列，`SessionManager` 會對陣列進行批次處理：
+    1. **並行卸載**：透過 `Promise.all` 將所有大型字串併發卸載。
+    2. **寫入去重與批次 I/O**：使用 `Set` 去重 Sender 與 Target，將所有的歷史 Oplog (`appendForAgent`) 收集後進行一次性的 `Promise.all` 管線化併發寫入，並保證背景壓縮 (`compactAgentHistory`) 每個 Sender 僅觸發一次。
+    3. **收斂喚醒**：將訊息安靜地推入 Inbox 後，每個目標 Agent 僅會被喚醒 (`dispatchInboxForAgent`) 一次，徹底解決陣列訊息派發導致的重複喚醒與資源競爭問題。
+*   **全域唯讀檢查 (Global Peek Filter) 與統一喚醒**：
+    在進行派發時，`SessionManager` 會嚴格檢查 `AgentState.BUSY`，若 Agent 正在執行則信件安全保留於 Inbox。同時為了避免意識分裂與並發衝突，新增了 `hasAnyActionableMessages` 全域檢查。只要 Agent 的信箱中包含任何一筆具行動價值的信件，就會透過 `popAllFromInbox` 一次性取出所有不同來源的信件，並進行 **「統一喚醒 (Unified Wakeup)」**，讓 Agent 的單一意識能在單次思考中總攬全局，不再發生舊架構下按發送者分流導致的多重宇宙與記憶錯亂問題。而 Agent 生成的回覆，也會預設轉換為針對該 Session 的 **「會話廣播 (Broadcast)」** (`targetId: null`)。
+*   **彈性廣播與私訊混用 (Flexible Hybrid Communication)**：
+    得益於「統一喚醒」與系統提示詞 (`COMMUNICATION_PROTOCOL`) 的結合，Agent 在處理多方訊息時具備了高級的情境判斷能力。當接收到多名用戶的並發請求時，LLM 能夠自行判斷：若請求涉及隱私或有明確一對一指定，它會主動調用 `send_message` 工具進行私訊；若是一般性閒聊或公開問題，則會直接輸出文字，整合為單一廣播訊息。這種混合模式大幅提升了多使用者場景下的自然度與 Token 效率。
 
 ### D. 代理人狀態儲存 (`IAgentStateRepository`)
 *   **介面特點**：繼承自通用 `IRepository<BaseAgentData>` 介面。
