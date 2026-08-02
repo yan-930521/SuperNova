@@ -29,6 +29,24 @@ export const DEFAULT_CONFIG: Config = {
     llm: {
         default_preset: 'SMART',
         presets: {
+            DEFAULT: {
+                modelName: 'gpt-4o-2024-08-06',
+                temperature: 0.7,
+                maxTokens: 4096,
+                modelKwargs: {
+                    parallel_tool_calls: true
+                }
+            },
+            REASONING_FAST: {
+                modelName: 'gpt-5.6-luna',
+                temperature: 1,
+                maxTokens: 8192,
+                reasoning: {
+                    effort: 'low',
+                    summary: 'auto'
+                },
+                parallel_tool_calls: true
+            },
             SMART: {
                 modelName: 'gpt-4o',
                 temperature: 0.2,
@@ -38,6 +56,9 @@ export const DEFAULT_CONFIG: Config = {
                 modelName: 'gpt-4o-mini',
                 temperature: 0.2,
                 maxTokens: 2048,
+                modelKwargs: {
+                    parallel_tool_calls: true
+                }
             },
             CHEAP: {
                 modelName: 'gpt-3.5-turbo',
@@ -54,5 +75,12 @@ export const DEFAULT_CONFIG: Config = {
         max_context_window: 100,
         enable_temporal_injection: true,
         temporal_threshold_ms: 1800000
+    },
+    cache: {
+        history_lru_size: 500,
+        prompt_lru_size: 100,
+        prompt_ttl_ms: 60000,
+        projection_lru_size: 10,
+        projection_ttl_ms: 5000
     }
 };

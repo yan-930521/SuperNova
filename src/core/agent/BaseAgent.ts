@@ -2,7 +2,7 @@ import { createAgent, ReactAgent } from 'langchain';
 import * as path from 'path';
 
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import { AIMessage, BaseMessage, SystemMessage } from '@langchain/core/messages';
+import { AIMessage, BaseMessage, SystemMessage, ToolMessage } from '@langchain/core/messages';
 import { ChatPromptTemplate } from '@langchain/core/prompts';
 import { ChatOpenAI } from '@langchain/openai';
 
@@ -14,8 +14,9 @@ import { ConsoleTransport } from '../infra/transports/ConsoleTransport';
 import { FileTransport } from '../infra/transports/FileTransport';
 import { DataBlock, MessagePriority } from '../messaging/DataBlock';
 import {
-    AgentEvent, HookEvent, IEventBus, IPromptSection, PromptSectionIndex, GlobalEventMap, IEvent
+    AgentEvent, GlobalEventMap, HookEvent, IEvent, IEventBus, IPromptSection, PromptSectionIndex
 } from '../messaging/IBus';
+import { SYSTEM_PROMPTS } from './prompts';
 import { BaseTool } from './tool/BaseTool';
 
 /** 代理人內部狀態與情緒載體 */
@@ -192,7 +193,14 @@ export abstract class BaseAgent {
     protected tools: BaseTool[] = [];
     private reactAgentCache = new Map<string, ReactAgent>();
     private cachedToolsSignature: string = '';
-    protected eventSubscriptions: Array<{type: string, handler: any}> = [];
+    protected eventSubscriptions: Array<{ type: string, handler: any }> = [];
+
+    private historyCache: {
+        blockCount: number;
+        messages: BaseMessage[];
+        profileHash: string;
+        systemPrompt: string;
+    } | null = null;
 
     constructor(
         public readonly id: string,
@@ -213,16 +221,16 @@ export abstract class BaseAgent {
         this.workspacePath = options?.workspacePath || '';
         this.workspaceType = options?.workspaceType || 'PERSISTENT';
         this.agentManager = options?.agentManager;
-            this.oplogDir = path.join(
-                process.cwd(),
-                this.config.storage.base_dir,
-                this.config.storage.session_dir,
-                this.sessionId,
-                this.config.storage.agent_dir,
-                this.id
-            );
-            this.stateFilePath = path.join(this.oplogDir, 'state.json');
-        
+        this.oplogDir = path.join(
+            process.cwd(),
+            this.config.storage.base_dir,
+            this.config.storage.session_dir,
+            this.sessionId,
+            this.config.storage.agent_dir,
+            this.id
+        );
+        this.stateFilePath = path.join(this.oplogDir, 'state.json');
+
 
         this.logger.addTransport(new FileTransport('DEBUG', this.oplogDir, this.config.storage.oplog_file));
         this.logger.info(`Initializing agent: ${this.id} under session: ${this.sessionId}`);
@@ -336,23 +344,22 @@ export abstract class BaseAgent {
 
         const sections: IPromptSection[] = [];
 
-        if (profile.mission || profile.principles) {
-            let corePrompt = '';
-            if (profile.mission) corePrompt += `## MISSION\n${profile.mission}\n\n`;
-            if (profile.principles && profile.principles.length > 0) {
-                corePrompt += `## PRINCIPLES (CRITICAL)\n`;
-                profile.principles.forEach(p => corePrompt += `- ${p}\n`);
-            }
+        // --- 1. SYSTEM_CORE ---
+        let corePrompt = '';
+        corePrompt += `${SYSTEM_PROMPTS.COMMUNICATION_PROTOCOL}\n\n`;
+        corePrompt += `${SYSTEM_PROMPTS.NETWORK_COMMUNICATION}\n\n`;
+
+        if (profile.mission) corePrompt += `## MISSION\n${profile.mission}\n\n`;
+        if (profile.principles && profile.principles.length > 0) {
+            corePrompt += `## PRINCIPLES (CRITICAL)\n`;
+            profile.principles.forEach(p => corePrompt += `- ${p}\n`);
+            corePrompt += `\n`;
+        }
+        if (corePrompt.trim()) {
             sections.push({ index: PromptSectionIndex.SYSTEM_CORE, content: corePrompt.trim() });
         }
 
-        if (this.envState) {
-            sections.push({
-                index: PromptSectionIndex.ENVIRONMENT_STATE,
-                content: `${this.envState}`
-            });
-        }
-
+        // --- 2. IDENTITY ---
         if (profile.identity) {
             sections.push({
                 index: PromptSectionIndex.IDENTITY,
@@ -360,24 +367,45 @@ export abstract class BaseAgent {
             });
         }
 
-        if (profile.capabilities || profile.action_guidelines) {
-            let tacticalPrompt = '';
-            if (profile.capabilities && profile.capabilities.length > 0) {
-                tacticalPrompt += `## CAPABILITIES\n`;
-                profile.capabilities.forEach(c => tacticalPrompt += `- ${c}\n`);
-                tacticalPrompt += `\n`;
-            }
-            if (profile.action_guidelines && profile.action_guidelines.length > 0) {
-                tacticalPrompt += `## ACTION GUIDELINES\n`;
-                profile.action_guidelines.forEach(g => tacticalPrompt += `- ${g}\n`);
-            }
+        // --- 3. TACTICAL_GUIDELINE ---
+        let tacticalPrompt = '';
+        tacticalPrompt += `${SYSTEM_PROMPTS.CONSCIOUSNESS_PROJECTION}\n\n`;
+
+        if (profile.capabilities && profile.capabilities.length > 0) {
+            tacticalPrompt += `## CAPABILITIES\n`;
+            profile.capabilities.forEach(c => tacticalPrompt += `- ${c}\n`);
+            tacticalPrompt += `\n`;
+        }
+        if (profile.action_guidelines && profile.action_guidelines.length > 0) {
+            tacticalPrompt += `## ACTION GUIDELINES\n`;
+            profile.action_guidelines.forEach(g => tacticalPrompt += `- ${g}\n`);
+            tacticalPrompt += `\n`;
+        }
+        if (profile.outputFormat) {
+            tacticalPrompt += `## OUTPUT FORMAT REQUIREMENTS\n${profile.outputFormat}\n\n`;
+        }
+        if (tacticalPrompt.trim()) {
             sections.push({ index: PromptSectionIndex.TACTICAL_GUIDELINE, content: tacticalPrompt.trim() });
         }
 
-        if (profile.outputFormat) {
+        // --- 4. ENVIRONMENT_STATE ---
+        const envState = envStateOverride !== undefined ? envStateOverride : this.envState;
+        if (envState) {
+            sections.push({
+                index: PromptSectionIndex.ENVIRONMENT_STATE,
+                content: `${envState}`
+            });
+        }
+
+        // --- 6. TOOL_USAGE ---
+        let toolUsagePrompt = '';
+        toolUsagePrompt += `${SYSTEM_PROMPTS.TOOL_USAGE_AND_VERIFICATION}\n\n`;
+        toolUsagePrompt += `${SYSTEM_PROMPTS.DATA_POINTER_HANDLING}\n\n`;
+
+        if (toolUsagePrompt.trim()) {
             sections.push({
                 index: PromptSectionIndex.TOOL_USAGE,
-                content: `## OUTPUT FORMAT REQUIREMENTS\n${profile.outputFormat}`
+                content: toolUsagePrompt.trim()
             });
         }
 
@@ -443,17 +471,17 @@ export abstract class BaseAgent {
             return saveTokens && (index < allHistoryBlocks.length - uncompressedTail);
         }
 
-        const historyMessages = this.buildHistoryMessages(allHistoryBlocks, shouldCompress);
+        const staticSections = this.buildProfilePromptSections(effectiveProfile, effectiveEnvState);
+        const allSections = [...staticSections, ...(contextOverride?.injectedPrompts || [])];
+        allSections.sort((a, b) => a.index - b.index);
+        const systemPrompt = allSections.map(p => p.content).join('\n\n');
+        const profileHash = JSON.stringify(effectiveProfile) + '|' + effectiveEnvState;
+
+        const historyMessages = this.buildHistoryMessagesIncremental(allHistoryBlocks, shouldCompress, profileHash, systemPrompt);
 
         this.logger.debug(`Aggregated input for LLM: ${historyMessages.length} historical messages`);
 
-        // 2. 組合所有 Prompt (靜態設定 + 動態 Hook 注入)
-        const staticSections = this.buildProfilePromptSections(effectiveProfile, effectiveEnvState);
-        const allSections = [...staticSections, ...(contextOverride?.injectedPrompts || [])];
 
-        // 依 index 嚴格排序
-        allSections.sort((a, b) => a.index - b.index);
-        const systemPrompt = allSections.map(p => p.content).join('\n\n');
 
         const lcMessages = await this.compileMessages(systemPrompt, undefined, {}, {
             history: historyMessages
@@ -461,31 +489,26 @@ export abstract class BaseAgent {
 
         // 3. 呼叫模型
         this.logger.debug(`Invoking LLM...`);
-        const { content: replyText, usageDelta } = await this.callModel(lcMessages, {
+        const { newBlocks, usageDelta } = await this.callModel(lcMessages, {
             presetName: effectiveProfile?.llmPreset,
-            overrideTools: effectiveTools
+            overrideTools: effectiveTools,
+            senderId: historyTargetId
         });
 
-        this.logger.debug(`LLM Respond.`);
+        this.logger.debug(`LLM Respond with ${newBlocks.length} new blocks.`);
 
-        // 4. 將決策傳回給最後的發送者
-        const lastMessage = messages[messages.length - 1];
-        const replyBlock = new DataBlock({
-            sessionId: this.sessionId,
-            senderId: historyTargetId,
-            targetId: lastMessage?.senderId, // 針對最後一個對話對象回覆
-            type: 'ai',
-            intent: 'AGENT_REPLY',
-            controlPayload: replyText
-        });
+        // 4. 將決策廣播至整個 Session (若需私訊，LLM 應呼叫 SendMessageTool)
+        // newBlocks 裡已經包含了 LLM 思考、工具呼叫、最後回覆的完整陣列
 
-        // 發布回 EventBus
-        await this.eventBus.publishAsync({
-            type: AgentEvent.AgentMessage,
-            timestamp: Date.now(),
-            sessionId: this.sessionId,
-            payload: replyBlock
-        });
+        // 發布回 EventBus (SessionManager 的 handleAgentMessage 已經支援接收陣列)
+        if (newBlocks.length > 0) {
+            await this.eventBus.publishAsync({
+                type: AgentEvent.AgentMessage,
+                timestamp: Date.now(),
+                sessionId: this.sessionId,
+                payload: newBlocks
+            });
+        }
 
         // 5. 任務完成，回傳消耗增量供上層合併
         return { usageDelta };
@@ -494,37 +517,73 @@ export abstract class BaseAgent {
     /**
      * 負責將原始的 DataBlock 轉換為 LangChain 的 BaseMessage，並支援動態的時間感知插針
      */
-    protected buildHistoryMessages(blocks: DataBlock[], shouldCompress: (index: number) => boolean): BaseMessage[] {
-        const historyMessages: BaseMessage[] = [];
+    protected injectTemporalMarker(prevM: DataBlock, m: DataBlock, outputArray: BaseMessage[]): void {
         const enableTemporalInjection = this.config.agent.enable_temporal_injection ?? true;
+        if (!enableTemporalInjection) return;
+
         const temporalThresholdMs = this.config.agent.temporal_threshold_ms;
+        const timeDiff = m.timestamp - prevM.timestamp;
 
+        if (timeDiff > temporalThresholdMs) {
+            const minutes = Math.floor(timeDiff / 60000);
+            const hours = Math.floor(minutes / 60);
+            const days = Math.floor(hours / 24);
+
+            let timeStr = '';
+            if (days > 0) timeStr = `${days} 天 ${hours % 24} 小時`;
+            else if (hours > 0) timeStr = `${hours} 小時 ${minutes % 60} 分鐘`;
+            else timeStr = `${minutes} 分鐘`;
+
+            outputArray.push(new SystemMessage(`[系統提示：距離上一次對話已過 ${timeStr}]`));
+        }
+    }
+
+    protected buildHistoryMessages(blocks: readonly DataBlock[], shouldCompress: (index: number) => boolean): BaseMessage[] {
+        const historyMessages: BaseMessage[] = [];
         for (let i = 0; i < blocks.length; i++) {
-            const m = blocks[i];
+            if (i > 0) {
+                this.injectTemporalMarker(blocks[i - 1], blocks[i], historyMessages);
+            }
+            historyMessages.push(blocks[i].toMessage(this.id, shouldCompress(i)));
+        }
+        return historyMessages;
+    }
 
-            // 進行時間插針 (Temporal Context Injection)
-            if (enableTemporalInjection && i > 0) {
-                const prevM = blocks[i - 1];
-                const timeDiff = m.timestamp - prevM.timestamp;
-                
-                if (timeDiff > temporalThresholdMs) {
-                    const minutes = Math.floor(timeDiff / 60000);
-                    const hours = Math.floor(minutes / 60);
-                    const days = Math.floor(hours / 24);
+    protected buildHistoryMessagesIncremental(
+        allBlocks: readonly DataBlock[],
+        shouldCompress: (index: number) => boolean,
+        profileHash: string,
+        systemPrompt: string
+    ): BaseMessage[] {
+        if (this.historyCache &&
+            this.historyCache.blockCount <= allBlocks.length &&
+            this.historyCache.profileHash === profileHash &&
+            this.historyCache.systemPrompt === systemPrompt) {
 
-                    let timeStr = '';
-                    if (days > 0) timeStr = `${days} 天 ${hours % 24} 小時`;
-                    else if (hours > 0) timeStr = `${hours} 小時 ${minutes % 60} 分鐘`;
-                    else timeStr = `${minutes} 分鐘`;
+            const cachedCount = this.historyCache.blockCount;
+            const newBlocks = allBlocks.slice(cachedCount);
 
-                    historyMessages.push(new SystemMessage(`[系統提示：距離上一次對話已過 ${timeStr}]`));
-                }
+            if (newBlocks.length === 0) {
+                return this.historyCache.messages;
             }
 
-            historyMessages.push(m.toMessage(this.id, shouldCompress(i)));
+            const newMessages: BaseMessage[] = [];
+            for (let i = 0; i < newBlocks.length; i++) {
+                const globalIndex = cachedCount + i;
+                if (globalIndex > 0) {
+                    this.injectTemporalMarker(allBlocks[globalIndex - 1], newBlocks[i], newMessages);
+                }
+                newMessages.push(newBlocks[i].toMessage(this.id, shouldCompress(globalIndex)));
+            }
+
+            const merged = [...this.historyCache.messages, ...newMessages];
+            this.historyCache = { blockCount: allBlocks.length, messages: merged, profileHash, systemPrompt };
+            return merged;
         }
 
-        return historyMessages;
+        const messages = this.buildHistoryMessages(allBlocks, shouldCompress);
+        this.historyCache = { blockCount: allBlocks.length, messages, profileHash, systemPrompt };
+        return messages;
     }
 
     /**
@@ -576,9 +635,13 @@ export abstract class BaseAgent {
             maxRetries?: number;
             presetName?: string;
             overrideTools?: BaseTool[];
+            senderId?: string;
+            targetId?: string;
         }
-    ): Promise<{ content: string, usageDelta: UsageStats }> {
+    ): Promise<{ newBlocks: DataBlock[], usageDelta: UsageStats }> {
         const presetName = options?.presetName ?? this.config.llm.default_preset;
+        const senderId = options?.senderId ?? this.id;
+        const targetId = options?.targetId ?? null;
         const model = this.getModel(presetName);
 
         // 使用 LangChain 的 .withRetry 封裝重試邏輯
@@ -589,6 +652,7 @@ export abstract class BaseAgent {
         const startTime = Date.now();
         try {
             let finalMessage: AIMessage;
+            let newMessages: BaseMessage[] = [];
             const activeTools = options?.overrideTools ? options.overrideTools : this.tools;
 
             if (activeTools.length > 0) {
@@ -615,9 +679,11 @@ export abstract class BaseAgent {
 
                 const result = await agentToUse.invoke({ messages });
 
+                newMessages = result.messages.slice(messages.length);
                 finalMessage = result.messages[result.messages.length - 1] as AIMessage;
             } else {
-                finalMessage = await modelWithRetry.invoke(messages);
+                finalMessage = (await modelWithRetry.invoke(messages)) as AIMessage;
+                newMessages = [finalMessage];
             }
 
             const durationMs = Date.now() - startTime;
@@ -638,11 +704,76 @@ export abstract class BaseAgent {
                 }
             }
 
-            let content = finalMessage.content;
-            if (typeof content !== 'string') {
-                content = JSON.stringify(content);
+            // 將新產生的 LangChain 訊息映射為 SuperNova 的 DataBlock 陣列
+            const newBlocks: DataBlock<any>[] = [];
+            for (const m of newMessages) {
+                if (m.type === 'ai') {
+                    const aiMsg = m as AIMessage;
+                    if (typeof aiMsg.content !== 'string') {
+                        aiMsg.content.forEach((cb) => {
+                            let content = "";
+                            if (cb.type === 'text') content = `${cb.text}`;
+                            else if (cb.type === 'reasoning') content = `${cb.reasoning}`;
+
+                            newBlocks.push(new DataBlock({
+                                sessionId: this.sessionId,
+                                senderId,
+                                targetId,
+                                type: 'ai',
+                                intent: 'AGENT_REPLY',
+                                controlPayload: content
+                            }));
+                        })
+                    } else if (aiMsg.content.trim() !== '') {
+                        newBlocks.push(new DataBlock({
+                            sessionId: this.sessionId,
+                            senderId,
+                            targetId,
+                            type: 'ai',
+                            intent: 'AGENT_REPLY',
+                            controlPayload: aiMsg.content
+                        }));
+                    }
+                } else if (m.type === 'tool') {
+                    const toolMsg = m as ToolMessage;
+                    let args = {};
+                    // 往前尋找對應的 tool_call 取出 args
+                    for (let i = newMessages.indexOf(m) - 1; i >= 0; i--) {
+                        if (newMessages[i]._getType() === 'ai') {
+                            const ai = newMessages[i] as AIMessage;
+                            const call = ai.tool_calls?.find(c => c.id === toolMsg.tool_call_id);
+                            if (call) {
+                                args = call.args;
+                                break;
+                            }
+                        }
+                    }
+                    newBlocks.push(new DataBlock({
+                        sessionId: this.sessionId,
+                        senderId,
+                        targetId,
+                        type: 'tool',
+                        intent: 'TOOL_CALL',
+                        controlPayload: { toolName: toolMsg.name || 'unknown', args, result: toolMsg.content }
+                    }));
+                }
             }
-            return { content: content as string, usageDelta };
+
+            // Fallback，確保至少有一個最終結論
+            if (newBlocks.length === 0 && finalMessage) {
+                let content = finalMessage.content;
+                if (typeof content !== 'string') content = JSON.stringify(content);
+                newBlocks.push(new DataBlock({
+                    sessionId: this.sessionId,
+                    senderId,
+                    targetId,
+                    type: 'ai',
+                    intent: 'AGENT_REPLY',
+                    controlPayload: content || '(empty)'
+                }));
+            }
+
+            return { newBlocks, usageDelta };
         } catch (error) {
             this.logger.error(`LLM call failed after retries: ${error}`);
             throw error;
@@ -747,15 +878,15 @@ export abstract class BaseAgent {
      * 被動喚醒 (由 EventBus 呼叫)
      * 喚醒後切換至 BUSY，並處理收到的事件訊息
      */
-    public async resume(messageBatches: DataBlock[][]): Promise<void> {
-        this.activeExecutions += messageBatches.length;
+    public async resume(messages: DataBlock[]): Promise<void> {
+        this.activeExecutions += 1;
         if (this.state !== AgentState.BUSY) {
             this.setState(AgentState.BUSY);
         }
-        this.logger.info(`Agent stateless execution started. Incoming message batches: ${messageBatches.length}. Active executions: ${this.activeExecutions}`);
+        this.logger.info(`Agent stateless execution started. Incoming messages: ${messages.length}. Active executions: ${this.activeExecutions}`);
 
         try {
-            // 觸發 BEFORE_AGENT_STEP Hook (單次觸發，供所有併發共用)
+            // 觸發 BEFORE_AGENT_STEP Hook (單次觸發)
             const contextPayload: ContextOverride = {
                 agentId: this.id,
                 injectedPrompts: []
@@ -763,22 +894,17 @@ export abstract class BaseAgent {
 
             await this.invokeBeforeStepHook(contextPayload);
 
-            // 併發處理所有批次的訊息
-            const promises = messageBatches.map(async (messages) => {
-                try {
-                    const { usageDelta } = await this.processInbox(messages, contextPayload);
-                    this.recordUsage(usageDelta);
-                } catch (err) {
-                    this.logger.error(`Failed to process incoming message batch: ${err}`);
-                } finally {
-                    this.activeExecutions--;
-                    if (this.activeExecutions === 0) {
-                        this.setState(AgentState.IDLE);
-                    }
+            try {
+                const { usageDelta } = await this.processInbox(messages, contextPayload);
+                this.recordUsage(usageDelta);
+            } catch (err) {
+                this.logger.error(`Failed to process incoming message batch: ${err}`);
+            } finally {
+                this.activeExecutions--;
+                if (this.activeExecutions === 0) {
+                    this.setState(AgentState.IDLE);
                 }
-            });
-
-            await Promise.all(promises);
+            }
         } catch (err) {
             this.logger.error(`Failed during stateless execution setup: ${err}`);
             throw err;
@@ -792,12 +918,12 @@ export abstract class BaseAgent {
     public async destroy(): Promise<void> {
         this.logger.info(`Preparing for teardown (GC). Cleaning up resources...`);
         this.setState(AgentState.TERMINATED);
-        
+
         for (const sub of this.eventSubscriptions) {
             this.eventBus.unsubscribe(sub.type, sub.handler);
         }
-        this.eventSubscriptions = [];
         this.logger.debug(`Cleaned up ${this.eventSubscriptions.length} event subscriptions.`);
+        this.eventSubscriptions = [];
     }
 
     /**
