@@ -107,7 +107,7 @@ export interface GlobalEventMap {
     [HookEvent.OnTaskError]: { taskId: string; error: string };
 
     // --- Agent Events ---
-    [AgentEvent.AgentMessage]: DataBlock<any>;
+    [AgentEvent.AgentMessage]: DataBlock<any> | DataBlock<any>[];
     [AgentEvent.AgentStateChanged]: { agentId: string; oldState: string; newState: string };
     [AgentEvent.WorldUpdated]: { agentId: string; worldState: string };
     [AgentEvent.EmotionTriggered]: { impacts: any };
@@ -127,13 +127,6 @@ export interface IEvent<T extends Extract<keyof GlobalEventMap, string> = Extrac
     readonly sessionId?: string;
 }
 
-/**
- * 宣告式訂閱者資訊，用於持久化與 EventBus 喚醒連動
- */
-export interface IDeclarativeSubscriber {
-    readonly sessionId: string;
-    readonly agentId: string;
-}
 
 /**
  * 事件總線介面
@@ -168,14 +161,6 @@ export interface IEventBus {
     ): void;
 
     /**
-     * 宣告式訂閱 (用於 Agent 持久化休眠與喚醒)
-     */
-    subscribe<T extends Extract<keyof GlobalEventMap, string>>(
-        type: T,
-        subscriber: IDeclarativeSubscriber
-    ): void;
-
-    /**
      * 取消回標函數訂閱
      */
     unsubscribe<T extends Extract<keyof GlobalEventMap, string>>(
@@ -183,11 +168,4 @@ export interface IEventBus {
         handler: (event: IEvent<T>) => void | Promise<void>
     ): void;
 
-    /**
-     * 取消宣告式訂閱
-     */
-    unsubscribe<T extends Extract<keyof GlobalEventMap, string>>(
-        type: T,
-        subscriber: IDeclarativeSubscriber
-    ): void;
 }

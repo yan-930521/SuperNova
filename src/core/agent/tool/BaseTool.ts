@@ -69,38 +69,10 @@ export abstract class BaseTool<T extends z.ZodTypeAny = any> {
                 try {
                     const result = await this.execute(parsedArgs, context);
 
-                    const resultBlock = new DataBlock<ToolControlPayload>({
-                        sessionId: context.sessionId,
-                        senderId: context.agentId,
-                        type: 'tool',
-                        intent: 'TOOL_CALL',
-                        controlPayload: { toolName: this.name, args: parsedArgs, result: result }
-                    });
-                    await context.eventBus.publishAsync({
-                        type: AgentEvent.AgentMessage,
-                        timestamp: Date.now(),
-                        sessionId: context.sessionId,
-                        payload: resultBlock
-                    });
-
-                    return resultBlock.toMarkdown();
+                    return result;
                 } catch (error: any) {
                     // 紀錄 Tool Error
-                    const errorBlock = new DataBlock<ToolControlPayload>({
-                        sessionId: context.sessionId,
-                        senderId: context.agentId,
-                        type: 'tool',
-                        intent: 'TOOL_ERROR',
-                        controlPayload: { toolName: this.name, args: parsedArgs, error: error.message }
-                    });
-                    await context.eventBus.publishAsync({
-                        type: AgentEvent.AgentMessage,
-                        timestamp: Date.now(),
-                        sessionId: context.sessionId,
-                        payload: errorBlock
-                    });
-
-                    return errorBlock.toMarkdown();
+                    return error.message;
                 }
             }
         });
