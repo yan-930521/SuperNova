@@ -1,5 +1,7 @@
 import { LogManager } from '../infra/LogManager';
 import { GlobalEventMap, IEvent, IEventBus } from './IBus';
+import { LRUCache } from '../utils/LRUCache';
+import { DEFAULT_CONFIG } from '../config/DefaultConfig';
 
 interface ICallbackRegistration {
     handler: (event: IEvent<any>) => void | Promise<void>;
@@ -18,6 +20,12 @@ export class EventBus implements IEventBus {
     private readonly logger = LogManager.recorder;
     private readonly callbackSubscribers = new Map<string, Set<ICallbackRegistration>>();
     private readonly handlerIndex = new Map<Function, { type: string; reg: ICallbackRegistration }>();
+    private readonly targetCache: LRUCache<string, ICallbackRegistration[]>;
+
+    constructor(config?: any) {
+        const lruSize = config?.cache?.event_bus_lru_size ?? DEFAULT_CONFIG.cache.event_bus_lru_size ?? 500;
+        this.targetCache = new LRUCache<string, ICallbackRegistration[]>(lruSize);
+    }
 
     /**
      * 發佈事件 (非同步廣播，不等待監聽器結束)
@@ -96,6 +104,7 @@ export class EventBus implements IEventBus {
         const reg: ICallbackRegistration = { handler, sessionId: options?.sessionId };
         this.callbackSubscribers.get(type)!.add(reg);
         this.handlerIndex.set(handler, { type, reg });
+        this.targetCache.clear(); // 訂閱異動時清空快取
         this.logger.debug(`[EventBus] Callback subscribed to: ${type}${options?.sessionId ? ` (Session: ${options.sessionId})` : ''}`, { type: 'SYSTEM' });
     }
 
@@ -114,6 +123,7 @@ export class EventBus implements IEventBus {
                 if (regs.size === 0) this.callbackSubscribers.delete(entry.type);
             }
             this.handlerIndex.delete(handler);
+            this.targetCache.clear(); // 訂閱異動時清空快取
             this.logger.info(`[EventBus] Callback unsubscribed from: ${type}`, { type: 'SYSTEM' });
         }
     }
@@ -124,10 +134,17 @@ export class EventBus implements IEventBus {
      * 獲取匹配的 callback 監聽器，實施 sessionId 隔離過濾
      */
     private getTargetCallbackRegistrations(eventType: string, eventSessionId?: string): ICallbackRegistration[] {
+        const cacheKey = `${eventType}:${eventSessionId || ''}`;
+        const cached = this.targetCache.get(cacheKey);
+        if (cached) return cached;
+
         const specific = this.callbackSubscribers.get(eventType);
         const wildcard = this.callbackSubscribers.get('*');
 
-        if (!specific && !wildcard) return [];
+        if (!specific && !wildcard) {
+            this.targetCache.set(cacheKey, []);
+            return [];
+        }
 
         const source = (!wildcard) ? specific!
                      : (!specific) ? wildcard!
@@ -140,6 +157,7 @@ export class EventBus implements IEventBus {
                     matched.push(reg);
                 }
             }
+            this.targetCache.set(cacheKey, matched);
             return matched;
         }
 
@@ -156,6 +174,8 @@ export class EventBus implements IEventBus {
                 matched.push(reg);
             }
         }
+        
+        this.targetCache.set(cacheKey, matched);
         return matched;
     }
 }

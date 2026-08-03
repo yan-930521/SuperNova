@@ -81,6 +81,7 @@ export const DEFAULT_CONFIG: Config = {
         prompt_lru_size: 100,
         prompt_ttl_ms: 60000,
         projection_lru_size: 10,
-        projection_ttl_ms: 5000
+        projection_ttl_ms: 5000,
+        event_bus_lru_size: 500
     }
 };

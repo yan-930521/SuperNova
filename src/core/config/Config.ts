@@ -33,6 +33,8 @@ export interface CacheConfig {
     readonly projection_lru_size: number;
     /** 意識投影歷史快取有效時間 (毫秒) */
     readonly projection_ttl_ms: number;
+    /** EventBus 監聽者快取最大數量 */
+    readonly event_bus_lru_size: number;
 }
 
 /**
