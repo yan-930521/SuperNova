@@ -128,9 +128,13 @@ export class DataBlock<TControlPayload = Record<string, any>> {
      */
     public validateSize(thresholdBytes: number = 100 * 1024): boolean {
         try {
-            const payloadSize = Buffer.byteLength(JSON.stringify(this.controlPayload) || '', 'utf8');
+            const payloadStr = typeof this.controlPayload === 'string' 
+                ? this.controlPayload 
+                : (JSON.stringify(this.controlPayload) || '');
+            const payloadSize = payloadStr.length; // 簡化成讀取字串長度，避免 UTF-8 計算負擔
+
             if (payloadSize >= thresholdBytes) {
-                LogManager.recorder.warn(`[WARNING] DataBlock ${this.id} payload size (${payloadSize} bytes) exceeds limit of ${thresholdBytes} bytes!`);
+                LogManager.recorder.warn(`[WARNING] DataBlock ${this.id} payload size (approx ${payloadSize} chars) exceeds limit of ${thresholdBytes} bytes!`);
                 return false; // 過大，無效
             }
             return true; // 大小合格
@@ -157,7 +161,7 @@ export class DataBlock<TControlPayload = Record<string, any>> {
             if (node === null || node === undefined) return node;
 
             if (typeof node === 'string') {
-                if (Buffer.byteLength(node, 'utf8') >= thresholdBytes) {
+                if (node.length >= thresholdBytes) { // 簡化成讀取字串長度，避免頻繁呼叫 Buffer.byteLength
                     hasChanges = true;
                     return await replacer(node);
                 }
