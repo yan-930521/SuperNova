@@ -39,6 +39,7 @@
     "mineflayer-tool": "^1.2.0",
     "prismarine-viewer": "^1.33.0",
     "uuid": "^9.0.1",
+    "vectra": "^0.15.0",
     "yargs": "^18.0.0",
     "zod": "^4.4.3"
   },
