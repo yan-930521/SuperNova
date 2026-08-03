@@ -51,6 +51,7 @@ export interface DataBlockData {
     timestamp: number;
     controlPayload: any;
     dataPointers: IDataPointer[];
+    isOffloaded?: boolean;
 }
 
 /**
@@ -93,6 +94,9 @@ export class DataBlock<TControlPayload = Record<string, any>> {
     /** 資料指標陣列 (巨型資料隔離) */
     public readonly dataPointers: IDataPointer[];
 
+    /** 持久化標記：是否已經將過大的 Payload 卸載為指標 (Offloaded) */
+    public isOffloaded: boolean;
+
     /** 記憶體內的瞬態標記，用於標示是否已經通過壓縮檢查，避免重複掃描 */
     public isCompacted: boolean = false;
 
@@ -108,6 +112,7 @@ export class DataBlock<TControlPayload = Record<string, any>> {
         timestamp?: number;
         controlPayload?: TControlPayload;
         dataPointers?: IDataPointer[];
+        isOffloaded?: boolean;
     }) {
         this.id = params.id || IdGenerator.dataBlock();
         this.sessionId = params.sessionId;
@@ -120,21 +125,22 @@ export class DataBlock<TControlPayload = Record<string, any>> {
         this.timestamp = params.timestamp || Date.now();
         this.controlPayload = params.controlPayload || ({} as TControlPayload);
         this.dataPointers = params.dataPointers || [];
+        this.isOffloaded = params.isOffloaded ?? false;
     }
 
     /**
      * 驗證 DataBlock 是否超過大小限制
-     * 若 controlPayload 經過 JSON.stringify 後超過 thresholdBytes，回傳 false 並拋出警告
+     * 若 controlPayload 經過 JSON.stringify 後超過 thresholdLength，回傳 false 並拋出警告
      */
-    public validateSize(thresholdBytes: number = 100 * 1024): boolean {
+    public validateSize(thresholdLength: number = 100 * 1024): boolean {
         try {
             const payloadStr = typeof this.controlPayload === 'string' 
                 ? this.controlPayload 
                 : (JSON.stringify(this.controlPayload) || '');
             const payloadSize = payloadStr.length; // 簡化成讀取字串長度，避免 UTF-8 計算負擔
 
-            if (payloadSize >= thresholdBytes) {
-                LogManager.recorder.warn(`[WARNING] DataBlock ${this.id} payload size (approx ${payloadSize} chars) exceeds limit of ${thresholdBytes} bytes!`);
+            if (payloadSize >= thresholdLength) {
+                LogManager.recorder.warn(`[WARNING] DataBlock ${this.id} payload size (approx ${payloadSize} chars) exceeds limit of ${thresholdLength} chars!`);
                 return false; // 過大，無效
             }
             return true; // 大小合格
@@ -147,12 +153,12 @@ export class DataBlock<TControlPayload = Record<string, any>> {
     /**
      * 遞迴走訪 Payload，允許對過大的字串進行非同步處理與替換
      * @param payload 原始 Payload
-     * @param thresholdBytes 觸發替換的位元組閥值
+     * @param thresholdLength 觸發替換的字元長度閥值
      * @param replacer 非同步替換函式，傳入過大字串，回傳替換後的新物件或字串
      */
     public static async traverseAndReplaceLargeStrings(
         payload: any,
-        thresholdBytes: number,
+        thresholdLength: number,
         replacer: (largeString: string) => Promise<any>
     ): Promise<{ newPayload: any; hasChanges: boolean }> {
         let hasChanges = false;
@@ -161,7 +167,7 @@ export class DataBlock<TControlPayload = Record<string, any>> {
             if (node === null || node === undefined) return node;
 
             if (typeof node === 'string') {
-                if (node.length >= thresholdBytes) { // 簡化成讀取字串長度，避免頻繁呼叫 Buffer.byteLength
+                if (node.length >= thresholdLength) { // 簡化成讀取字串長度，避免頻繁呼叫 Buffer.byteLength
                     hasChanges = true;
                     return await replacer(node);
                 }
@@ -329,7 +335,8 @@ export class DataBlock<TControlPayload = Record<string, any>> {
             priority: this.priority,
             timestamp: this.timestamp,
             controlPayload: this.controlPayload,
-            dataPointers: this.dataPointers
+            dataPointers: this.dataPointers,
+            isOffloaded: this.isOffloaded
         };
     }
 
