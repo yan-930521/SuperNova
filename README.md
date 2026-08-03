@@ -11,6 +11,12 @@ SuperNova 是一個 **Embodied AI Runtime** -- 一套賦予 AI Agent 具身認�
 >
 > **專案前身**: [Proj.Nova](https://github.com/yan-930521/Proj.Nova/)
 
+**安全性警告 (Security Warning)**
+由於本專案目前正處於快速迭代與底層架構重構階段，部分執行環境工具（例如：允許 Agent 執行原生 Shell 指令的 `RunBashTool` 等工具）**尚未實作完整的沙盒隔離 (Sandbox) 或嚴格的指令過濾防護**。這意味著系統目前存在潛在的指令注入 (Command Injection) 風險。
+**強烈建議：**
+1. **僅在受隔離的虛擬機 (VM) 或 Docker 容器內**執行本系統。
+2. 絕對不要將本系統直接部署於含有機密資料或重要環境變數的生產環境伺服器上。
+
 ---
 
 ## Architecture Highlights
@@ -60,11 +66,12 @@ Agent 並非永駐記憶體。閒置時其完整狀態 (包含情緒、Profile�
 
 ### Performance-First Memory Pipeline -- 極致效能記憶管線
 
+- **巨型資料卸載 (Offloading)** -- 超大 Payload 自動抽離至實體 Blob 檔案，於訊息中替換為輕量級 DataPointer，保護 LLM Token 額度不被單次極大輸入撐爆。
+- **背景歷史壓縮 (History Compaction)** -- 針對遠古記憶採用滑動視窗策略，將掉出視窗的老舊訊息執行高強度的 Offloading 瘦身，並搭配 `isOffloaded` 標記實現 $O(1)$ 極速短路。
 - **增量式歷史快取** -- DataBlock 的 LangChain Message 轉換結果被 Memoize，消除 95% 以上的重複序列化
 - **LRU 快取驅逐** -- 檔案倉儲層以上限 50 Key 的 LRU 演算法防止記憶體無限增長
-- **延遲壓縮標記** -- 已壓縮的 DataBlock 被標記跳過，歷史掃描從 O(N) 降至 O(1)
 - **異步日誌寫入** -- FileTransport 以背景緩衝佇列取代同步阻塞，釋放 Event Loop 吞吐
-- **批次訊息管線化 (Batch Pipelining)** -- 支援陣列訊息廣播，統一去重寫入與派發，避免重複喚醒 (Wakeup)
+- **批次訊息管線化 (Batch Pipelining)** -- 支援陣列訊息廣播，並在 `SessionManager` 進行分組打包 (Grouping)，實現歷史紀錄的 Single I/O 寫入，根除磁碟 N+1 瓶頸。
 - **透明化 ReAct 迴圈** -- 完整攔截與紀錄 LLM 中間的每一次思維鏈 (`<thought>`) 與工具呼叫，杜絕推論黑箱
 
 ### Repository Pattern and Git-Native Workspace -- 倉儲模式與原生 Git 工作區
