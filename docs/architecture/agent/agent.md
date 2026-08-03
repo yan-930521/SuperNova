@@ -1,8 +1,8 @@
 ---
 title: Agent 系統設計
-version: 0.1.0
+version: 0.1.1
 status: APPROVED
-last_updated: 2026-07-20
+last_updated: 2026-08-03
 author: Antigravity & User
 related_codes: []
 related_docs:

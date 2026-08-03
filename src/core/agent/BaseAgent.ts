@@ -193,6 +193,8 @@ export abstract class BaseAgent {
     protected tools: BaseTool[] = [];
     private reactAgentCache = new Map<string, ReactAgent>();
     private cachedToolsSignature: string = '';
+    private toolsSignatureCache = new WeakMap<BaseTool[], string>();
+    private profileHashCache = new WeakMap<any, string>();
     protected eventSubscriptions: Array<{ type: string, handler: any }> = [];
 
     private historyCache: {
@@ -292,7 +294,28 @@ export abstract class BaseAgent {
      * 產生工具指紋，供快取驗證使用
      */
     protected generateToolsSignature(tools: BaseTool[]): string {
-        return tools.map(t => t.name).sort().join(',');
+        if (this.toolsSignatureCache.has(tools)) {
+            return this.toolsSignatureCache.get(tools)!;
+        }
+        const sig = tools.map(t => t.name).sort().join(',');
+        this.toolsSignatureCache.set(tools, sig);
+        return sig;
+    }
+
+    /**
+     * 產生 Profile Hash，供快取驗證使用
+     */
+    protected generateProfileHash(profile: any, envState: string): string {
+        let pHash = '';
+        if (profile) {
+            if (this.profileHashCache.has(profile)) {
+                pHash = this.profileHashCache.get(profile)!;
+            } else {
+                pHash = JSON.stringify(profile);
+                this.profileHashCache.set(profile, pHash);
+            }
+        }
+        return pHash + '|' + envState;
     }
     /**
      * 更新 Agent 裝備的可用工具
@@ -345,16 +368,19 @@ export abstract class BaseAgent {
         const sections: IPromptSection[] = [];
 
         // --- 1. SYSTEM_CORE ---
-        let corePrompt = '';
-        corePrompt += `${SYSTEM_PROMPTS.COMMUNICATION_PROTOCOL}\n\n`;
-        corePrompt += `${SYSTEM_PROMPTS.NETWORK_COMMUNICATION}\n\n`;
+        const corePrompts: string[] = [];
+        corePrompts.push(SYSTEM_PROMPTS.COMMUNICATION_PROTOCOL, "");
+        corePrompts.push(SYSTEM_PROMPTS.NETWORK_COMMUNICATION, "");
 
-        if (profile.mission) corePrompt += `## MISSION\n${profile.mission}\n\n`;
-        if (profile.principles && profile.principles.length > 0) {
-            corePrompt += `## PRINCIPLES (CRITICAL)\n`;
-            profile.principles.forEach(p => corePrompt += `- ${p}\n`);
-            corePrompt += `\n`;
+        if (profile.mission) {
+            corePrompts.push("## MISSION\n" + profile.mission, "");
         }
+        if (profile.principles && profile.principles.length > 0) {
+            corePrompts.push("## PRINCIPLES (CRITICAL)");
+            profile.principles.forEach(p => corePrompts.push(`- ${p}`));
+            corePrompts.push("");
+        }
+        const corePrompt = corePrompts.join('\n');
         if (corePrompt.trim()) {
             sections.push({ index: PromptSectionIndex.SYSTEM_CORE, content: corePrompt.trim() });
         }
@@ -368,22 +394,23 @@ export abstract class BaseAgent {
         }
 
         // --- 3. TACTICAL_GUIDELINE ---
-        let tacticalPrompt = '';
-        tacticalPrompt += `${SYSTEM_PROMPTS.CONSCIOUSNESS_PROJECTION}\n\n`;
+        const tacticalPrompts: string[] = [];
+        tacticalPrompts.push(SYSTEM_PROMPTS.CONSCIOUSNESS_PROJECTION, "");
 
         if (profile.capabilities && profile.capabilities.length > 0) {
-            tacticalPrompt += `## CAPABILITIES\n`;
-            profile.capabilities.forEach(c => tacticalPrompt += `- ${c}\n`);
-            tacticalPrompt += `\n`;
+            tacticalPrompts.push("## CAPABILITIES");
+            profile.capabilities.forEach(c => tacticalPrompts.push(`- ${c}`));
+            tacticalPrompts.push("");
         }
         if (profile.action_guidelines && profile.action_guidelines.length > 0) {
-            tacticalPrompt += `## ACTION GUIDELINES\n`;
-            profile.action_guidelines.forEach(g => tacticalPrompt += `- ${g}\n`);
-            tacticalPrompt += `\n`;
+            tacticalPrompts.push("## ACTION GUIDELINES");
+            profile.action_guidelines.forEach(g => tacticalPrompts.push(`- ${g}`));
+            tacticalPrompts.push("");
         }
         if (profile.outputFormat) {
-            tacticalPrompt += `## OUTPUT FORMAT REQUIREMENTS\n${profile.outputFormat}\n\n`;
+            tacticalPrompts.push("## OUTPUT FORMAT REQUIREMENTS\n" + profile.outputFormat, "");
         }
+        const tacticalPrompt = tacticalPrompts.join('\n');
         if (tacticalPrompt.trim()) {
             sections.push({ index: PromptSectionIndex.TACTICAL_GUIDELINE, content: tacticalPrompt.trim() });
         }
@@ -398,10 +425,11 @@ export abstract class BaseAgent {
         }
 
         // --- 6. TOOL_USAGE ---
-        let toolUsagePrompt = '';
-        toolUsagePrompt += `${SYSTEM_PROMPTS.TOOL_USAGE_AND_VERIFICATION}\n\n`;
-        toolUsagePrompt += `${SYSTEM_PROMPTS.DATA_POINTER_HANDLING}\n\n`;
+        const toolUsagePrompts: string[] = [];
+        toolUsagePrompts.push(SYSTEM_PROMPTS.TOOL_USAGE_AND_VERIFICATION, "");
+        toolUsagePrompts.push(SYSTEM_PROMPTS.DATA_POINTER_HANDLING, "");
 
+        const toolUsagePrompt = toolUsagePrompts.join('\n');
         if (toolUsagePrompt.trim()) {
             sections.push({
                 index: PromptSectionIndex.TOOL_USAGE,
@@ -475,7 +503,7 @@ export abstract class BaseAgent {
         const allSections = [...staticSections, ...(contextOverride?.injectedPrompts || [])];
         allSections.sort((a, b) => a.index - b.index);
         const systemPrompt = allSections.map(p => p.content).join('\n\n');
-        const profileHash = JSON.stringify(effectiveProfile) + '|' + effectiveEnvState;
+        const profileHash = this.generateProfileHash(effectiveProfile, effectiveEnvState);
 
         const historyMessages = this.buildHistoryMessagesIncremental(allHistoryBlocks, shouldCompress, profileHash, systemPrompt);
 
@@ -706,6 +734,22 @@ export abstract class BaseAgent {
 
             // 將新產生的 LangChain 訊息映射為 SuperNova 的 DataBlock 陣列
             const newBlocks: DataBlock<any>[] = [];
+            const toolCallMap = new Map<string, any>();
+            
+            // 預先收集 tool_calls，避免後續陣列反向查找的 O(N^2) 效能問題
+            for (const m of newMessages) {
+                if (m.type === 'ai') {
+                    const aiMsg = m as AIMessage;
+                    if (aiMsg.tool_calls) {
+                        for (const call of aiMsg.tool_calls) {
+                            if (call.id) {
+                                toolCallMap.set(call.id, call.args);
+                            }
+                        }
+                    }
+                }
+            }
+
             for (const m of newMessages) {
                 if (m.type === 'ai') {
                     const aiMsg = m as AIMessage;
@@ -736,18 +780,7 @@ export abstract class BaseAgent {
                     }
                 } else if (m.type === 'tool') {
                     const toolMsg = m as ToolMessage;
-                    let args = {};
-                    // 往前尋找對應的 tool_call 取出 args
-                    for (let i = newMessages.indexOf(m) - 1; i >= 0; i--) {
-                        if (newMessages[i]._getType() === 'ai') {
-                            const ai = newMessages[i] as AIMessage;
-                            const call = ai.tool_calls?.find(c => c.id === toolMsg.tool_call_id);
-                            if (call) {
-                                args = call.args;
-                                break;
-                            }
-                        }
-                    }
+                    let args = toolCallMap.get(toolMsg.tool_call_id) || {};
                     newBlocks.push(new DataBlock({
                         sessionId: this.sessionId,
                         senderId,
