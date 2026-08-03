@@ -6,8 +6,8 @@ import { DataBlock } from './DataBlock';
  * 數字越小，在最終 Prompt 中的位置越靠前（權重越高）
  */
 export enum PromptSectionIndex {
-    SYSTEM_CORE = 1,          // 系統層級的絕對核心設定
-    IDENTITY = 2,             // 角色定位與身分認知
+    IDENTITY = 1,             // 角色定位與身分認知
+    SYSTEM_CORE = 2,          // 系統層級的絕對核心設定
     TACTICAL_GUIDELINE = 3,   // 領域戰術與行為準則 (左腦/右腦指南)
     ENVIRONMENT_STATE = 4,    // 當前環境與實體狀態 (World & Body)
     EMOTIONAL_STATE = 5,      // 內部情緒與動機模型 (OCC)
