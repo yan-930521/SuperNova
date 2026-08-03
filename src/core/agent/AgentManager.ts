@@ -143,11 +143,7 @@ export class AgentManager implements ILifecycle {
             throw new Error(`Agent with ID ${id} is already active.`);
         }
 
-        // 透過靜態載入建立實例
         const agent = this.createAgentInstance(type, id, sessionId, options);
-
-        // 放入活躍池
-        this.addAgentToPool(agent);
 
         try {
             // 掛載工作區與工具
@@ -155,11 +151,7 @@ export class AgentManager implements ILifecycle {
             await this.workspaceManager.initWorkspace(sessionId, id, workspaceType as any);
 
             const tools: BaseTool[] = [];
-
-            if (type === AgentType.MAIN) {
-                tools.push(new ToggleProjectionTool());
-            }
-
+            if (type === AgentType.MAIN) tools.push(new ToggleProjectionTool());
             if (type === AgentType.MAIN || type === AgentType.TASK) {
                 tools.push(...this.workspaceManager.loadTools(sessionId, id));
             }
@@ -167,19 +159,20 @@ export class AgentManager implements ILifecycle {
 
             agent.updateTools(tools);
 
-            // 初始化完成，切換為就緒狀態
+            // 初始化完成，切換為就緒狀態並正式加入活躍池
             agent.setReady();
+            this.addAgentToPool(agent);
 
-            // 初始存檔
+            // 初始存檔 (需確保已經在 activeAgents 內)
             await this.saveAgent(id);
+            
+            this.logger.info(`[AgentManager] Spawned new agent ${id} of type ${type}`);
+            return agent;
         } catch (err) {
             await agent.destroy();
             this.removeAgentFromPool(id);
             throw err;
         }
-
-        this.logger.info(`[AgentManager] Spawned new agent ${id} of type ${type}`);
-        return agent;
     }
 
     /**
@@ -271,19 +264,16 @@ export class AgentManager implements ILifecycle {
         await this.workspaceManager.initWorkspace(sessionId, agentId, data.workspaceType || 'PERSISTENT');
 
         const tools: any[] = [];
-        if (data.type === AgentType.MAIN) {
-            tools.push(new ToggleProjectionTool());
-        }
+        if (data.type === AgentType.MAIN) tools.push(new ToggleProjectionTool());
         if (data.type === AgentType.MAIN || data.type === AgentType.TASK) {
             tools.push(...this.workspaceManager.loadTools(sessionId, agentId));
         }
         tools.push(new SendMessageTool());
 
         agent.updateTools(tools);
-
         agent.setReady();
         
-        // 放入活躍池
+        // 完全就緒後才放入活躍池
         this.addAgentToPool(agent);
 
         this.logger.debug(`[AgentManager] Agent ${agentId} rehydrated successfully.`);
