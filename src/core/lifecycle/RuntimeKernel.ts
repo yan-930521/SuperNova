@@ -21,6 +21,7 @@ export class RuntimeKernel implements ILifecycle {
   private readonly logger = LogManager.recorder;
   private readonly container: ComponentContainer;
   private isHooked = false;
+  private isShuttingDown = false;
 
   constructor(
     private readonly config: Config,
@@ -113,6 +114,11 @@ export class RuntimeKernel implements ILifecycle {
    * 停止內核，停止所有組件並註銷信號監聽
    */
   public async stop(): Promise<void> {
+    if (this.isShuttingDown) {
+      this.logger.warn('[Kernel] Kernel is already shutting down, ignoring duplicate stop request.');
+      return;
+    }
+    this.isShuttingDown = true;
     this.logger.info('[Kernel] Shutting down Runtime Kernel...');
 
     try {
