@@ -74,7 +74,10 @@ export const DEFAULT_CONFIG: Config = {
         uncompressed_tail: 20,
         max_context_window: 100,
         enable_temporal_injection: true,
-        temporal_threshold_ms: 1800000
+        temporal_threshold_ms: 1800000,
+        offload_threshold_new_message: 50000,
+        offload_threshold_compact: 1000,
+        max_history_lines_safety_cap: 5000
     },
     cache: {
         history_lru_size: 500,

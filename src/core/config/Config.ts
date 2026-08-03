@@ -61,6 +61,15 @@ export interface AgentConfig {
 
     /** 觸發時間感知插針的時間間隔閾值 (毫秒) */
     readonly temporal_threshold_ms: number;
+
+    /** 收到新訊息時，超過此長度 (字元) 的 Payload 將自動卸載 */
+    readonly offload_threshold_new_message: number;
+
+    /** 背景歷史壓縮時，超過此長度 (字元) 的舊歷史 Payload 將被強制卸載 */
+    readonly offload_threshold_compact: number;
+
+    /** 讀取檔案時的安全上限，防止單一檔案過大癱瘓記憶體 */
+    readonly max_history_lines_safety_cap: number;
 }
 
 /**
