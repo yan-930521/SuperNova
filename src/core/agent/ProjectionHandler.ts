@@ -44,8 +44,22 @@ export class ProjectionHandler {
         const brainBlocks = await this.dataBlockRepo.findByAgent(this.brain.sessionId, this.brain.id);
         const bodyBlocks = await this.dataBlockRepo.findByAgent(this.body.sessionId, this.body.id);
 
-        // 依據時間戳合併並排序
-        const mergedHistory = [...brainBlocks, ...bodyBlocks].sort((a, b) => a.timestamp - b.timestamp);
+        // 依據時間戳合併並排序 (改用 O(N) 的雙指標合併)
+        const mergedHistory: DataBlock[] = [];
+        let i = 0, j = 0;
+        while (i < brainBlocks.length && j < bodyBlocks.length) {
+            if (brainBlocks[i].timestamp <= bodyBlocks[j].timestamp) {
+                mergedHistory.push(brainBlocks[i++]);
+            } else {
+                mergedHistory.push(bodyBlocks[j++]);
+            }
+        }
+        while (i < brainBlocks.length) {
+            mergedHistory.push(brainBlocks[i++]);
+        }
+        while (j < bodyBlocks.length) {
+            mergedHistory.push(bodyBlocks[j++]);
+        }
         
         this.cache.set(cacheKey, mergedHistory);
         return mergedHistory;
@@ -77,18 +91,19 @@ export class ProjectionHandler {
         await this.brain.invokeBeforeStepHook(contextOverride);
 
         try {
-            // 併發處理所有批次訊息
+            // 保留併發處理所有批次訊息的優勢
             const promises = messageBatches.map(async (messages) => {
                 const { usageDelta } = await this.body.processInbox(messages, contextOverride);
 
                 // 投影期間的 Token 消耗算在大腦頭上
                 this.brain.recordUsage(usageDelta);
+                
+                // 【關鍵修正】只要有任何一個並發任務完成（代表可能寫入了新的 AI 回覆至 DB），
+                // 就立刻失效快取，避免其他正在啟動的並發任務讀到髒資料！
+                this.invalidateCache();
             });
 
             await Promise.all(promises);
-
-            // 處理完畢後，由於可能產生了新的 AI 回覆 (寫入了 DB)，使快取失效
-            this.invalidateCache();
         } catch (err) {
             throw err;
         }
