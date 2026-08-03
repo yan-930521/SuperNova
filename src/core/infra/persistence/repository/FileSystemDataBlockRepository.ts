@@ -3,6 +3,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 
 import { Config } from '../../../config/Config';
+import { DEFAULT_CONFIG } from '../../../config/DefaultConfig';
 import { DataBlock } from '../../../messaging/DataBlock';
 import { IdGenerator } from '../../../utils/IdGenerator';
 import { LRUCache } from '../../../utils/LRUCache';
@@ -24,7 +25,8 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
         private readonly config: Config,
         private readonly baseDir: string
     ) {
-        this.cache = new LRUCache<string, DataBlock<any>[]>(this.config.cache.history_lru_size);
+        const lruSize = this.config?.cache?.history_lru_size ?? DEFAULT_CONFIG.cache.history_lru_size;
+        this.cache = new LRUCache<string, DataBlock<any>[]>(lruSize);
     }
 
     // --- ILifecycle 實作 ---
@@ -59,25 +61,27 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
     }
 
     /**
-     * 追加單筆 DataBlock 至特定 Agent 的歷史末尾 (JSONLine 追加)
+     * 追加單筆或多筆 DataBlock 至特定 Agent 的歷史末尾 (JSONLine 批次追加)
      */
-    public async appendForAgent(sessionId: string, agentId: string, block: DataBlock<any>): Promise<void> {
+    public async appendForAgent(sessionId: string, agentId: string, blockOrBlocks: DataBlock<any> | DataBlock<any>[]): Promise<void> {
         const historyFilePath = this.getFileName(sessionId, agentId);
+        const blocks = Array.isArray(blockOrBlocks) ? blockOrBlocks : [blockOrBlocks];
+        if (blocks.length === 0) return;
 
         try {
-            const line = JSON.stringify(block.toJSON()) + '\n';
+            const lines = blocks.map(b => JSON.stringify(b.toJSON())).join('\n') + '\n';
 
-            // 追加寫入
-            await fs.appendFile(historyFilePath, line, 'utf-8');
+            // 批次追加寫入 (Single I/O)
+            await fs.appendFile(historyFilePath, lines, 'utf-8');
             
             // 更新快取
             const cacheKey = `${sessionId}:${agentId}`;
             const existing = this.cache.get(cacheKey);
             if (existing) {
-                existing.push(block);
+                existing.push(...blocks);
             }
             
-            this.logger.debug(`[DataBlockRepository] Appended history for agent ${agentId} under session ${sessionId}`);
+            this.logger.debug(`[DataBlockRepository] Appended ${blocks.length} blocks to history for agent ${agentId} under session ${sessionId}`);
         } catch (err: any) {
             this.logger.error(`[DataBlockRepository] Failed to append history for agent ${agentId}: ${err.message}`);
             throw err;
@@ -85,11 +89,12 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
     }
 
     /**
-     * 讀取並還原特定 Agent 的所有 DataBlock 歷史 (逐行解析 JSONL)
+     * 讀取並還原特定 Agent 的 DataBlock 歷史 (逐行解析 JSONL)
      */
     public async findByAgent(sessionId: string, agentId: string): Promise<readonly DataBlock<any>[]> {
         const cacheKey = `${sessionId}:${agentId}`;
         const cached = this.cache.get(cacheKey);
+
         if (cached) {
             // 回傳唯讀參考，零拷貝
             return cached;
@@ -104,7 +109,14 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
 
         try {
             const content = await fs.readFile(historyFilePath, 'utf-8');
-            const lines = content.split('\n');
+            let lines = content.split('\n');
+            
+            // 安全上限 (Safety Cap)：在 JSON.parse 前強制切片，防止 OOM
+            const safetyCap = this.config?.agent?.max_history_lines_safety_cap ?? DEFAULT_CONFIG.agent.max_history_lines_safety_cap;
+            if (lines.length > safetyCap) {
+                lines = lines.slice(-safetyCap);
+            }
+
             const blocks: DataBlock<any>[] = [];
 
             for (const line of lines) {
@@ -119,10 +131,9 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
                 }
             }
 
-            // 寫入快取
+            // 寫入快取，此處存入的即是受安全上限保護的乾淨歷史
             this.cache.set(cacheKey, blocks);
 
-            // 回傳唯讀參考
             return blocks;
     } catch (err: any) {
             this.logger.error(`[DataBlockRepository] Failed to read history for agent ${agentId}: ${err.message}`);
@@ -133,18 +144,21 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
     /**
      * 檢查並將超大字串卸載為 DataPointer，並回傳更新後的 DataBlock。
      */
-    public async offloadLargePayloads(sessionId: string, block: DataBlock<any>, thresholdBytes: number = 2000): Promise<DataBlock<any>> {
+    public async offloadLargePayloads(sessionId: string, block: DataBlock<any>, thresholdLength?: number): Promise<DataBlock<any>> {
+        const actualThreshold = thresholdLength ?? this.config?.agent?.offload_threshold_new_message ?? DEFAULT_CONFIG.agent.offload_threshold_new_message;
+
         // 增量標記：若已處理過則直接跳過
         if (block.isCompacted) {
             return block;
         }
 
-        if (block.validateSize(thresholdBytes)) {
+        if (block.validateSize(actualThreshold)) {
             block.isCompacted = true;
             return block; // 大小合格，不需要卸載
         }
 
-        const blobsDir = path.join(this.baseDir, sessionId, this.config.storage.blob_dir);
+        const blobDirName = this.config?.storage?.blob_dir ?? DEFAULT_CONFIG.storage.blob_dir;
+        const blobsDir = path.join(this.baseDir, sessionId, blobDirName);
         if (!existsSync(blobsDir)) {
             mkdirSync(blobsDir, { recursive: true });
         }
@@ -153,7 +167,7 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
 
         const { newPayload, hasChanges } = await DataBlock.traverseAndReplaceLargeStrings(
             block.controlPayload,
-            thresholdBytes,
+            actualThreshold,
             async (largeString) => {
                 const blobId = IdGenerator.blob();
                 const blobPath = path.join(blobsDir, `${blobId}.txt`);
@@ -195,7 +209,8 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
         sessionId: string,
         agentId: string
     ): string {
-        const agentDir = path.join(this.baseDir, sessionId, this.config.storage.agent_dir, agentId);
+        const agentDirName = this.config?.storage?.agent_dir ?? DEFAULT_CONFIG.storage.agent_dir;
+        const agentDir = path.join(this.baseDir, sessionId, agentDirName, agentId);
         if (!existsSync(agentDir)) {
             mkdirSync(agentDir, { recursive: true });
         }
@@ -206,7 +221,8 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
         sessionId: string,
         agentId: string
     ): string {
-        const filePath = path.join(this.getDirName(sessionId, agentId), this.config.storage.history_file);
+        const historyFileName = this.config?.storage?.history_file ?? DEFAULT_CONFIG.storage.history_file;
+        const filePath = path.join(this.getDirName(sessionId, agentId), historyFileName);
         return filePath;
     }
 }
