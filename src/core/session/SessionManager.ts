@@ -271,35 +271,32 @@ export class SessionManager implements ILifecycle {
 
         const sessionId = blocks[0].sessionId;
 
-        // 確保 Session 存在
-        let session = this.getSession(sessionId);
+        // 確保 Session 存在 (Fail-Fast: 僅處理已存在記憶體的活躍會話，徹底杜絕 Session Load Race)
+        const session = this.getSession(sessionId);
         if (!session) {
-            try {
-                session = await this.loadSession(sessionId);
-            } catch {
-                this.logger.warn(`[SessionManager] Ignored message for unknown session ${sessionId}`);
-                return;
-            }
+            this.logger.warn(`[SessionManager] Dropped message: Session ${sessionId} is not active in memory.`);
+            return;
         }
 
         // 1. 並行處理所有的超大型字串卸載
         const processedBlocks = await Promise.all(
-            blocks.map(b => this.dataBlockRepo.offloadLargePayloads(b.sessionId, b, 50000))
+            blocks.map(b => this.dataBlockRepo.offloadLargePayloads(b.sessionId, b, this.config.agent.offload_threshold_new_message))
         );
 
         const sendersToCompact = new Set<string>();
         const targetsToDispatch = new Set<string>();
-        const appendTasks: Promise<void>[] = [];
+        
+        // 批次 I/O 優化：將同一個 Agent 該寫入的多個 Block 群組化，實現 Single I/O
+        const senderBlocksMap = new Map<string, DataBlock<any>[]>();
+        const targetBlocksMap = new Map<string, DataBlock<any>[]>();
 
         for (const processedBlock of processedBlocks) {
             // 2. Sender: 準備寫入發送者的歷史紀錄 Oplog
-            if (session.registeredAgentIds.has(processedBlock.senderId)) {
-                sendersToCompact.add(processedBlock.senderId);
-                appendTasks.push(
-                    this.dataBlockRepo.appendForAgent(processedBlock.sessionId, processedBlock.senderId, processedBlock).catch(e => {
-                        this.logger.error(`[SessionManager] Failed to append sender history: ${e}`);
-                    })
-                );
+            const senderId = processedBlock.senderId;
+            if (session.registeredAgentIds.has(senderId)) {
+                sendersToCompact.add(senderId);
+                if (!senderBlocksMap.has(senderId)) senderBlocksMap.set(senderId, []);
+                senderBlocksMap.get(senderId)!.push(processedBlock);
             }
 
             // 3. Target: 準備接收對象，並寫入目標的歷史 Oplog 與推入 Inbox
@@ -309,17 +306,31 @@ export class SessionManager implements ILifecycle {
                 if (session.registeredAgentIds.has(targetId)) {
                     targetsToDispatch.add(targetId);
                     
-                    // 寫入目標 Oplog
-                    appendTasks.push(
-                        this.dataBlockRepo.appendForAgent(processedBlock.sessionId, targetId, processedBlock).catch(e => {
-                            this.logger.error(`[SessionManager] Failed to append target history for ${targetId}: ${e}`);
-                        })
-                    );
+                    if (!targetBlocksMap.has(targetId)) targetBlocksMap.set(targetId, []);
+                    targetBlocksMap.get(targetId)!.push(processedBlock);
 
                     // 同步推入會話層級的 InboxBuffer
                     session.pushToInbox(targetId, processedBlock);
                 }
             }
+        }
+
+        const appendTasks: Promise<void>[] = [];
+
+        // 發送批次 I/O 任務
+        for (const [senderId, blocks] of senderBlocksMap.entries()) {
+            appendTasks.push(
+                this.dataBlockRepo.appendForAgent(sessionId, senderId, blocks).catch(e => {
+                    this.logger.error(`[SessionManager] Failed to batch append sender history for ${senderId}: ${e}`);
+                })
+            );
+        }
+        for (const [targetId, blocks] of targetBlocksMap.entries()) {
+            appendTasks.push(
+                this.dataBlockRepo.appendForAgent(sessionId, targetId, blocks).catch(e => {
+                    this.logger.error(`[SessionManager] Failed to batch append target history for ${targetId}: ${e}`);
+                })
+            );
         }
 
         // 等待所有 Oplog I/O 寫入完成
@@ -370,14 +381,11 @@ export class SessionManager implements ILifecycle {
             return;
         }
 
-        let session = this.getSession(sessionId);
+        // 確保 Session 存在 (Fail-Fast)
+        const session = this.getSession(sessionId);
         if (!session) {
-            try {
-                session = await this.loadSession(sessionId);
-            } catch {
-                this.logger.warn(`[SessionManager] Ignored projection toggle for unknown session ${sessionId}`);
-                return;
-            }
+            this.logger.warn(`[SessionManager] Dropped projection toggle: Session ${sessionId} is not active in memory.`);
+            return;
         }
 
         if (enable) {
@@ -470,13 +478,21 @@ export class SessionManager implements ILifecycle {
             const limit = allBlocks.length - this.config.agent.uncompressed_tail;
 
             const offloadPromises = allBlocks.slice(0, limit).map(async (originalBlock, i) => {
-                // 對於舊歷史，使用極其嚴格的 1000 bytes 閾值進行檔案卸載
-                const processedBlock = await this.dataBlockRepo.offloadLargePayloads(sessionId, originalBlock, 1000);
+                // 利用 isOffloaded 標記進行極速短路，完全免除遞迴遍歷與字串比對
+                if (originalBlock.isOffloaded) return false;
+
+                // 對於舊歷史，使用極其嚴格的閾值進行檔案卸載
+                const processedBlock = await this.dataBlockRepo.offloadLargePayloads(sessionId, originalBlock, this.config.agent.offload_threshold_compact);
                 if (processedBlock !== originalBlock) {
+                    processedBlock.isOffloaded = true; // 標記為已卸載，並持久化
                     allBlocks[i] = processedBlock;
                     return true;
                 }
-                return false;
+                
+                // 即使沒達到閾值，我們也標記為已檢查過，下次就不必再進去掃了
+                originalBlock.isOffloaded = true;
+                allBlocks[i] = originalBlock;
+                return true;
             });
 
             const results = await Promise.all(offloadPromises);
