@@ -3,7 +3,6 @@ title: 事件總線與排程系統
 version: 0.1.0
 status: APPROVED
 last_updated: 2026-07-14
-author: Antigravity & User
 related_codes: []
 related_docs:
   - ../../ARCH.md

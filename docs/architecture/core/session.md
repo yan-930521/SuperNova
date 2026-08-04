@@ -3,7 +3,6 @@ title: 會話與工作階段管理
 version: 0.1.0
 status: APPROVED
 last_updated: 2026-07-14
-author: Antigravity & User
 related_codes: []
 related_docs:
   - ../../ARCH.md

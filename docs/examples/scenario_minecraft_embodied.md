@@ -3,7 +3,6 @@ title: 具身智能模擬場景大綱：Underworld (人工搖光社會)
 version: 0.3.0
 status: APPROVED
 last_updated: 2026-07-22
-author: Antigravity & User
 related_codes: 
   - ../../src/core/agent/EmbodiedAgent.ts
 related_docs:

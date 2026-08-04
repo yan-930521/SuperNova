@@ -3,7 +3,6 @@ title: 系統基礎建設
 version: 0.1.0
 status: APPROVED
 last_updated: 2026-07-18
-author: Antigravity & User
 related_codes: []
 related_docs:
   - ../../ARCH.md

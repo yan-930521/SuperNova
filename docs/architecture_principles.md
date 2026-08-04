@@ -3,7 +3,6 @@ title: 核心設計原則
 version: 0.1.0
 status: APPROVED
 last_updated: 2026-07-14
-author: Antigravity & User
 related_codes:
   - ../src/core/infra/persistence/IRepository.ts
 related_docs:

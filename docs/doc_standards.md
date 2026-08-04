@@ -48,7 +48,6 @@ title: 任務系統規範
 version: 0.1.0
 status: APPROVED
 last_updated: 2026-07-14
-author: Antigravity & User
 related_codes:
   - ../../src/core/task/Task.ts
 related_docs:

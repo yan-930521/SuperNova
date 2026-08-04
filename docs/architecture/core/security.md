@@ -3,7 +3,6 @@ title: 零信任安全防護架構
 version: 0.1.0
 status: APPROVED
 last_updated: 2026-07-14
-author: Antigravity & User
 related_codes: []
 related_docs:
   - ../../ARCH.md

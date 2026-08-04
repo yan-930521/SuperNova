@@ -3,7 +3,6 @@ title: 工具系統設計 (Tool System)
 version: 0.1.0
 status: APPROVED
 last_updated: 2026-07-20
-author: Antigravity & User
 related_codes: 
   - src/core/agent/tool/BaseTool.ts
 related_docs:

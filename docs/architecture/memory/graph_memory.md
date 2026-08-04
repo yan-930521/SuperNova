@@ -3,7 +3,6 @@ title: 圖譜記憶管理 (Graph Memory)
 version: 0.1.0
 status: APPROVED
 last_updated: 2026-08-03
-author: Antigravity & User
 related_codes: []
 related_docs:
   - ../core/memory.md
@@ -42,5 +41,12 @@ related_docs:
   - `getSubgraph`: 透過中心節點 ID 展開星狀周邊圖譜，擷取高關聯性的上下文。
 
 ## 3. 情緒與沉澱機制
-- **事件驅動沉澱**: 透過 EventBus 在會話結束時非同步觸發 `MemoryAgent` 提煉 `history.jsonl`，轉換為三元組寫入圖譜，不阻塞前台運作。
-- **情緒權重邊**: 結合 MainAgent 的 OCC 情緒引擎，邊緣權重會隨外部事件（如任務成功、失敗）即時調整，賦予 Agent 長期的人格連續性。
+- **事件驅動沉澱**: 透過 EventBus 在背景攔截對話 (`handleAgentMessage`)，當未萃取記憶到達閾值 (`memory_extract_threshold`) 時，自動喚醒 `MemoryManager` 進行提煉。
+- **情緒權重邊**: 結合 MainAgent 的 OCC 情緒引擎，邊緣權重會隨外部事件即時調整，賦予 Agent 長期的人格連續性。
+
+## 4. 核心記憶機制與 Feature Flags
+這些進階功能可以透過 `Config.ts` 中的布林值進行開關，以適應輕量或重度會話。
+- **記憶圖譜萃取 (`enable_graph_memory`)**：決定是否使用 LLM 結構化輸出在背景提煉對話為三元組。
+- **宏觀情境記憶 / 每日總結 (`enable_daily_summary`)**：透過 `Tick` 心跳引擎動態計算自訂換日時間 (`daily_optimization_time`)。換日後利用防打斷靜默機制 (`daily_optimization_idle_threshold_ms`) 觸發 LLM 產生 Markdown 每日總結，並自動將 `history.jsonl` 輪替為日期檔。
+- **超大文本自動卸載 (`enable_payload_offload`)**：攔截幾萬字的超大上下文，轉為 `DataPointer`，保護系統記憶體不被撐爆。
+- **多代理人遍歷 (Multi-Agent Support)**：在上述所有萃取與總結過程中，`MemoryManager` 會主動向 Repository 查詢 (`listAgentsForSession`)，遍歷處理該 Session 下所有的子分身與主腦，不遺漏任何 Agent 的歷史。

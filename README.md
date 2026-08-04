@@ -5,123 +5,42 @@
 [![Architecture](https://img.shields.io/badge/Architecture-Event--Driven-orange.svg)](#architecture-highlights)
 [![Stage](https://img.shields.io/badge/Stage-v0.1.0-green.svg)](#development-roadmap)
 
-SuperNova 是一個 **Embodied AI Runtime** -- 一套賦予 AI Agent 具身認知、情緒模型與長期自主能力的執行時引擎。它運行於 Bun 高性能環境之上，透過「雙腦分層架構」將高階決策與領域執行徹底隔離，同時讓 Agent 能夠感知情緒並操控物理世界。系統以事件驅動與完全非同步的設計從根本上消除 Context Drift (上下文漂移) 與 Goal Drift (目標偏移)，使 Agent 能在複雜、跨領域的長期任務中保持穩定的認知與一致的目標。
+SuperNova 是一個專注於效能與狀態管理的 **Agent Runtime (代理人執行引擎)**。它運行於 Bun 高性能環境之上，透過事件驅動架構，有效解決長效型 AI 系統常見的上下文爆炸與目標飄移 (Goal Drift) 問題，使 Agent 能在複雜、跨領域的長期任務中保持穩定的認知與執行力。
 
 > **快速掌握架構**: 請優先閱讀 [docs/ARCH.md](docs/ARCH.md) 以獲取最新的系統設計藍圖。
 >
 > **專案前身**: [Proj.Nova](https://github.com/yan-930521/Proj.Nova/)
 
-**安全性警告 (Security Warning)**
-由於本專案目前正處於快速迭代與底層架構重構階段，部分執行環境工具（例如：允許 Agent 執行原生 Shell 指令的 `RunBashTool` 等工具）**尚未實作完整的沙盒隔離 (Sandbox) 或嚴格的指令過濾防護**。這意味著系統目前存在潛在的指令注入 (Command Injection) 風險。
-**強烈建議：**
-1. **僅在受隔離的虛擬機 (VM) 或 Docker 容器內**執行本系統。
-2. 絕對不要將本系統直接部署於含有機密資料或重要環境變數的生產環境伺服器上。
+> [!WARNING]
+> **安全性警告 (Security Warning)**
+> 由於本專案目前正處於快速迭代與底層架構重構階段，部分執行環境工具（例如：允許 Agent 執行原生 Shell 指令的 `RunBashTool` 等工具）**尚未實作完整的沙盒隔離 (Sandbox) 或嚴格的指令過濾防護**。這意味著系統目前存在潛在的指令注入 (Command Injection) 風險。
+> 
+> **強烈建議：**
+> 1. **僅在受隔離的虛擬機 (VM) 或 Docker 容器內**執行本系統。
+> 2. 絕對不要將本系統直接部署於含有機密資料或重要環境變數的生產環境伺服器上。
 
 ---
 
-## Architecture Highlights
+## Technical Highlights (系統技術實作)
 
-### Dual-Brain Architecture -- 雙腦分層架構
+本專案專注於解決長效型 Agentic System 常見的記憶體耗盡、Token 爆量與狀態管理問題，透過以下具體工程手法實作：
 
-系統將 Agent 的認知劃分為「決策層」與「執行層」，徹底隔離高階決策與領域運算：
+### 1. 核心狀態與排程 (Core State & Scheduling)
+- **分離決策與執行迴圈**：將 Agent 拆分為 `MainAgent` (決策中樞)、`TaskAgent` (任務執行) 以及 `EmbodiedAgent` (具身感知)，防止底層程式碼與物理操作細節污染全局 Prompt。
+- **動態上下文投影 (Context Projection)**：`MainAgent` 在必要時可無縫接管子代理人 (如 `EmbodiedAgent`)。系統會將該子代理人的獨立歷史紀錄與專屬工具集動態投影 (Projection) 給主腦，使主腦能親自下場操作子工具以完成特定高難度任務。
+- **基於 EventBus 的非同步喚醒**：Agent 呼叫工具後即主動 `suspend` (掛起)，待工具執行完畢再由事件流觸發 `resume`，全程無阻塞 (Non-blocking) 等待。
+- **狀態持久化 (Dehydrate / Rehydrate)**：當 Agent 處於閒置狀態，系統會將包含歷史紀錄與 Token 消耗等變數序列化寫入磁碟 (JSONL)，並在需要時反序列化還原。
 
-- **MainAgent (決策中樞)** -- 系統的最高決策節點。不執行任何工具調用，純粹負責情緒演算、高階決策與人類自然對話。MainAgent 將 EmbodiedAgent 視為自己在物理世界中的操作端，並能透過上下文投影 (Context Projection) 直接接管。
-- **TaskAgent (任務執行核心)** -- 專注的任務執行單元。在獨立的 Git Worktree 隔離沙盒中運算，確保決策中樞的上下文不被龐大的程式碼細節淹沒。支援無狀態併發分身 (Auto-Concurrency)。
-- **EmbodiedAgent (具身感知)** -- 決策中樞在物理世界中的執行端與感測端。將底層環境操作具象化為 CLI 指令，執行層只需下達意圖指令 (Intent Command)，達到「決策與操作」的完美解耦。
+### 2. 記憶體與上下文優化 (Memory & Context Optimization)
+- **大字串卸載 (Payload Offloading)**：當系統偵測到單次輸入超過字元閾值，會自動將內容寫入實體 Blob 檔案，並在 Prompt 中替換為短字串 `DataPointer`，避免耗盡 Token 上限。
+- **背景知識圖譜 (Background Graph Memory)**：當未處理訊息達到設定閾值 (例如 50 筆) 時，觸發背景 LLM 任務，直接將歷史對話轉譯為 JSON 格式的事實三元組 (Subject-Predicate-Object) 並儲存。
+- **歷史壓縮 (History Compaction)**：為了解決長文本延遲，系統採用滑動視窗機制。掉出視窗的老舊對話紀錄會被執行高強度的 Offloading 壓縮並落盤，避免歷史對話無限增長拖垮效能。
+- **換日防打斷總結 (Cross-Day Idle Summary)**：利用心跳引擎 (Tick Engine) 動態追蹤換日點。當跨越配置的換日時間後，系統會啟動防打斷倒數，確信使用者完全進入閒置休眠狀態後，才觸發背景 LLM 將當日雜亂的對話收斂為精煉的 Markdown 每日總結，並執行底層 JSONL 檔案的日期輪替 (Log Rotation)。
 
-### OCC Emotion Engine -- 情緒認知引擎
-
-Agent 不只是冰冷的推理機器。MainAgent 內建基於 OCC 理論的多維情緒狀態模型：
-
-- 維護能量 (Energy)、親密度 (Intimacy)、喜悅、焦慮、驕傲、壓力、社交需求等獨立維度
-- 情緒隨時間自然衰減，並受外界事件 (如任務成功、衝突、長時間沉默) 即時衝擊
-- 杏仁核劫持機制 (Amygdala Hijack) -- 外部環境的劇烈變化能繞過理性層直接觸發情緒波動
-- 情緒狀態影響決策風格與對話語氣，使 Agent 具備真正的「人格連續性」
-
-### Embodied Intelligence -- 具身智能框架
-
-SuperNova 的 Agent 不僅存在於文字空間，更能棲息於物理或虛擬的 3D 世界中：
-
-- **Physical World First 原則** -- 外部軀殼實體連線且就緒後，系統才開始介入調度
-- **感知-決策-行動迴路** -- EmbodiedAgent 持續接收環境狀態 (WorldUpdated 事件)，經決策層處理後透過 CLI 工具執行物理操作
-- **上下文投影 (Context Projection)** -- MainAgent 可隨時接管 EmbodiedAgent 的操作權，合併歷史記憶與工具集，實現跨 Agent 的上下文共享與直接操控
-- **Minecraft 沙盒驗證** -- 以 mineflayer 為實驗場，完整驗證採集、戰鬥、跟隨等具身行為的自主決策鏈
-
-### Async Event-Driven Fabric -- 非同步事件驅動織網
-
-全面捨棄同步等待，以 EventBus 為通訊骨幹串連所有組件：
-
-- Agent 透過 `send_message` 發佈任務後即主動掛起休眠，由事件流自動喚醒
-- 會話租戶隔離 (sessionId) -- 事件天然按 Session 分區，杜絕跨會話資料洩漏
-- 異步 Promise 安全邊界 -- 阻斷單一 reject 引發的連鎖崩潰
-- 殭屍監聽器自動清理 -- Agent 銷毀時統一解綁所有事件訂閱，杜絕記憶體洩漏
-
-### Temporal Context Injection -- 時間感知插針
-
-Agent 具備時間流逝的感知能力。系統在組裝歷史紀錄時，動態偵測相鄰訊息的時間間隔，若超過閾值 (預設 30 分鐘) 則自動安插虛擬的時間標記 (如「距離上次對話已過 2 小時」)。此機制完全不污染底層資料庫，僅在投影給 LLM 的瞬間生效。
-
-### Dehydrate / Rehydrate -- 狀態脫水與喚醒
-
-Agent 並非永駐記憶體。閒置時其完整狀態 (包含情緒、Profile、Token 消耗紀錄) 會被序列化寫入磁碟並銷毀實體；需要時從持久化層還原，實現高並發下的彈性擴縮與容錯。
-
-### Performance-First Memory Pipeline -- 極致效能記憶管線
-
-- **巨型資料卸載 (Offloading)** -- 超大 Payload 自動抽離至實體 Blob 檔案，於訊息中替換為輕量級 DataPointer，保護 LLM Token 額度不被單次極大輸入撐爆。
-- **背景歷史壓縮 (History Compaction)** -- 針對遠古記憶採用滑動視窗策略，將掉出視窗的老舊訊息執行高強度的 Offloading 瘦身，並搭配 `isOffloaded` 標記實現 $O(1)$ 極速短路。
-- **增量式歷史快取** -- DataBlock 的 LangChain Message 轉換結果被 Memoize，消除 95% 以上的重複序列化
-- **LRU 快取驅逐** -- 檔案倉儲層以上限 50 Key 的 LRU 演算法防止記憶體無限增長
-- **異步日誌寫入** -- FileTransport 以背景緩衝佇列取代同步阻塞，釋放 Event Loop 吞吐
-- **批次訊息管線化 (Batch Pipelining)** -- 支援陣列訊息廣播，並在 `SessionManager` 進行分組打包 (Grouping)，實現歷史紀錄的 Single I/O 寫入，根除磁碟 N+1 瓶頸。
-- **透明化 ReAct 迴圈** -- 完整攔截與紀錄 LLM 中間的每一次思維鏈 (`<thought>`) 與工具呼叫，杜絕推論黑箱
-
-### Repository Pattern and Git-Native Workspace -- 倉儲模式與原生 Git 工作區
-
-- 儲存層透過 `ISessionRepository`、`IDataBlockRepository`、`IAgentStateRepository` 徹底與業務解耦
-- 每個 Session 擁有獨立的 Git 倉庫，Agent 在專屬的 Worktree 分支中運算，物理隔離且支援回滾
-- 歷史紀錄採用 JSONL 格式，支援 O(1) 追加寫入
-- Claim Check Pattern -- 超大 Payload 自動卸載至 Blob 檔案，以 DataPointer 引用，防止 Token 溢位
-
-### Zero-Trust Security Boundary -- 零信任安全邊界
-
-- 人工審批閘道 (HITL) -- 高危操作強制等待人類確認
-- Prompt 注入防禦 -- 系統級安全過濾
-- 安全熔斷器 (Circuit Breaker) -- 連續錯誤超過深度閾值時強制切斷 Agent 的執行迴圈
-
----
-
-## Project Structure
-
-```
-src/
-  core/                        # 核心引擎與基礎設施
-    agent/                     # Agent 實體與工具系統
-      BaseAgent.ts             # 抽象基底 -- 生命週期、狀態機、情緒載體
-      MainAgent.ts             # 決策中樞 -- 情緒模型與高階決策
-      TaskAgent.ts             # 任務執行核心 -- 隔離運算與併發分身
-      EmbodiedAgent.ts         # 具身感知 -- 物理世界介面
-      AgentManager.ts          # 統籌管理 -- 脫水/喚醒與活躍池
-      tool/                    # BaseTool、AgentTools、WorkspaceTools
-    messaging/                 # 事件驅動通訊層
-      EventBus.ts              # 非同步事件匯流排 (會話隔離)
-      DataBlock.ts             # 資料載體與增量快取
-      IBus.ts                  # 匯流排介面與事件分類定義
-    session/                   # 會話與狀態管理
-      SessionManager.ts        # 全局訊息派發與排程
-      Session.ts               # 會話實體與 InboxBuffer
-    lifecycle/                 # 運行時內核
-      RuntimeKernel.ts         # 系統啟動與依賴注入中樞
-    container/                 # DI 容器
-    config/                    # 配置管理與預設值
-    infra/                     # 基礎建設
-      persistence/             # Repository 實作與 StorageDriver
-      transports/              # 日誌傳輸 (Console / File)
-    utils/                     # PromptLoader、IdGenerator 等工具
-  package/                     # 業務擴充與外掛層 (如 Minecraft 對接)
-docs/                          # 架構設計文件
-prompts/                       # Agent Profile JSON 與 Prompt 範本
-```
-
-**依賴規則**: `src/package/` 只能透過 `src/core/index.ts` 引用核心功能，核心層嚴禁反向引用業務層。
+### 3. 工程基礎建設 (Infrastructure)
+- **Git Worktree 沙盒隔離**：為每一個 Session 開闢獨立的 Git Worktree，Agent 的任何檔案讀寫與工具操作皆被限制在該目錄，確保操作可追溯且可 `git checkout` 回滾。
+- **全非同步併發架構 (Full Async Concurrency)**：整份專案大量運用併發操作處理高 I/O 任務 (例如：平行寫入多個 Session 日誌、批次離線壓縮記憶體、並行呼叫外部 LLM API)，徹底榨乾 Event Loop 效能，確保 AI 代理在處理龐大上下文時絕不被 I/O 阻塞拖慢。
+- **泛型 LRU 快取與 Memoization**：底層實作獨立且可重用的泛型 `LRUCache` (如維護上限 50 Key)，搭配增量快取機制，杜絕記憶體無限膨脹並大幅消除重複的序列化開銷。
 
 ---
 
@@ -145,16 +64,10 @@ bun install
 # 執行主程式 Demo
 bun run demo
 
-# 執行 Minecraft 具身智能沙盒
-bun run demo:minecraft
-
 # 型別檢查
 bun run lint
-
-# 執行併發測試
-bun test:batch
 ```
 
 ---
 
-(c) 2026 SuperNova Project. An experiment in embodied cognition, emotional agency, and autonomous coordination.
+(c) 2026 SuperNova Project. An experiment in building robust agentic systems.
