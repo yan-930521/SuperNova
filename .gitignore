@@ -3,7 +3,6 @@ dist/*
 .env
 GEMINI.md
 workspace/*
-src_bk/*
 web/*
 docs/superpowers/*
 docs/review/*
@@ -12,3 +11,4 @@ docs/review/*
 .dev/*
 .worktrees/*
 src/package/*
+config.json
