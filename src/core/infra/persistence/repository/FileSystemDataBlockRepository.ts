@@ -204,6 +204,46 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
         return newBlock;
     }
 
+    // --- 日常總結與檔案輪替 ---
+    public async rotateHistoryFile(sessionId: string, agentId: string, dateString: string): Promise<void> {
+        const historyFilePath = this.getFileName(sessionId, agentId);
+        if (existsSync(historyFilePath)) {
+            const rotatedFilePath = path.join(this.getDirName(sessionId, agentId), `${dateString}.jsonl`);
+            await fs.rename(historyFilePath, rotatedFilePath);
+            this.logger.info(`[DataBlockRepository] Rotated history file for agent ${agentId} to ${dateString}.jsonl`);
+        }
+        const cacheKey = `${sessionId}:${agentId}`;
+        this.cache.delete(cacheKey);
+    }
+
+    public async saveDailySummary(sessionId: string, dateString: string, summaryMarkdown: string): Promise<void> {
+        const dailyDirName = this.config?.storage?.daily_dir ?? DEFAULT_CONFIG.storage.daily_dir;
+        const dailyDir = path.join(this.baseDir, sessionId, dailyDirName);
+        if (!existsSync(dailyDir)) {
+            mkdirSync(dailyDir, { recursive: true });
+        }
+        const summaryFile = path.join(dailyDir, `${dateString}.md`);
+        await fs.writeFile(summaryFile, summaryMarkdown, 'utf-8');
+        this.logger.info(`[DataBlockRepository] Saved daily summary for session ${sessionId} to ${summaryFile}`);
+    }
+
+    public async listAgentsForSession(sessionId: string): Promise<string[]> {
+        const agentDirName = this.config.storage.agent_dir ?? DEFAULT_CONFIG.storage.agent_dir;
+        const sessionAgentsDir = path.join(this.baseDir, sessionId, agentDirName);
+        
+        if (!existsSync(sessionAgentsDir)) return [];
+        
+        try {
+            const dirents = await fs.readdir(sessionAgentsDir, { withFileTypes: true });
+            return dirents
+                .filter(dirent => dirent.isDirectory())
+                .map(dirent => dirent.name);
+        } catch (err: any) {
+            this.logger.error(`[DataBlockRepository] Failed to list agents for session ${sessionId}: ${err.message}`);
+            return [];
+        }
+    }
+
     // --- 內部輔助方法 ---
     private getDirName(
         sessionId: string,

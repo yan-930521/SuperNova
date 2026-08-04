@@ -1,14 +1,18 @@
 import * as path from 'path';
 
 import { AgentManager } from '../agent/AgentManager';
+import { LLMProvider } from '../agent/LLMProvider';
 import { Config } from '../config/Config';
 import { ComponentContainer } from '../container/ComponentContainer';
 import { LogManager } from '../infra/LogManager';
 import {
     FileSystemAgentStateRepository, FileSystemDataBlockRepository, FileSystemSessionRepository
 } from '../infra/persistence';
+import { JsonGraphRepository } from '../infra/persistence/repository/JsonGraphRepository';
 import { WorkspaceManager } from '../infra/persistence/WorkspaceManager';
+import { MemoryManager } from '../memory/MemoryManager';
 import { EventBus } from '../messaging/EventBus';
+import { SystemEvent } from '../messaging/IBus';
 import { SessionManager } from '../session/SessionManager';
 import { PromptLoader } from '../utils/PromptLoader';
 import { ILifecycle } from './ILifecycle';
@@ -44,19 +48,26 @@ export class RuntimeKernel implements ILifecycle {
       // EventBus 是系統的神經系統，需最先被註冊
       const eventBus = new EventBus();
 
+      // 1.5 實例化 LLM Provider
+      const llmProvider = new LLMProvider(this.config);
+
       // 2. 實例化底層儲存庫 (Repositories) - DI 中樞
       const sessionBaseDir = path.join(process.cwd(), this.config.storage.base_dir, this.config.storage.session_dir);
       
       const sessionRepo = new FileSystemSessionRepository(this.config, sessionBaseDir);
       const dataBlockRepo = new FileSystemDataBlockRepository(this.config, sessionBaseDir);
       const agentStateRepo = new FileSystemAgentStateRepository(this.config, sessionBaseDir);
+      const graphRepo = new JsonGraphRepository(this.config, sessionBaseDir);
 
       // 3. 實例化底層儲存組件 - WorkspaceManager
       // WorkspaceManager 內部會依據工作區類型動態分配 StorageDriver (VFS/Git)
       const workspaceManager = new WorkspaceManager(this.config, sessionBaseDir);
 
-      // AgentManager 負責所有 Agent 狀態管理與生命週期，注入 agentStateRepo 與 eventBus
-      const agentManager = new AgentManager(this.config, agentStateRepo, eventBus, dataBlockRepo, workspaceManager);
+      // 4. 實例化高階管理器
+      const memoryManager = new MemoryManager(this.config, graphRepo, dataBlockRepo, eventBus, llmProvider);
+
+      // AgentManager 負責所有 Agent 狀態管理與生命週期，注入 agentStateRepo 與 eventBus 等
+      const agentManager = new AgentManager(this.config, agentStateRepo, eventBus, dataBlockRepo, workspaceManager, llmProvider);
 
       // SessionManager 負責管理會話，統一攔截與派發 AgentMessage
       const sessionManager = new SessionManager(this.config, sessionRepo, workspaceManager, agentManager, dataBlockRepo, eventBus);
@@ -65,11 +76,14 @@ export class RuntimeKernel implements ILifecycle {
       // 容器啟動時會按照此註冊順序執行 initialize() 和 start()
       this.container.register('EventBus', eventBus);
       this.container.register('WorkspaceManager', workspaceManager);
+      this.container.register('LLMProvider', llmProvider);
       this.container.register('SessionManager', sessionManager);
       this.container.register('AgentManager', agentManager);
+      this.container.register('MemoryManager', memoryManager);
       this.container.register('SessionRepository', sessionRepo);
       this.container.register('DataBlockRepository', dataBlockRepo);
       this.container.register('AgentStateRepository', agentStateRepo);
+      this.container.register('GraphRepository', graphRepo);
 
       this.logger.info('[Kernel] Kernel components registered successfully');
     } catch (error: any) {
@@ -97,7 +111,7 @@ export class RuntimeKernel implements ILifecycle {
       const eventBus = this.container.resolve('EventBus') as EventBus;
       this.tickTimer = setInterval(() => {
           eventBus.publish({
-              type: 'SYSTEM_TICK', // SystemEvent.Tick
+              type: SystemEvent.Tick,
               timestamp: Date.now(),
               payload: { currentTime: Date.now() }
           });

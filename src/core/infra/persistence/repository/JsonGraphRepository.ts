@@ -2,21 +2,24 @@ import { mkdir, readFile, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { LocalIndex } from 'vectra';
 
+import { Config } from '../../../config/Config';
 import { GraphEdge, GraphNode, IGraphRepository } from '../IGraphRepository';
 
 export class JsonGraphRepository implements IGraphRepository {
+    private config: Config;
     private baseDir: string;
     
     private vectorIndices: Map<string, LocalIndex> = new Map();
     private nodeCaches: Map<string, Map<string, GraphNode>> = new Map();
     private edgeCaches: Map<string, Map<string, GraphEdge>> = new Map();
 
-    constructor(baseDir: string) {
+    constructor(config: Config, baseDir: string) {
+        this.config = config;
         this.baseDir = baseDir;
     }
 
     private getSessionDir(sessionId: string): string {
-        return join(this.baseDir, sessionId, 'graph');
+        return join(this.baseDir, sessionId, this.config.storage.graph_dir);
     }
 
     private async ensureSessionLoaded(sessionId: string): Promise<void> {
@@ -33,7 +36,7 @@ export class JsonGraphRepository implements IGraphRepository {
         this.vectorIndices.set(sessionId, index);
 
         // Load Nodes
-        const nodesFile = join(sessionDir, 'nodes.json');
+        const nodesFile = join(sessionDir, this.config.storage.graph_nodes_file);
         const nodesMap = new Map<string, GraphNode>();
         try {
             const data = await readFile(nodesFile, 'utf-8');
@@ -45,7 +48,7 @@ export class JsonGraphRepository implements IGraphRepository {
         this.nodeCaches.set(sessionId, nodesMap);
 
         // Load Edges
-        const edgesFile = join(sessionDir, 'edges.json');
+        const edgesFile = join(sessionDir, this.config.storage.graph_edges_file);
         const edgesMap = new Map<string, GraphEdge>();
         try {
             const data = await readFile(edgesFile, 'utf-8');
@@ -59,13 +62,13 @@ export class JsonGraphRepository implements IGraphRepository {
 
     private async persistNodes(sessionId: string): Promise<void> {
         const nodesMap = this.nodeCaches.get(sessionId)!;
-        const nodesFile = join(this.getSessionDir(sessionId), 'nodes.json');
+        const nodesFile = join(this.getSessionDir(sessionId), this.config.storage.graph_nodes_file);
         await writeFile(nodesFile, JSON.stringify(Array.from(nodesMap.values()), null, 2), 'utf-8');
     }
 
     private async persistEdges(sessionId: string): Promise<void> {
         const edgesMap = this.edgeCaches.get(sessionId)!;
-        const edgesFile = join(this.getSessionDir(sessionId), 'edges.json');
+        const edgesFile = join(this.getSessionDir(sessionId), this.config.storage.graph_edges_file);
         await writeFile(edgesFile, JSON.stringify(Array.from(edgesMap.values()), null, 2), 'utf-8');
     }
 

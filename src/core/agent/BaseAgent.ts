@@ -4,8 +4,8 @@ import * as path from 'path';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { AIMessage, BaseMessage, SystemMessage, ToolMessage } from '@langchain/core/messages';
 import { ChatPromptTemplate } from '@langchain/core/prompts';
-import { ChatOpenAI } from '@langchain/openai';
 
+import { DEFAULT_CONFIG } from '../config';
 import { Config } from '../config/Config';
 import { LogManager } from '../infra/LogManager';
 import { IDataBlockRepository, IEntity } from '../infra/persistence/IRepository';
@@ -16,6 +16,7 @@ import { DataBlock, MessagePriority } from '../messaging/DataBlock';
 import {
     AgentEvent, GlobalEventMap, HookEvent, IEvent, IEventBus, IPromptSection, PromptSectionIndex
 } from '../messaging/IBus';
+import { LLMProvider } from './LLMProvider';
 import { SYSTEM_PROMPTS } from './prompts';
 import { BaseTool } from './tool/BaseTool';
 
@@ -144,7 +145,10 @@ export interface UsageStats {
 export interface AgentOptions {
     workspacePath?: string;
     workspaceType?: WorkspaceType;
-    agentManager?: any; // 注入 AgentManager 供動態存取
+    llmProvider: LLMProvider; // 注入全域 LLMProvider
+    eventBus: IEventBus;
+    config: Config;
+    dataBlockRepo: IDataBlockRepository;
 }
 
 /**
@@ -184,10 +188,7 @@ export abstract class BaseAgent {
     public readonly workspaceType: WorkspaceType;
     protected readonly oplogDir: string;
     protected readonly stateFilePath: string; // 為了與原先代碼相容保留
-
-    protected readonly agentManager?: any;
-
-    private llmInstances = new Map<string, BaseChatModel>();
+    protected readonly llmProvider: LLMProvider;
 
     /** 裝備的工具清單 */
     protected tools: BaseTool[] = [];
@@ -204,14 +205,18 @@ export abstract class BaseAgent {
         systemPrompt: string;
     } | null = null;
 
+    protected readonly eventBus: IEventBus;
+    protected readonly config: Config;
+    protected readonly dataBlockRepo: IDataBlockRepository;
+
     constructor(
         public readonly id: string,
         public readonly sessionId: string, // 強制綁定會話 ID，所有衍生 Agent/Worker 均依附於此會話
-        protected readonly eventBus: IEventBus,
-        protected readonly config: Config,
-        protected readonly dataBlockRepo: IDataBlockRepository,
-        options?: AgentOptions
+        options: AgentOptions
     ) {
+        this.eventBus = options.eventBus;
+        this.config = options.config;
+        this.dataBlockRepo = options.dataBlockRepo;
         this.state = AgentState.INITIALIZING;
 
         // 注入專屬的 Contextual Logger，追蹤這個 Agent 的所有行為
@@ -222,7 +227,6 @@ export abstract class BaseAgent {
         // 物理工作空間路徑指派
         this.workspacePath = options?.workspacePath || '';
         this.workspaceType = options?.workspaceType || 'PERSISTENT';
-        this.agentManager = options?.agentManager;
         this.oplogDir = path.join(
             process.cwd(),
             this.config.storage.base_dir,
@@ -233,6 +237,7 @@ export abstract class BaseAgent {
         );
         this.stateFilePath = path.join(this.oplogDir, 'state.json');
 
+        this.llmProvider = options.llmProvider;
 
         this.logger.addTransport(new FileTransport('DEBUG', this.oplogDir, this.config.storage.oplog_file));
         this.logger.info(`Initializing agent: ${this.id} under session: ${this.sessionId}`);
@@ -279,7 +284,7 @@ export abstract class BaseAgent {
         this.usageStats.durationMs += stats.durationMs;
 
         // 安全告警：檢查是否超過臨界值
-        const MAX_SAFE_TOKENS = this.config.security.max_safe_tokens ?? 100000;
+        const MAX_SAFE_TOKENS = this.config.security.max_safe_tokens ?? DEFAULT_CONFIG.security.max_safe_tokens!;
         const totalTokens = this.usageStats.promptTokens + this.usageStats.completionTokens;
         if (totalTokens > MAX_SAFE_TOKENS) {
             this.logger.warn(`SECURITY WARNING: Token usage exceeded safe threshold (${totalTokens} > ${MAX_SAFE_TOKENS})`);
@@ -443,23 +448,6 @@ export abstract class BaseAgent {
     // ==========================================
     // LangChain 整合 (LLM & Prompt Helpers)
     // ==========================================
-
-    /**
-     * 獲取該 Agent 使用的 LangChain Chat Model 實例 (自動依照 preset 從 config 實例化並快取)
-     */
-    protected getModel(presetName?: string): BaseChatModel {
-        const finalPresetName = presetName ?? this.config.llm.default_preset;
-
-        if (!this.llmInstances.has(finalPresetName)) {
-            // 根據 preset 讀取對應的配置，若找不到則回退到空配置
-            const presetConfig = this.config.llm.presets[finalPresetName] || {};
-
-            this.llmInstances.set(finalPresetName, new ChatOpenAI({
-                ...presetConfig
-            }));
-        }
-        return this.llmInstances.get(finalPresetName)!;
-    }
 
     /**
      * 預設的業務處理邏輯 (處理收到的 DataBlock)
@@ -670,7 +658,7 @@ export abstract class BaseAgent {
         const presetName = options?.presetName ?? this.config.llm.default_preset;
         const senderId = options?.senderId ?? this.id;
         const targetId = options?.targetId ?? null;
-        const model = this.getModel(presetName);
+        const model = this.llmProvider.getModel(presetName);
 
         // 使用 LangChain 的 .withRetry 封裝重試邏輯
         let modelWithRetry = model.withRetry({

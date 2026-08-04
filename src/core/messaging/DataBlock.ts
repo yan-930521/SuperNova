@@ -51,7 +51,7 @@ export interface DataBlockData {
     timestamp: number;
     controlPayload: any;
     dataPointers: IDataPointer[];
-    isOffloaded?: boolean;
+    metadata?: Record<string, any>;
 }
 
 /**
@@ -94,11 +94,32 @@ export class DataBlock<TControlPayload = Record<string, any>> {
     /** 資料指標陣列 (巨型資料隔離) */
     public readonly dataPointers: IDataPointer[];
 
+    /** 內部附加屬性儲存 (Metadata) */
+    public metadata: Record<string, any>;
+
     /** 持久化標記：是否已經將過大的 Payload 卸載為指標 (Offloaded) */
-    public isOffloaded: boolean;
+    public get isOffloaded(): boolean {
+        return this.metadata.isOffloaded ?? false;
+    }
+    public set isOffloaded(value: boolean) {
+        this.metadata.isOffloaded = value;
+    }
 
     /** 記憶體內的瞬態標記，用於標示是否已經通過壓縮檢查，避免重複掃描 */
-    public isCompacted: boolean = false;
+    public get isCompacted(): boolean {
+        return this.metadata.isCompacted ?? false;
+    }
+    public set isCompacted(value: boolean) {
+        this.metadata.isCompacted = value;
+    }
+
+    /** 圖譜記憶萃取標記：標示是否已被 MemoryManager 萃取為圖譜節點 */
+    public get isExtracted(): boolean {
+        return this.metadata.isExtracted ?? false;
+    }
+    public set isExtracted(value: boolean) {
+        this.metadata.isExtracted = value;
+    }
 
     constructor(params: {
         id?: string;
@@ -112,7 +133,8 @@ export class DataBlock<TControlPayload = Record<string, any>> {
         timestamp?: number;
         controlPayload?: TControlPayload;
         dataPointers?: IDataPointer[];
-        isOffloaded?: boolean;
+        metadata?: Record<string, any>;
+        isOffloaded?: boolean; // Backward compatibility for old JSON payloads
     }) {
         this.id = params.id || IdGenerator.dataBlock();
         this.sessionId = params.sessionId;
@@ -125,7 +147,12 @@ export class DataBlock<TControlPayload = Record<string, any>> {
         this.timestamp = params.timestamp || Date.now();
         this.controlPayload = params.controlPayload || ({} as TControlPayload);
         this.dataPointers = params.dataPointers || [];
-        this.isOffloaded = params.isOffloaded ?? false;
+        
+        // 確保支援舊版直接在 Root 放 isOffloaded 的結構
+        this.metadata = params.metadata || {};
+        if (params.isOffloaded !== undefined && this.metadata.isOffloaded === undefined) {
+            this.metadata.isOffloaded = params.isOffloaded;
+        }
     }
 
     /**
@@ -336,7 +363,7 @@ export class DataBlock<TControlPayload = Record<string, any>> {
             timestamp: this.timestamp,
             controlPayload: this.controlPayload,
             dataPointers: this.dataPointers,
-            isOffloaded: this.isOffloaded
+            metadata: this.metadata
         };
     }
 

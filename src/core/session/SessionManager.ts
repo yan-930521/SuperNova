@@ -8,7 +8,7 @@ import { IAgentStateRepository, IDataBlockRepository } from '../infra/persistenc
 import { IWorkspaceManager, WorkspaceType } from '../infra/persistence/IWorkspaceManager';
 import { ILifecycle } from '../lifecycle/ILifecycle';
 import { DataBlock, MessagePriority } from '../messaging/DataBlock';
-import { AgentEvent, IEvent, IEventBus } from '../messaging/IBus';
+import { AgentEvent, IEvent, IEventBus, SystemEvent } from '../messaging/IBus';
 import { IdGenerator } from '../utils/IdGenerator';
 import { Session, SessionState } from './Session';
 
@@ -255,6 +255,15 @@ export class SessionManager implements ILifecycle {
         await this.sessionRepo.save(session);
 
         this.activeSessions.delete(sessionId);
+        
+        // 廣播會話關閉事件
+        this.eventBus.publish({
+            type: SystemEvent.SessionClosed,
+            timestamp: Date.now(),
+            payload: { sessionId },
+            sessionId
+        });
+        
         this.logger.info(`[SessionManager] Session ${sessionId} archived and cleared from memory`);
     }
 
@@ -278,10 +287,13 @@ export class SessionManager implements ILifecycle {
             return;
         }
 
-        // 1. 並行處理所有的超大型字串卸載
-        const processedBlocks = await Promise.all(
-            blocks.map(b => this.dataBlockRepo.offloadLargePayloads(b.sessionId, b, this.config.agent.offload_threshold_new_message))
-        );
+        // 1. 若啟用自動卸載，並行處理所有的超大型字串卸載
+        let processedBlocks = blocks;
+        if (this.config.agent.enable_payload_offload) {
+            processedBlocks = await Promise.all(
+                blocks.map(b => this.dataBlockRepo.offloadLargePayloads(b.sessionId, b, this.config.agent.offload_threshold_new_message))
+            );
+        }
 
         const sendersToCompact = new Set<string>();
         const targetsToDispatch = new Set<string>();
@@ -471,6 +483,8 @@ export class SessionManager implements ILifecycle {
      * 避免剛執行的工具回報立即被壓縮導致 LLM 忘記細節，同時確保遠古歷史的空間與 Token 浪費降至最低。
      */
     private async compactAgentHistory(sessionId: string, agentId: string): Promise<void> {
+        if (!this.config.agent.enable_payload_offload) return;
+        
         try {
             const allBlocks = [...await this.dataBlockRepo.findByAgent(sessionId, agentId)];
             if (allBlocks.length <= this.config.agent.uncompressed_tail) return;

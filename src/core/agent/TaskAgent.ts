@@ -16,12 +16,9 @@ export class TaskAgent extends BaseAgent {
     constructor(
         id: string,
         sessionId: string,
-        eventBus: IEventBus,
-        config: Config,
-        dataBlockRepo: IDataBlockRepository,
-        options?: AgentOptions
+        options: AgentOptions
     ) {
-        super(id, sessionId, eventBus, config, dataBlockRepo, options);
+        super(id, sessionId, options);
 
         // 如果沒有被指派 profile (例如是 Clone)，則載入預設的左腦設定
         if (!this.profile) {

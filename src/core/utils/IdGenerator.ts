@@ -62,4 +62,18 @@ export class IdGenerator {
   static blob(): string {
     return this.generate('blob_');
   }
+
+  /**
+   * 生成 GraphNode ID
+   */
+  static graphNode(): string {
+    return this.generate('node_');
+  }
+
+  /**
+   * 生成 GraphEdge ID
+   */
+  static graphEdge(): string {
+    return this.generate('edge_');
+  }
 }

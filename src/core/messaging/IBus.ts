@@ -34,6 +34,7 @@ export enum SystemEvent {
     SessionStarted = "SESSION_STARTED",
     SessionClosed = "SESSION_CLOSED",
     SessionUpdated = "SESSION_UPDATED",
+    SessionOptimization = "SESSION_OPTIMIZATION",
 
     // Task 全局狀態相關
     TaskCreated = "TASK_CREATED",
@@ -90,6 +91,7 @@ export interface GlobalEventMap {
     [SystemEvent.SessionStarted]: { sessionId: string };
     [SystemEvent.SessionClosed]: { sessionId: string };
     [SystemEvent.SessionUpdated]: { sessionId: string };
+    [SystemEvent.SessionOptimization]: { sessionId: string; targetDate: string };
     [SystemEvent.TaskCreated]: { taskId: string };
     [SystemEvent.TaskFinished]: { taskId: string };
     [SystemEvent.TaskFailed]: { taskId: string; error: string };

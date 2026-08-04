@@ -16,12 +16,9 @@ export class EmbodiedAgent extends BaseAgent {
   constructor(
     id: string,
     sessionId: string,
-    eventBus: IEventBus,
-    config: Config,
-    dataBlockRepo: IDataBlockRepository,
-    options?: AgentOptions
+    options: AgentOptions
   ) {
-    super(id, sessionId, eventBus, config, dataBlockRepo, options);
+    super(id, sessionId, options);
     
     // 從 JSON 設定檔載入 EmbodiedAgent 專屬身份與認知
     if (!this.profile) {

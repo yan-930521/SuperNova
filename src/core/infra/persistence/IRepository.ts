@@ -53,6 +53,21 @@ export interface IDataBlockRepository extends IRepository<DataBlock<any>> {
    * (實作層需自行施加安全上限，防止記憶體溢出)
    */
   findByAgent(sessionId: string, agentId: string): Promise<readonly DataBlock<any>[]>;
+
+  /**
+   * 將目前的歷史記錄重新命名為特定日期的檔案 (Log Rotation)
+   */
+  rotateHistoryFile(sessionId: string, agentId: string, dateString: string): Promise<void>;
+
+  /**
+   * 儲存每日總結檔案 (Markdown)
+   */
+  saveDailySummary(sessionId: string, dateString: string, summaryMarkdown: string): Promise<void>;
+
+  /**
+   * 取得特定 Session 底下所有擁有歷史記錄的 Agent ID 列表
+   */
+  listAgentsForSession(sessionId: string): Promise<string[]>;
 }
 
 

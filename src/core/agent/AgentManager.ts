@@ -7,6 +7,7 @@ import { HookEvent, IEvent, IEventBus, PromptSectionIndex } from '../messaging/I
 import { BaseTool } from './';
 import { AgentOptions, AgentType, BaseAgent } from './BaseAgent';
 import { EmbodiedAgent } from './EmbodiedAgent';
+import { LLMProvider } from './LLMProvider';
 import { MainAgent } from './MainAgent';
 import { TaskAgent } from './TaskAgent';
 import { SendMessageTool, ToggleProjectionTool } from './tool/AgentTools';
@@ -50,6 +51,7 @@ export class AgentManager implements ILifecycle {
         private readonly eventBus: IEventBus,
         private readonly dataBlockRepo: IDataBlockRepository,
         private readonly workspaceManager: IWorkspaceManager,
+        private readonly llmProvider: LLMProvider
     ) { }
 
     // ==========================================
@@ -117,14 +119,20 @@ export class AgentManager implements ILifecycle {
         sessionId: string,
         options?: AgentOptions
     ): BaseAgent {
-        const mergedOptions = { ...options, agentManager: this };
+        const mergedOptions: AgentOptions = { 
+            ...options,
+            llmProvider: this.llmProvider,
+            eventBus: this.eventBus,
+            config: this.config,
+            dataBlockRepo: this.dataBlockRepo
+        };
         switch (type) {
             case AgentType.MAIN:
-                return new MainAgent(id, sessionId, this.eventBus, this.config, this.dataBlockRepo, mergedOptions);
+                return new MainAgent(id, sessionId, mergedOptions);
             case AgentType.TASK:
-                return new TaskAgent(id, sessionId, this.eventBus, this.config, this.dataBlockRepo, mergedOptions);
+                return new TaskAgent(id, sessionId, mergedOptions);
             case AgentType.EMBODIED:
-                return new EmbodiedAgent(id, sessionId, this.eventBus, this.config, this.dataBlockRepo, mergedOptions);
+                return new EmbodiedAgent(id, sessionId, mergedOptions);
             default:
                 throw new Error(`[AgentManager] Unsupported AgentType: ${type}`);
         }
