@@ -3,7 +3,7 @@ import * as readline from 'readline';
 
 import { AgentManager } from '../src/core/agent/AgentManager';
 import { AgentType } from '../src/core/agent/BaseAgent';
-import { DEFAULT_CONFIG } from '../src/core/config/DefaultConfig';
+import { ConfigLoader } from '../src/core/config/ConfigLoader';
 import { RuntimeKernel } from '../src/core/lifecycle/RuntimeKernel';
 import { DataBlock } from '../src/core/messaging/DataBlock';
 import { EventBus } from '../src/core/messaging/EventBus';
@@ -18,7 +18,8 @@ async function main() {
     console.log('=============================================');
     console.log('Initializing system...');
 
-    const config = DEFAULT_CONFIG;
+    const loader = new ConfigLoader();
+    const config = await loader.bootstrap('./config.json');
     const kernel = new RuntimeKernel(config);
 
     // 1. 透過內核啟動所有系統組件 (IoC, Repo, Managers)

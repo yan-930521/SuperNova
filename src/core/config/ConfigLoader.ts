@@ -1,9 +1,37 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { z } from 'zod';
 
 import { LogManager } from '../infra/LogManager';
-import { Config, DeepPartial } from './Config';
+import { Config, ConfigSchema, DeepPartial } from './Config';
 import { DEFAULT_CONFIG } from './DefaultConfig';
+
+function generateCommentedConfig(schema: z.ZodTypeAny | undefined, values: any): any {
+    if (values === null || typeof values !== 'object' || Array.isArray(values)) {
+        return values;
+    }
+
+    const isObjectSchema = schema instanceof z.ZodObject;
+    const isRecordSchema = schema instanceof z.ZodRecord;
+
+    const result: any = {};
+
+    if (schema?.description) {
+        result['__comment__'] = schema.description;
+    }
+
+    for (const key in values) {
+        const fieldSchema = isObjectSchema ? schema.shape[key] : (isRecordSchema ? schema.valueType : undefined);
+        
+        if (fieldSchema?.description) {
+            result[`__comment_${key}__`] = fieldSchema.description;
+        }
+
+        result[key] = generateCommentedConfig(fieldSchema, values[key]);
+    }
+
+    return result;
+}
 
 /**
  * ConfigLoader 類
@@ -26,7 +54,9 @@ export class ConfigLoader {
             // 檔案存在，執行讀取與解析
             const content = await fs.readFile(targetPath, 'utf-8');
             try {
-                customConfig = JSON.parse(content);
+                // 移除 // 與 /* */ 註解，以便支援過渡期 jsonc 格式 (向下相容)
+                const cleanContent = content.replace(/\/\/.*|\/\*[\s\S]*?\*\//g, '');
+                customConfig = JSON.parse(cleanContent);
             } catch (parseError) {
                 // 若解析失敗，記錄錯誤並拋出，防止以損壞的配置啟動
                 LogManager.recorder.error(`[ConfigLoader] Failed to parse config file at ${targetPath}:`, { payload: { error: parseError }, type: 'SYSTEM' });
@@ -39,10 +69,14 @@ export class ConfigLoader {
 
                 // 確保目標目錄存在
                 const dir = path.dirname(targetPath);
-                await fs.mkdir(dir, { recursive: true });
+                if (dir && dir !== '.') {
+                    await fs.mkdir(dir, { recursive: true });
+                }
 
-                // 將預設配置序列化為帶縮排的 JSON 格式
-                const defaultConfigJson = JSON.stringify(DEFAULT_CONFIG, null, 2);
+                // 利用 Zod schema 與 describe 產生帶有 __comment 鍵的 JSON 結構
+                const commentedConfig = generateCommentedConfig(ConfigSchema, DEFAULT_CONFIG);
+                const defaultConfigJson = JSON.stringify(commentedConfig, null, 2);
+                
                 await fs.writeFile(targetPath, defaultConfigJson, 'utf-8');
             } else {
                 // 其他系統級別的檔案訪問錯誤

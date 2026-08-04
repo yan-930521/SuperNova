@@ -20,22 +20,29 @@ export const DEFAULT_CONFIG: Config = {
         session_dir: 'session',
         agent_dir: 'agent',
         agent_profile_dir: 'profiles',
+        graph_dir: 'graph',
+        daily_dir: 'daily',
         blob_dir: "blobs",
         session_file: 'session.json',
         history_file: 'history.jsonl',
         agent_state_file: 'state.json',
-        oplog_file: '.oplog.jsonl'
+        oplog_file: '.oplog.jsonl',
+        graph_nodes_file: 'nodes.json',
+        graph_edges_file: 'edges.json'
     },
     llm: {
-        default_preset: 'SMART',
+        default_preset: 'REASONING_FAST',
         presets: {
             DEFAULT: {
-                modelName: 'gpt-4o-2024-08-06',
-                temperature: 0.7,
-                maxTokens: 4096,
-                modelKwargs: {
-                    parallel_tool_calls: true
-                }
+                modelName: 'gpt-5.6-luna',
+                temperature: 1,
+                maxTokens: 8192,
+                reasoning: {
+                    effort: 'low',
+                    summary: 'auto'
+                },
+                parallel_tool_calls: true,
+                service_tier: 'flex'
             },
             REASONING_FAST: {
                 modelName: 'gpt-5.6-luna',
@@ -45,25 +52,27 @@ export const DEFAULT_CONFIG: Config = {
                     effort: 'low',
                     summary: 'auto'
                 },
-                parallel_tool_calls: true
-            },
-            SMART: {
-                modelName: 'gpt-4o',
-                temperature: 0.2,
-                maxTokens: 4096,
+                parallel_tool_calls: true,
+                service_tier: 'flex'
             },
             FAST: {
                 modelName: 'gpt-4o-mini',
                 temperature: 0.2,
-                maxTokens: 2048,
-                modelKwargs: {
-                    parallel_tool_calls: true
-                }
+                maxTokens: 4096,
+                parallel_tool_calls: true
             },
             CHEAP: {
-                modelName: 'gpt-3.5-turbo',
-                temperature: 0,
-                maxTokens: 1024,
+                modelName: 'gpt-5.6-luna',
+                temperature: 0.2,
+                maxTokens: 4096,
+                service_tier: 'flex',
+                parallel_tool_calls: true
+            },
+            EXTRACTION: {
+                modelName: 'gpt-4o-mini',
+                temperature: 0.1,
+                maxTokens: 8192,
+                parallel_tool_calls: true
             }
         }
     },
@@ -71,13 +80,20 @@ export const DEFAULT_CONFIG: Config = {
         max_clones_per_agent: 5,
         force_wakeup_threshold: 5,
         save_tokens: true,
-        uncompressed_tail: 20,
-        max_context_window: 100,
+        uncompressed_tail: 5,
+        max_context_window: 128000,
         enable_temporal_injection: true,
+        enable_graph_memory: true,
+        enable_daily_summary: true,
+        enable_payload_offload: true,
         temporal_threshold_ms: 1800000,
         offload_threshold_new_message: 50000,
         offload_threshold_compact: 1000,
-        max_history_lines_safety_cap: 5000
+        max_history_lines_safety_cap: 5000,
+        memory_extract_threshold: 50,
+        daily_optimization_time: "00:00",
+        daily_optimization_check_interval_ms: 30000,
+        daily_optimization_idle_threshold_ms: 600000
     },
     cache: {
         history_lru_size: 500,
