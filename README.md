@@ -70,4 +70,4 @@ bun run lint
 
 ---
 
-(c) 2026 SuperNova Project. An experiment in building robust agentic systems.
+(c) 2026 SuperNova Project. An experiment in building high-performance agentic systems.
