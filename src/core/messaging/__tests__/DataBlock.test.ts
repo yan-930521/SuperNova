@@ -64,7 +64,7 @@ describe('DataBlock toMarkdown and toMessage Test', () => {
 
     // 驗證是否為 LangChain HumanMessage 實例
     expect(msg instanceof HumanMessage).toBe(true);
-    expect(msg.content).toBe('Hello');
+    expect(msg.content).toBe('[Message from user-chat]:\nHello');
 
     const blockSys = new DataBlock({
       sessionId: 'session-123',

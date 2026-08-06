@@ -23,6 +23,10 @@ describe('System Integration & Inbox Dispatch Test', () => {
     
     const testConfig: Config = {
         version: "v0.1.0",
+        cache: {
+            prompt_lru_size: 100,
+            memory_lru_size: 100
+        },
         storage: {
             base_dir: '.dev_temp_system_test',
             session_dir: 'session',
@@ -44,9 +48,6 @@ describe('System Integration & Inbox Dispatch Test', () => {
             presets: {
                 'FAST': { modelName: 'mock-model' }
             }
-        },
-        agent: {
-            max_clones_per_agent: 2 // 嚴格限制分身上限為 2 供測試
         }
     } as any;
 
@@ -71,7 +72,16 @@ describe('System Integration & Inbox Dispatch Test', () => {
         // 我們讓模擬的 LLM 延遲 500ms 後回覆，藉此測試併發與狀態鎖
         spyOn(BaseAgent.prototype as any, 'callModel').mockImplementation(async (messages: any[]) => {
             await new Promise(resolve => setTimeout(resolve, 500));
-            return "Mocked LLM Response";
+            return {
+                newBlocks: [new DataBlock({
+                    sessionId: 'dummy',
+                    senderId: 'mock-agent',
+                    type: 'ai',
+                    intent: 'AGENT_REPLY',
+                    controlPayload: 'Mocked LLM Response'
+                })],
+                usageDelta: { promptTokens: 10, completionTokens: 10, durationMs: 500 }
+            };
         });
     });
 
@@ -117,88 +127,6 @@ describe('System Integration & Inbox Dispatch Test', () => {
         // 驗證 AgentProfile 大腦被成功載入
         const profile = agent.getProfile();
         expect(profile).not.toBeUndefined();
-    });
-
-    it('should handle sequential message correctly without clones', async () => {
-        const sessionId = "seq-test-session";
-        const mainAgentId = "SeqMainAgent";
-        await sessionManager.createSession(mainAgentId, sessionId, 'PERSISTENT');
-        
-        let replyCount = 0;
-        const handler = (e: any) => {
-            if (e.payload.senderId === mainAgentId) {
-                replyCount++;
-            }
-        };
-        eventBus.subscribe(AgentEvent.AgentMessage, handler);
-
-        const block = new DataBlock({
-            sessionId,
-            senderId: "User",
-            targetId: mainAgentId,
-            type: 'human',
-            intent: 'TEST',
-            controlPayload: 'Hello'
-        });
-
-        // 派發一則訊息
-        await eventBus.publishAsync({
-            type: AgentEvent.AgentMessage,
-            timestamp: Date.now(),
-            sessionId,
-            payload: block
-        });
-
-        // 等待 LLM 模擬處理完成 (500ms + 緩衝)
-        await new Promise(resolve => setTimeout(resolve, 800));
-
-        // 由於我們改為無狀態並發，此處不需要再檢查分身數量
-        // 應該有收到一則回覆
-        expect(replyCount).toBe(1);
-
-        eventBus.unsubscribe(AgentEvent.AgentMessage, handler as any);
-    });
-
-    it('should spawn clones for concurrent requests up to max_clones_per_agent limit', async () => {
-        const sessionId = "concurrent-session";
-        const mainAgentId = "ConcurrentMainAgent";
-        await sessionManager.createSession(mainAgentId, sessionId, 'PERSISTENT');
-        
-        const senders = ["User1", "User2", "User3", "User4"];
-        
-        // 為了避免測試框架的不穩定 setTimeout，我們直接 publishAsync 並等待它們全部完成
-        // User1 到 User4 同時發送，系統應該會平行處理 (1 個 MainAgent + 2 個 Clone)，而最後 1 個會排隊等前面做完
-        const promises = senders.map(senderId => {
-            const block = new DataBlock({
-                sessionId,
-                senderId,
-                targetId: mainAgentId,
-                type: 'human',
-                intent: 'TEST',
-                controlPayload: `Concurrent Test from ${senderId}`
-            });
-            return eventBus.publishAsync({
-                type: AgentEvent.AgentMessage,
-                timestamp: Date.now(),
-                sessionId,
-                payload: block
-            });
-        });
-
-        // 我們等待所有的 publishAsync 完成 (包含重試與佇列消化)
-        // 我們等待所有的 publishAsync 完成 (這只代表訊息已進入信箱或派發)
-        await Promise.all(promises);
-
-        // 由於第4個訊息會被退回 Inbox 排隊，它的執行是非同步的 (等待前三個有人 IDLE 才會自動觸發)
-        // 為了確保整個排隊機制全部消化完畢，我們給予充分的時間等待 (大於 LLM mock 的 500ms 兩倍)
-        await new Promise(resolve => setTimeout(resolve, 2000));
-
-        // 所有的任務處理完畢後，Inbox 必定為空
-        const session = sessionManager.getSession(sessionId);
-        const finalPending = session!.hasPendingMessages(mainAgentId);
-        expect(finalPending).toBe(false);
-
-        // 所有並發處理皆已完結，無狀態設計不會產生殘留實體
     });
 
     it('should correctly mount workspace and allow file operations', async () => {

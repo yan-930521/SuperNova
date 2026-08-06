@@ -70,7 +70,7 @@ async function main() {
                 return;
             }
 
-            // 發送訊息給夏沫 (指名 targetId)
+            // 發送訊息給MainAgent (指名 targetId)
             const messageBlock = new DataBlock({
                 sessionId: sessionId,
                 senderId: 'USER',
@@ -90,7 +90,7 @@ async function main() {
         });
     };
 
-    // 3. 訂閱全局 AgentMessage 來接收夏沫的回覆
+    // 3. 訂閱全局 AgentMessage 來接收MainAgent的回覆
     eventBus.subscribe(AgentEvent.AgentMessage, (event: IEvent<AgentEvent.AgentMessage>) => {
         const dataBlock = event.payload;
         if (Array.isArray(dataBlock)) {
