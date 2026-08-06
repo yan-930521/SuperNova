@@ -9,6 +9,12 @@
 ## [Unreleased]
 
 ### Added (新增功能與基礎設施)
+- **工作區隔離 (Workspace Isolation)**：
+  - 實作 Git Worktree 工作區隔離機制，確保會話 (Session) 的檔案狀態獨立。這也為未來處理多代理人 (Multi-Agent) 協作時的 Git 衝突 (Conflict) 解決與狀態合併打下穩固基礎。
+- **歷史與快取 (History & Cache)**：
+  - 新增滑動視窗 (Sliding Window) 歷史壓縮功能，以及通用的 LRUCache。
+- **示範程式 (Demo)**：
+  - 建立 `demo/v0.1.0.ts`，展示透過 EventBus 非同步訊息傳遞的互動式 CLI ReAct 執行迴圈。
 - **歷史檔案安全上限 (History Safety Cap)**：
   - 在 `FileSystemDataBlockRepository` 中新增 `max_history_lines_safety_cap` 保護機制。當底層讀取極端龐大的 JSONL 檔案時，會在執行耗時的 JSON 反序列化前強制切片 (Slice)，確保系統與記憶體絕對不會被惡意或異常的大型歷史檔案撐爆。
 - **歷史壓縮短路機制 (Compaction Fast-Fail)**：
@@ -24,6 +30,10 @@
   - 於 `Config.ts` 與 `DefaultConfig.ts` 新增 `event_bus_lru_size`，允許外部配置 EventBus 監聽者快取上限 (`f949420`)。
 
 ### Changed (效能與架構優化)
+- **組態引擎翻新 (Config Engine)**：
+  - 翻新組態引擎，使用 Zod 進行動態 Schema 遍歷，並支援產生帶有 `__keyname` 註解的 JSON。
+- **記憶體管線 (Memory Pipeline)**：
+  - 簡化背景記憶管線，改為單一階段的圖記憶體 (Graph Memory) 萃取。
 - **歷史寫入批次優化 (Batch I/O Pipelining)**：
   - 升級 `FileSystemDataBlockRepository` 與 `IRepository`，支援陣列傳入與單次檔案追加寫入 (Single I/O)。
   - 重構 `SessionManager.handleAgentMessage`，將高頻到達的訊息按 Agent 分組打包後批次寫入，徹底解決大流量廣播時造成的磁碟 N+1 I/O 阻塞瓶頸。
