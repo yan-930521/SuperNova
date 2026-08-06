@@ -2,8 +2,11 @@
 title: 記憶與狀態管理
 version: 0.1.0
 status: APPROVED
-last_updated: 2026-07-14
-related_codes: []
+last_updated: 2026-08-06
+related_codes: 
+  - ../../src/core/messaging/DataBlock.ts
+  - ../../src/core/utils/LRUCache.ts
+  - ../../src/core/infra/LogManager.ts
 related_docs:
   - ../../ARCH.md
   - ../agent/agent.md
@@ -21,77 +24,43 @@ related_docs:
     1. **雙軸語意編碼 (Dual-Axis Semantics)**：
        *   **`type` (Message 角色類型)**：為強型別 Enum，限定為 `'message' | 'tool' | 'system'`。此欄位直接與大模型的 Message 角色（Human, Tool, System）完美對齊，決定了 DataBlock 在被時序插針投影給 LLM 時的 Message Role。
        *   **`intent` (業務意圖名稱)**：一個字串（e.g. `'TASK_SUCCESS'`, `'GIT_CONFLICT'`, `'HITL_APPROVED'`），用以標記具體發生的系統或業務事件。
-    3. **控制面與資料面分離 (Control/Data Plane Separation)**：為避免 `EventBus` 遭遇巨量負載，`DataBlock` 僅可夾帶巨型資料的**指標 (Pointer) 或 URI**（指向 `WorkspaceManager` 中的實體檔案或外部快取），真正的資料本體交由底層資料面處理。
-    4. **Claim Check Pattern (資料指標模式)**：當 `DataBlock` 乘載的 `controlPayload` 內部字串過大（例如超出 Token 安全閾值）時，系統會自動將該長字串抽離，寫入實體 Blob 檔案，並在原位置替換為 `DataPointer` (例如 `{"_type": "DataPointer", "blobId": "..."}`)，確保歷史紀錄 (Oplog) 不會因龐大資料而崩潰。
+    2. **控制面與資料面分離 (Control/Data Plane Separation)**：為避免 `EventBus` 遭遇巨量負載，`DataBlock` 僅可夾帶巨型資料的**指標 (Pointer) 或 URI**（指向實體檔案或外部快取），真正的資料本體交由底層資料面處理。
+    3. **Claim Check Pattern (資料指標模式)**：當 `DataBlock` 乘載的 `controlPayload` 內部字串過大（例如超出 Token 安全閾值）時，系統會自動將該長字串抽離，寫入實體 Blob 檔案，並在原位置替換為 `DataPointer` (例如 `{"_type": "DataPointer", "blobId": "..."}`)，確保歷史紀錄 (Oplog) 不會因龐大資料而崩潰。
 
-### `InboxBuffer` (收件箱)
-*   **職責**：暫存 `Agent` 在掛起期間接收到的所有 `DataBlock`。
-
-### `ContextManager & Oplog` (上下文與操作日誌管理器)
+### 上下文管理 (Context Management)
 *   **職責**：維護 Agent 的操作歷史與上下文視窗，防止 Context Drift (上下文漂移)。
 *   **行為**：
-    1. **去中心化儲存 (Decentralized Storage)**：每個 Agent 的操作日誌與內部運行日誌直接實體化（例如寫入 `.oplog.jsonl` 與 `agent.log`），強制儲存於**專屬的實體日誌目錄**中，**完全獨立於 `WorkspaceManager`** 的任務隔離區。
-    2. **滾動截斷與指標卸載 (Blob Offloading)**：維護專屬目錄內日誌檔案的頭尾滾動更新。為了避免廣播訊息時重複 I/O，**控制流由 `SessionManager` 負責**：在接收到全域訊息準備派發前，會統一呼叫 `DataBlockRepository.offloadLargePayloads()`。此方法會掃描 `DataBlock`，若檢測到超大字串，會自動將其卸載到實體的 `blobs/` 目錄，並在記憶體中將其改寫為 `DataPointer`，再進行後續的廣播與存檔。這完美解決了 Token 撐爆問題，並確保了單一訊息只會存檔一次 Blob。
-    3. **Hot-Lock (防幻覺鎖定)**：採用**事件驅動**或**主動鎖定**。當 `DataBlock` 包含錯誤狀態，或 Agent 顯式調用 `lock_context()` 時，立刻鎖定當前上下文免於截斷，確保 Agent 在反思排錯時擁有 100% 完整的錯誤現場資訊。
-    4. **時間感知插針 (Temporal Context Injection)**：為了讓 Agent 具備時間流逝的感知能力（增強 EQ）且不污染底層實體 Oplog 資料庫，在將歷史紀錄組裝給 LLM 前（`processInbox` 階段），系統會動態比對相鄰歷史訊息的時間戳。若間隔超過設定閾值（如 30 分鐘），則會在該位置即時安插虛擬的 `SystemMessage`（例如 `[系統提示：距離上一次對話已過 2 小時]`）。
-    5. **極限效能最佳化 (Performance Optimizations)**：
-       *   **增量式歷史快取 (Incremental History Cache)**：`DataBlock.toMessage` 實作了記憶體級別的 Memoization，將已轉換的 `BaseMessage` 快取，大幅消除了陣列重組與 JSON 字串化的 CPU 負擔。
-       *   **延遲壓縮 (Debounced Compaction)**：`DataBlock` 帶有瞬態的 `isCompacted` 標記。當訊息第一次被 `DataBlockRepository.offloadLargePayloads` 掃描過後，就會被打上已壓縮的標記。未來全量掃描歷史時將直接跳過，時間複雜度從 O(N) 降至 O(1)。
-       *   **通用 LRU 快取機制 (LRU Cache Utility)**：系統提供繼承自原生 `Map` 的泛型 `LRUCache` 工具類別，確保在不影響原有 API 操作的情況下實現 O(1) 的淘汰策略。目前廣泛應用於檔案倉儲層 (上限 50 個 Key) 與 `PromptLoader` 中，解決了多 Agent 高並發存取時的記憶體洩漏 (Memory Leak) 隱患。
-       *   **異步檔案寫入 (Async File I/O)**：底層日誌傳輸 (`FileTransport`) 採用寫入緩衝與背景異步 Flush 機制，避免高頻繁的 `fs.appendFileSync` 阻塞事件迴圈 (Event Loop)。
+    1. **去中心化儲存 (Decentralized Storage)**：歷史紀錄 (`history.jsonl`) 與內部運行日誌透過 `IDataBlockRepository` 直接實體化寫入，並透過 `SessionManager` 的 Inbox 機制處理暫存。
+    2. **滾動截斷與指標卸載 (Blob Offloading)**：為了避免重複 I/O，控制流會自動呼叫 Repository 的卸載功能，將 `DataBlock` 中過大的 payload 改寫為 `DataPointer`，然後才進行存檔。完美解決了 Token 撐爆問題，並確保單一訊息只會存檔一次 Blob。
+    3. **時間感知插針 (Temporal Context Injection)**：為了讓 Agent 具備時間流逝的感知能力，系統會動態比對相鄰歷史訊息的時間戳。若間隔超過設定閾值，則會在該位置即時安插虛擬的 `SystemMessage`。
+    4. **極限效能最佳化 (Performance Optimizations)**：
+       *   **延遲壓縮 (Debounced Compaction)**：`DataBlock` 帶有瞬態的 `isCompacted` 標記，避免重複掃描已經處理過的歷史訊息，將時間複雜度降至 O(1)。
+       *   **通用 LRU 快取機制 (LRU Cache Utility)**：系統提供繼承自原生 `Map` 的泛型 `LRUCache` 工具類別，支援 O(1) 的存取與淘汰策略，避免高並發存取時的記憶體洩漏隱患。
+       *   **異步檔案寫入 (Async File I/O)**：底層日誌傳輸 (例如 `FileTransport`) 採用非同步機制，避免阻塞事件迴圈 (Event Loop)。
 
-### `WorkspaceManager` (工作區與儲存管理器)
-*   **職責**：以 Session 為基本安全與隔離邊界，為每個 Session 維護一個唯一的 Workspace，管理工作空間的狀態。
+### 持久化與日誌 (Persistence & Transports)
+*   **雙軌日誌架構 (Dual-Rail Logging)**：
+    *   由 `LogManager` 實作。提供全域層級的 Recorder（用於基礎設施），同時支援注入上下文（如 Session/Agent ID）建立具備 Context 的 Logger。
+    *   定義明確的操作類型 (`RecordAction`)，包含 `THOUGHT`, `TOOL_CALL`, `STATE_MUTATION`, `PLAN_UPDATE`。
+*   **傳輸器實作 (Transports)**：
+    *   內建 `ConsoleTransport` 提供終端機標準輸出。
+    *   內建 `FileTransport` 支援非同步檔案寫入。
+*   **儲存庫抽象 (Repositories)**：
+    *   定義通用的 `IRepository` 介面，並以 `JsonFileRepository` 作為預設實作，提供標準化的檔案讀寫抽象與資料序列化。
+
+### 工作空間管理器 (WorkspaceManager)
+*   **職責**：負責 Session 工作區生命週期協調。不直接進行檔案 I/O，而是根據工作空間的類型 (VOLATILE / PERSISTENT) 動態加載對應的 StorageDriver，將所有檔案讀寫與指令執行委託給底層的驅動者。
 *   **行為**：
-    1. **Session 獨佔 Workspace**：Workspace 由 Session 創建與持有，同一會話內的所有任務與 Agent 都操作該 Session 的唯一工作區。
-    2. **計算與儲存解耦**：去除了運行時 Container 的直接控制，只負責儲存狀態與檔案快照的變更歷史。
-    3. **分級與多驅動擴充 (Storage Drivers)**：支援本地檔案系統、Git、虛擬記憶體檔案系統 (memfs) 以及遠端 SSH 等多種儲存媒介。
+    1. **雙層工作區拓撲 (Two-Tier Workspace Topology)**：支援 Session 級別的中央倉庫與 Agent 級別的專屬隔離工作區，確保複雜多工任務間的隔離性。
+    2. **策略模式驅動 (Strategy Pattern for StorageDriver)**：依據工作區類型動態配置 `IStorageDriver`。針對 `VOLATILE` (短期/揮發性) 類型採用 `MemoryVfsStorageDriver`，而 `PERSISTENT` (長期/持久化) 類型則採用 `GitLocalStorageDriver`。
+    3. **動態工具注入 (Dynamic Tool Injection)**：透過 `loadTools()` 方法，能夠根據底層驅動的能力動態返回可用的 Agent 工具集 (例如 `ReadFileTool`、`WriteFileTool`，並在驅動支援 `supportsCommandExecution` 時動態注入 `RunBashTool`)。
+    4. **實體儲存庫 (Repositories)**：系統實作了多種針對檔案系統的實體儲存庫，包含 `FileSystemSessionRepository`、`FileSystemDataBlockRepository`、`FileSystemAgentStateRepository` 以及針對圖結構的 `JsonGraphRepository`，負責將系統業務資料安全地存入檔案系統。
 
 ---
 
-## 3. 運行時工作空間設計與擴展 (Runtime Workspace Design)
+## 工程防護機制 (Engineering Safeguards)
 
-為了實現「一個 Session 維護一個 Workspace，計算解耦，未來可擴充 Workspace」的目標，我們將 Workspace 與儲存管理器定義為以下大方向模組，並在下方標註目前待探討的細節痛點：
-
-### 3.1. SessionManager (會話管理器)
-*   **大方向職責**：
-    *   作為用戶請求的入口，建立與維護 `Session` 的生命週期。
-    *   在會話啟動時，向 `WorkspaceManager` 申請一個專屬的工作空間（Workspace），並將 `sessionId` 與 `workspaceId` 進行強綁定。
-*   **📝 待探討的細節問題 (Open Questions)**：
-    *   *GC 與存檔策略*：當 Session 結束時，對應的 Workspace 應該直接銷毀（如 VOLATILE），還是進行封存（Archived）？如何提供歷史 Session 工作區的回溯與再啟用？
-
-### 3.2. WorkspaceManager (工作空間管理器)
-*   **大方向職責**：
-    *   **雙層工作空間拓撲 (Two-Tier Workspace Topology)**：
-        1.  **Session 級別的獨立 Repo (Session-level Isolated Repo)**：在用戶主專案外（如被 gitignore 的 `workspace/<sessionId>`）執行 `git init`，做為一個全新的、空白的、**與用戶主專案 100% 物理隔離的中央共享倉庫**。
-        2.  **Agent 級別的工作樹 (Agent-level Worktrees)**：當 Session 內有多個 Agent 需要並行協作時，**在此 Session 倉庫內**，透過 `git worktree add -b <branchName> .worktrees/<agentId>` 建立子工作樹目錄，供 Agent 在 VFS/Docker 中進行無干擾開發。
-        3.  **無污染合併**：各 Agent 開發完成後，其分支會 merge 回 Session 倉庫的 `main` 分支。Session 結束後，用戶可安全地從此獨立目錄獲取產出成果。
-    *   **高階狀態管理**：提供高階事務介面（如初始化、提交變更、建立快照 Checkpoint、回滾 Rollback、合併）。
-    *   **功能性介面暴露（動態 Tool 包裝）**：對外暴露一組統一的存取讀寫（`readFile`, `writeFile`, `listFiles`）與命令執行（`runBash`）函數。這些函數在底層會自動將操作範圍限制在該 Session 工作區的相對路徑與上下文中，並在 Control Plane 層面被隱式柯里化（Curry）綁定 `sessionId`，動態包裝為 Tools 提供給 Agent 調用。
-*   **📝 已對齊的細節設計 (Aligned Designs)**：
-    *   *安全物理隔離*：徹底拋棄「在用戶主專案直接建立 git worktree」的作法，改用獨立 Git 倉庫。Agent 絕對碰不到用戶主專案。
-    *   *Git 快照事務回滾*：利用獨立倉庫的 `git commit` 與 `git reset --hard HEAD`，支援 Agent 的 Save/Load 存檔與回滾機制，消除編譯/測試失敗時的上下文污染。
-
-### 3.3. StorageDriver (儲存驅動者 - 核心擴充點)
-*   **大方向職責**：
-    *   **儲存面與管理面解耦**：定義統一的 `IStorageDriver` 介面（`init`, `readFile`, `writeFile`, `listFiles`, `executeCommand`, `commit`, `merge`, `destroy`）。
-    *   **驅動獨立化 (Standalone Drivers)**：
-        *   `MemoryVfsStorageDriver`：專注於 `memfs` 的記憶體虛擬讀寫（`VOLATILE` 模式），不支援 Shell 指令。
-        *   `GitLocalStorageDriver`：專注於本地空倉庫的 `git init` 初始化、檔案寫入與本地 Shell 指令執行。
-    *   讓 `WorkspaceManager` 根據 Session 的類型與配置動態載入對應的 StorageDriver，使控制面與底層儲存完全解耦。
-
-### 3.4. DataBlock & DataPointer (安全資料流)
-*   **大方向職責**：
-    *   作為任務間資料傳遞的媒介。
-    *   **防安全逃逸**：`DataPointer` 嚴格限制只能使用相對於 Workspace 根路徑的**相對路徑**（如 `src/index.ts`），從底層杜絕 AI 讀取宿主機敏感檔案的可能性。
-*   **📝 待探討的細節問題 (Open Questions)**：
-    *   *跨工作區的協同與共享（Cross-Workspace Collaboration）*：如果 Alice 的工作區需要參考 Bob 的工作區產出，在「資料絕對不流通」的前提下，我們該如何提供一個受控的、唯讀的「共享掛載（Shared Mount）」或「資料複製品（Data Snapshot Export）」？
-
----
-
-## 4. 工程防護機制 (Engineering Safeguards)
-
-### 4.1. 安全熔斷器 (Circuit Breaker)
-除了排程器的 Timeout 防死鎖機制外，針對 `TaskAgent` 層級設有熔斷保護：
-*   **觸發條件**：單次任務的**最大連續錯誤修補深度大於 3 層**（Depth > 3），或單一 DataBlock **鎖定解析時間過長**。
-*   **處置動作**：系統將強制切斷該 `TaskAgent` 的 PDCA 循環，拋出不可恢復之錯誤 (Fatal Error)，並直接向 `MainAgent` 進行異常回報，防止 Token 被無限消耗。
+### 安全熔斷器 (Circuit Breaker)
+除了排程器的 Timeout 防死鎖機制外，針對 TaskAgent 層級設有熔斷保護：
+*   **觸發條件**：單次任務的最大連續錯誤修補深度大於限制，或單一 DataBlock 鎖定解析時間過長。
+*   **處置動作**：系統將強制切斷循環，拋出不可恢復之錯誤 (Fatal Error)，並向 MainAgent 回報，防止 Token 被無限消耗。

@@ -2,8 +2,10 @@
 title: 會話與工作階段管理
 version: 0.1.0
 status: APPROVED
-last_updated: 2026-07-14
-related_codes: []
+last_updated: 2026-08-06
+related_codes: 
+  - ../../src/core/session/Session.ts
+  - ../../src/core/session/SessionManager.ts
 related_docs:
   - ../../ARCH.md
   - ../agent/agent.md
@@ -12,7 +14,7 @@ related_docs:
 
 # 會話與工作階段管理 (Session & Thread Management)
 
-負責系統級會話生命週期、多租戶隔離、人機協同中斷與狀態時間旅行。
+負責系統級會話生命週期、多租戶隔離、中斷與狀態時間旅行。
 
 ## 1. 核心概念
 
@@ -29,10 +31,10 @@ related_docs:
 
 *   **`ACTIVE`**：會話處於活躍狀態，Agents s 正在並發執行。
 *   **`SUSPENDED` (掛起)**：系統在優雅停機或維護時主動凍結的狀態。此時所有活躍 Agent 均已脫水（Dehydrate）寫入存檔，重啟後可透過恢復流自動還原執行。
-*   **`INTERRUPTED` (人機協同掛起)**：遭遇高危操作或資訊不足，Session 被掛起並釋放記憶體，等待外部人類（HITL）點擊「同意」或給予反饋。
+*   **`INTERRUPTED` (人機協同掛起)**：人機協同掛起中，等待外部審批或使用者反饋。
 *   **`COMPLETED`**：任務順利達成，Session 歸檔。
 *   **`FAILED`**：遭遇無法修復之嚴重錯誤、安全熔斷或工作空間毀損。
-*   **`ARCHIVED` (封存)**：Session 長期閒置，狀態與 Workspace 被寫入持久儲存（如 Git / Database），從活躍記憶體中清除。當下一次有新訊息傳入時，會自動進行「溫啟動（Warm Start）」還原。
+*   **`ARCHIVED` (封存)**：已歸檔（長期閒置，記憶體釋放，可隨時重新溫啟動）。
 
 ---
 
@@ -66,24 +68,11 @@ related_docs:
 透過 Session 機制，底層的記憶體與工作區管理將進行更精細的劃分：
 
 1.  **工作區路由**：`WorkspaceManager` 建立的目錄（實體 Git 目錄或 VFS 虛擬檔案系統）不再僅以 `agent_id` 命名，而是組織在 `{base_dir}/sessions/{sessionId}/{threadId}/` 之下，實作徹底的物理隔離。
-2.  **垃圾回收 (VFS Session GC)**：當 Session 進入 `COMPLETED` 或 `FAILED` 時，底層虛擬檔案系統中掛載在該 `sessionId` 下的所有記憶體暫存資源將會被一次性徹底銷毀，釋放伺服器記憶體。
-3.  **Token 累計與計費**：`BaseAgent` 的 `recordUsage` 可以將計量資訊回報至 Session 級別，從而實現單一 Session 或 Thread 的精準成本核算。
+2.  **Token 累計與計費**：`BaseAgent` 的 `recordUsage` 可以將計量資訊回報至 Session 級別，從而實現單一 Session 或 Thread 的精準成本核算。
 
 ---
 
-## 5. 人機協同閘道 (HITL Session Gateway)
-
-當 `BaseAgent` 的子類別（如 `TaskAgent`）需要人類確認時（例如調用高危工具）：
-
-1.  Agent 調用系統 API 發佈 `INTERRUPT` 類型的 `DataBlock`。
-2.  `SessionManager` 捕獲此事件，將該 Session 狀態變更為 `INTERRUPTED`，並呼叫 `saveState()` 將當前狀態序列化存檔，隨後釋放相關 Agent  實例。
-3.  外部 UI / API 接收到待審批通知。
-4.  人類審批通過（或提供反饋內容）後，外部系統向 `SessionManager` 送入一個 `RESUME` 訊號。
-5.  `SessionManager` 依據 `sessionId` 反序列化還原 Agents，將審批結果包裝為 `DataBlock` 塞入 Agent 收件箱，Agent 恢復 BUSY 狀態繼續運作。
-
----
-
-## 6. 系統重啟恢復流與容錯 (System Recovery Flow & Fault-Tolerance)
+## 5. 系統重啟恢復流 (System Recovery Flow)
 
 當 SuperNova Runtime 啟動引導 (`Kernel.start()`) 時，`SessionManager` 將自動執行會話恢復流程，以確保系統斷電或重啟後的自愈能力：
 
@@ -91,18 +80,12 @@ related_docs:
     `SessionManager` 掃描配置的會話儲存根目錄，讀取所有歷史 `session.json`。
 2.  **目標恢復會話篩選**：
     篩選出狀態為 `ACTIVE` 或 `SUSPENDED` 的會話資料。
-3.  **Workspace 容錯驗證 (Fault-Tolerance Policy - 方案 B)**：
-    *   **損毀會話**：若偵測到該會話的 Workspace 物理目錄遺失、損毀或發生 Git 損壞，**系統採取容錯跳過策略**：
-        *   將該會話在磁碟中的 `session.json` 狀態強制更新標記為 `FAILED`。
-        *   在系統日誌中發布 `WARNING` 級別的日誌，警告管理員該 Workspace 已毀損。
-        *   **不拋出致命例外阻礙 Boot，而是跳過該會話，繼續引導恢復其他健康的會話**，保障 Runtime 內核的全局高可用性。
-
-4.  **與儲存基礎設施解耦**：
+3.  **與儲存基礎設施解耦**：
     `SessionManager` 內部的檔案掃描與加載操作已完全委託給 `ISessionRepository` 完成，其自身不直接依賴任何本機 `fs` 或物理路徑，具備優良的單元測試隔離性。
 
 ---
 
-## 7. 資料持久化與 Repository 模式 (Data Persistence & Repository Pattern)
+## 6. 資料持久化與 Repository 模式 (Data Persistence & Repository Pattern)
 
 為了解耦高層業務控制面與底層物理檔案系統，系統引入了 **Repository（倉儲）模式**，規範了會話狀態與事件歷史的物理存檔拓撲。
 
@@ -161,3 +144,4 @@ workspace/
 *   **Repository 物理細節封裝**：
     `BaseAgent` 本身僅傳入 `sessionId` 與 `agentId` 進行狀態存取，不再涉及任何本機 `fs` 或路徑拼接代碼，完美達成了高低層依賴解耦。
 
+> 進階功能規劃（HITL 閘道、Thread 分支合併、VFS GC、會話重播）請參閱 [會話進階功能規劃](../../todo/session_advanced.md)。

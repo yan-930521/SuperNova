@@ -1,16 +1,18 @@
 ---
 title: 零信任安全防護架構
 version: 0.1.0
-status: APPROVED
-last_updated: 2026-07-14
+status: DRAFT
+last_updated: 2026-08-06
 related_codes: []
 related_docs:
-  - ../../ARCH.md
-  - ../agent/agent.md
-  - ./memory.md
+  - ../ARCH.md
+  - ../architecture/agent/agent.md
+  - ../architecture/core/memory.md
 ---
 
 # 零信任安全防護架構 (Zero-Trust Security Architecture)
+
+> **[TODO]** 本文件描述的功能完全未實現。所有安全模組（Prompt 注入防護、HITL 權限閘道、零信任架構）均待開發。
 
 本文件定義了 SuperNova 系統應對外部惡意攻擊與內部邏輯失控的資安防禦規範。系統秉持「零信任 (Zero-Trust)」原則，從資料流轉、實體執行到高階權限，實施了三層縱深防禦。
 

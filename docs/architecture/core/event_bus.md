@@ -2,12 +2,15 @@
 title: 事件總線與排程系統
 version: 0.1.0
 status: APPROVED
-last_updated: 2026-07-14
-related_codes: []
+last_updated: 2026-08-06
+related_codes: 
+  - ../../../src/core/messaging/EventBus.ts
+  - ../../../src/core/messaging/IBus.ts
+  - ../../../src/core/messaging/DataBlock.ts
+  - ../../../src/core/messaging/index.ts
 related_docs:
   - ../../ARCH.md
   - ../agent/agent.md
-  - ../agent/task.md
 ---
 
 # 事件總線與排程系統 (EventBus & Scheduler)
@@ -18,20 +21,15 @@ related_docs:
 
 ### `EventBus` (事件總線)
 *   **職責**：處理非同步通訊、訊息路由 (Message Routing) 與事件中斷喚醒機制 (Interrupt-Driven Wakeup)。
+*   **全局監聽**：支援 `subscribe('*')` 進行通配符訂閱，可用於全局監控與日誌收集，並享有完整的型別推導與安全。
 
-*   **行為**：
-    2. **TTL 監控防死鎖**：內建超時監控機制，若任務逾時，排程器將主動生成 `TimeoutError DataBlock` 並透過 `EventBus` 喚醒負責的 Agent，確保 PDCA 循環不會永久掛起。
-
----
-
-## 底層工具 API 邊界 (Tools Interface)
-系統為 `Agent` 提供以下四大狀態原語 (Tools) 作為與底層組件互動的介面：
-3.  **`query_oplog(filter_tags)`**：主動撈取歷史操作軌跡，用於 Check 階段的狀態比對。
-4.  **`patch_task_graph(modifications)`**：在 Act 階段動態增刪改已存在的任務節點與依賴關係。
+### `DataBlock` (資料載體) 與 `DataPointer` 機制
+*   所有事件與訊息的傳遞皆透過 `DataBlock` 進行封裝。
+*   **Claim Check 模式**：為了避免龐大的資料（如長文本或檔案）塞爆記憶體或事件總線，系統實現了 **Claim Check 模式**。超大 Payload 會被卸載，並轉換為輕量級的 `DataPointer` 介面（支援 FILE, VFS, CACHE, URL）。這有效分離了「控制面」與「資料面」。
 
 ---
 
-## 3. 事件總線安全與異步增強 (EventBus Security & Async Enhancements)
+## 事件總線安全與異步增強 (EventBus Security & Async Enhancements)
 
 為了支撐多用戶併發運行、避免進程因為異步錯誤崩潰，並提供高可靠的協作中樞，`EventBus` 進行了高階重構與安全增強：
 
@@ -53,17 +51,12 @@ related_docs:
 *   事件總線支援傳入 `IDeclarativeSubscriber = { sessionId, agentId }` 進行宣告式訂閱。
 *   **喚醒中樞**：當 Agent 處於持久化休眠狀態時，該訂閱會持久化保存於會話目錄下。事件觸發時，`EventBus` 會發送喚醒訊號給 `SessionManager`，推動其重組恢復該 Agent 節點並投遞事件 DataBlock。
 
-### E. 全局通配符型別安全
-*   為 `subscribe('*')` 提供了專屬的強型別簽名，保證全域 Logger、Metrics 收集器在不使用 `as any` 強轉的情況下，順利通過嚴格的 TypeScript 編譯校驗。
-
-### F. 全局事件對映表 (GlobalEventMap) 與泛型推導
-*   為保證編譯期的極致型別安全，引入了 `GlobalEventMap` 模式，將所有 `SystemEvent`, `HookEvent`, 與 `AgentEvent` 與其專屬的 Payload 型別（如 `DataBlock`）綁定。
+### E. 全局事件對映表 (GlobalEventMap) 與泛型推導
+*   為保證編譯期的極致型別安全，引入了 `GlobalEventMap` 模式，將所有 `SystemEvent`, `HookEvent`, 與 `AgentEvent` 與其專屬的 Payload 型別綁定。這構成了 `IBus` 的完整泛型型別系統。
 *   發佈或訂閱事件時，只需傳入事件型別 (Type)，TypeScript 會自動推導並鎖定 `event.payload` 的型別，徹底消除了不安全的型別強轉 (Type Assertion)，保障執行期安全。
 
-### G. 預定義事件分類與標籤 (Predefined Event Types & Labels)
-為了提高型別安全性與程式碼可讀性，系統將事件劃分為兩大列舉：
-1. **`SystemEvent` (系統事件)**：描述全域或 Session 級別的宏觀生命週期變化（如 Session 啟動/關閉、Task 最終完成/失敗、系統 Tick 等）。
-2. **`HookEvent` (鉤子事件)**：描述 Agent、Task、Tool 在執行生命週期中的細粒度切面監聽點（Before / After / Error 鉤子）。
+### F. 預定義事件分類與標籤 (Predefined Event Types & Labels)
+為了提高型別安全性與程式碼可讀性，系統將事件劃分為三大列舉：
 
 #### 預定義事件一覽表
 
@@ -72,13 +65,24 @@ related_docs:
 | **SystemEvent** | `SESSION_STARTED` | 新 Session 被成功建立並啟動時 |
 | | `SESSION_CLOSED` | Session 被關閉或銷毀時 |
 | | `SESSION_UPDATED` | Session 配置或狀態更新時 |
+| | `SESSION_OPTIMIZATION` | 觸發 Session 記憶與狀態優化時 |
 | | `TASK_CREATED` | 新任務被註冊到排程器時 |
 | | `TASK_FINISHED` | 任務成功執行完畢時 |
 | | `TASK_FAILED` | 任務執行失敗或逾時時 |
 | | `SYSTEM_TICK` | 系統運行時心跳信號 |
+| **HookEvent** | `BEFORE_TOOL_CALL` | 工具即將執行前 |
 | | `AFTER_TOOL_CALL` | 工具成功執行並返還結果時 |
 | | `ON_TOOL_ERROR` | 工具呼叫失敗並拋出異常時 |
 | | `BEFORE_AGENT_STEP` | Agent 即將進入單步決策循環（PDCA）前 |
 | | `AFTER_AGENT_STEP` | Agent 完成單步決策並更新狀態後 |
 | | `ON_AGENT_ERROR` | Agent 內部決策或執行發生未捕獲錯誤時 |
+| | `BEFORE_TASK_EXECUTE` | 任務即將開始執行前 |
 | | `AFTER_TASK_EXECUTE` | 任務執行成功且結果已寫入快取時 |
+| | `ON_TASK_ERROR` | 任務執行發生錯誤時 |
+| **AgentEvent** | `AGENT_MESSAGE` | Agent 之間或與用戶傳遞訊息時 |
+| | `AGENT_STATE_CHANGED` | Agent 內部狀態發生轉換時 |
+| | `WORLD_UPDATED` | Agent 的世界觀認知更新時 |
+| | `EMOTION_TRIGGERED` | 觸發內部情緒變化時 |
+| | `PROJECTION_TOGGLED` | 啟用或關閉意識投影控制時 |
+
+> 進階功能規劃（TTL 監控、工具 API、事件優先級、重播、背壓控制）請參閱 [EventBus 進階功能規劃](../../todo/event_bus_advanced.md)。
