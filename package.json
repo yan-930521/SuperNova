@@ -10,12 +10,15 @@
     "demo": "bun ./demo/v0.1.0.ts",
     "demo:minecraft": "bun ./src/package/underworld/index.ts",
     "test:batch": "bun ./demo/batch_test.ts",
-    "test:reasoning": "bun ./demo/test_reasoning.ts"
+    "test:reasoning": "bun ./demo/test_reasoning.ts",
+    "bench:core": "bun ./demo/benchmark.ts",
+    "bench:oom": "bun ./demo/benchmark_oom.ts"
   },
   "devDependencies": {
     "@types/bun": "^1.3.14",
     "@types/uuid": "^9.0.8",
     "bun-types": "^1.3.14",
+    "mitata": "^1.0.34",
     "typescript": "^5.9.3"
   },
   "dependencies": {
