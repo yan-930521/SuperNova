@@ -48,4 +48,8 @@ Please generate a Markdown formatted summary that includes:
 3. **User Preferences & Context**: Did the user express any new preferences, rules, or architectural directions?
 4. **Unresolved Issues / Next Steps**: What is left to do?
 
+⚠️ STRICT RULES:
+- DO NOT summarize the AI's own identity, persona, roleplay settings, or emotional states. The AI already knows who it is from its core profile.
+- Focus ONLY on the User, the User's context, the tasks discussed, and the real-world events or concepts mentioned.
+
 Keep the summary concise, professional, and well-structured using Markdown.`;
