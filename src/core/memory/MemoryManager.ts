@@ -290,57 +290,62 @@ export class MemoryManager implements ILifecycle {
             this.logger.debug(`[MemoryManager] Extracting factual graph triples for session ${sessionId} (${agentId}) batch ${i / BATCH_SIZE + 1}...`);
             const graphResult = await graphChain.invoke({ conversation: dialogue });
 
-            if (!graphResult.triple_list || graphResult.triple_list.length === 0) {
-                this.logger.debug(`[MemoryManager] No factual triples extracted in this batch.`);
+            if (!graphResult.entities || graphResult.entities.length === 0) {
+                this.logger.debug(`[MemoryManager] No entities extracted in this batch.`);
                 await this.markBlocksAsExtracted(sessionId, agentId, blocks, batchBlocks);
                 continue;
             }
 
-            this.logger.debug(`[MemoryManager] Successfully extracted ${graphResult.triple_list.length} factual triples.`);
+            this.logger.debug(`[MemoryManager] Successfully extracted ${graphResult.entities.length} entities and ${graphResult.relations?.length || 0} relations.`);
 
             // ==========================================
             // 2. 第二階段：沉澱至圖譜資料庫 (Graph Repository)
             // ==========================================
-            for (const triple of graphResult.triple_list) {
-                const sourceEntityId = `Entity:${triple.subject.trim().replace(/\s+/g, '_')}`;
-                const targetEntityId = `Entity:${triple.object.trim().replace(/\s+/g, '_')}`;
-
-                let sourceNode = await this.graphRepo.getNode(sessionId, sourceEntityId);
-                if (!sourceNode) {
-                    sourceNode = {
-                        id: sourceEntityId,
-                        label: "Entity",
-                        memory: triple.subject,
-                        properties: {},
+            
+            // 先儲存所有實體節點 (Nodes)
+            for (const entity of graphResult.entities) {
+                const nodeId = `Entity:${entity.id.trim().replace(/\s+/g, '_')}`;
+                
+                let node = await this.graphRepo.getNode(sessionId, nodeId);
+                if (!node) {
+                    this.logger.debug(`[MemoryManager] Generating embedding for new node: ${entity.id}`);
+                    // 將 description 加入記憶體文本，增加向量比對的語意豐富度
+                    const memoryText = `${entity.id}: ${entity.description}`;
+                    const embedding = await this.llmProvider.generateEmbeddings(memoryText);
+                    
+                    node = {
+                        id: nodeId,
+                        label: entity.type || "Entity",
+                        memory: memoryText,
+                        embedding,
+                        properties: { original_id: entity.id, description: entity.description },
                         createdAt: Date.now(),
                         updatedAt: Date.now()
                     };
-                    await this.graphRepo.addNode(sessionId, sourceNode);
+                    await this.graphRepo.addNode(sessionId, node);
+                } else {
+                    // 若存在則可以選擇是否更新 properties/description
+                    // 這裡暫時維持原樣不覆蓋
                 }
+            }
 
-                let targetNode = await this.graphRepo.getNode(sessionId, targetEntityId);
-                if (!targetNode) {
-                    targetNode = {
-                        id: targetEntityId,
-                        label: "Entity",
-                        memory: triple.object,
-                        properties: {},
+            // 再儲存關係邊 (Edges)
+            if (graphResult.relations) {
+                for (const relation of graphResult.relations) {
+                    const sourceNodeId = `Entity:${relation.sourceEntityId.trim().replace(/\s+/g, '_')}`;
+                    const targetNodeId = `Entity:${relation.targetEntityId.trim().replace(/\s+/g, '_')}`;
+                    
+                    const edge: GraphEdge = {
+                        id: IdGenerator.graphEdge(),
+                        sourceId: sourceNodeId,
+                        targetId: targetNodeId,
+                        relation: relation.predicate,
+                        properties: { sourceContext: relation.sourceContext },
                         createdAt: Date.now(),
                         updatedAt: Date.now()
                     };
-                    await this.graphRepo.addNode(sessionId, targetNode);
+                    await this.graphRepo.addEdge(sessionId, edge);
                 }
-
-                const edge: GraphEdge = {
-                    id: IdGenerator.graphEdge(),
-                    sourceId: sourceEntityId,
-                    targetId: targetEntityId,
-                    relation: triple.predicate,
-                    properties: { sourceContext: triple.sourceContext },
-                    createdAt: Date.now(),
-                    updatedAt: Date.now()
-                };
-                await this.graphRepo.addEdge(sessionId, edge);
             }
 
             await this.markBlocksAsExtracted(sessionId, agentId, blocks, batchBlocks);
