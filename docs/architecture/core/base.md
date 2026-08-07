@@ -30,7 +30,7 @@ related_docs:
 
 ## 2. 依賴注入容器 (DI Container - `src/core/container/`)
 *   **`ComponentContainer.ts`**：實作了控制反轉 (IoC) 的依賴注入容器。
-    *   **職責**：負責註冊、解析並管理系統中各個核心單例組件（如 `LogManager`, `EventBus`），徹底解除組件間的硬編碼耦合。
+    *   **職責**：負責註冊、解析並管理系統中各個核心單例組件（如 `LogManager`, `EventBus` 等），徹底解除組件間的硬編碼耦合。
     *   **擴展性**：這是未來實作 `EmbodiedAgent` 動態注入不同 `Body` 與 `ActionTools` 模組的最底層依據。
 
 ## 3. 生命週期管理 (Lifecycle - `src/core/lifecycle/`)

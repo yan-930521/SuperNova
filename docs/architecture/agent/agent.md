@@ -26,7 +26,7 @@ related_docs:
 *   **型態與擴展性聲明**：實體強制聲明其 `type: AgentType` (如 MAIN, TASK, EMBODIED 等)，以便系統進行正確的生命週期管理與路由。
 
 *   **純粹的生命週期管理**：專注於系統資源與執行狀態管理。定義 `AgentState` 枚舉 (`INITIALIZING`, `IDLE`, `BUSY`, `SUSPENDED`, `TERMINATED`, `PROJECTING`)。系統設計有嚴謹的狀態遷移，例如 `setReady()` 方法由 `AgentManager` 明確標記初始化完成並切換至 `IDLE`。提供 `suspend()`, `resume()`, `destroy()` 狀態控制與資源清理介面。
-*   **純粹的狀態匯出與匯入 (解耦)**：`BaseAgent` **不注入**任何 Repository。它只提供 `serialize(): BaseAgentData` 與 `hydrate(data)` 介面，將自身的狀態（包含 Token 消耗、狀態機、**結構化身份設定 Profile**）打包，真正的持久化由外部的 `AgentManager` 負責調度。
+*   **純粹的狀態匯出與匯入 (解耦)**：`BaseAgent` **不注入**任何 Repository。它只提供 `serialize(): BaseAgentData` 與 `hydrate(data)` 介面，將自身的狀態（包含 Token 消耗、狀態機、**結構化身份設定 Profile**、允許工具清單 `allowedTools`）打包，真正的持久化由外部的 `AgentManager` 負責調度。
 *   **結構化大腦設定 (AgentProfile JSON)**：Agent 的核心提示詞不是一段死板的字串，而是一個嚴謹的 JSON 結構 (包含 `roleName`, `objectives`, `constraints`, `contextData` 等)。這讓 Agent 能在執行過程中透過程式化方式動態更新認知，且完美支援脫水序列化。
 *   **資源消耗追蹤**：內部維護 `UsageStats` (Token 與執行時間等消耗)，提供 `recordUsage` 讓子類別回報並具備安全閾值告警機制。
 
@@ -58,11 +58,13 @@ related_docs:
 ## 2.5 AgentManager (代理人管理器)
 為了落實領域驅動設計 (DDD)，將實體與儲存設施解耦，系統引入 `AgentManager` 負責統籌 Agent 的存活與狀態快照。
 
-*   **實例與依賴**：注入 `IAgentStateRepository` 與 `IEventBus`。內部維護 `activeAgents: Map<string, BaseAgent>` 作為活躍池。
+*   **實例與依賴**：注入 `IAgentStateRepository` 與 `IEventBus`。內部維護 `activeAgents: Map<string, BaseAgent>` 作為活躍池，並實例化內部的 `ToolRegistry` 提供工具註冊與索取。
 *   **靜態實例化 (Static Instantiation)**：不再依賴手動註冊工廠，而是直接於頂層引入 `MainAgent`, `TaskAgent`, `EmbodiedAgent`，根據 `AgentType` 透過 `switch` 判斷並直接 `new` 初始化。架構單純且具備強型別檢查優勢。
+*   **動態工具分配 (Dynamic Tool Delegation)**：`spawnAgent` 與 `rehydrate` 時支援傳入或載入 `allowedTools: string[]`。Agent 會依據此清單向內部的 `ToolRegistry` 索取對應的無狀態工具單例。
+*   **控制權反轉 (Tool Control)**：特定工具 (如 `SpawnAgentTool`, `TerminateSelfTool`) 可直接由 `ToolRegistry` 注入 `AgentManager` 控制權，不再侷限於 EventBus 事件驅動。
 *   **脫水與喚醒 (Dehydrate & Rehydrate)**：
-    *   `dehydrate(agentId)`：從活躍池取出 Agent，呼叫 `serialize()` 取得狀態快照並交由 Repository 存檔，隨後銷毀實體並釋放記憶體。
-    *   `rehydrate(agentId)`：從 Repository 載入狀態，經由 Factory 實例化，並呼叫 `hydrate(data)` 恢復狀態，最後加回活躍池。
+    *   `dehydrate(agentId)`：從活躍池取出 Agent，呼叫 `serialize()` 取得狀態快照（包含 `allowedTools`）並交由 Repository 存檔，隨後銷毀實體並釋放記憶體。
+    *   `rehydrate(agentId)`：從 Repository 載入狀態，經由 Factory 實例化，並呼叫 `hydrate(data)` 恢復狀態，透過 `ToolRegistry` 重建工具綁定，最後加回活躍池。
 
 ---
 

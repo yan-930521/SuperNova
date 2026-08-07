@@ -20,7 +20,7 @@ related_docs:
 
 ## 1. 代理層與執行層 (Agent & Execution Layer)
 *   [Agent 系統設計 (docs/architecture/agent/agent.md)](./architecture/agent/agent.md)：引入**雙腦意識架構 (Dual-Brain Consciousness)**。包含 `MainAgent` 作為具備 OCC 情緒引擎 (Emotion Engine) 的情感感知中樞，以及 `TaskAgent` 作為專注 IDE 邏輯與任務執行的左腦，和 `EmbodiedAgent` 作為專注 3D 空間與 CLI 操作的右腦。包含 `BaseAgent` 基礎設施、**PromptSectionIndex 渲染機制**、意識投影 (Consciousness Projection)、時間感知插針 (Temporal Injection) 與生命週期管理。
-*   [工具系統設計 (`docs/architecture/agent/tool.md`)](./architecture/agent/tool.md)：定義 `BaseTool` 抽象基底、強型別參數驗證 (Zod) 與執行上下文 (ToolContext)。包含內建工具列表 (`SendMessageTool`, `ToggleProjectionTool`, `ReadBlobTool`, `ReadFileTool`, `WriteFileTool`, `ListFilesTool`, `RunBashTool`)，以及「工具負責做事，大腦負責記憶與廣播」的職責分離機制。
+*   [工具系統設計 (`docs/architecture/agent/tool.md`)](./architecture/agent/tool.md)：定義 `BaseTool` 抽象基底、強型別參數驗證 (Zod) 與執行上下文 (ToolContext)。包含全域工具註冊表 (ToolRegistry)、無狀態工具設計與內建工具列表 (`SendMessageTool`, `ToggleProjectionTool`, `ReadBlobTool`, `ReadFileTool`, `WriteFileTool`, `ListFilesTool`, `RunBashTool`)，以及「工具負責做事，大腦負責記憶與廣播」的職責分離機制。
 
 ## 2. 調度與事件層 (Scheduling & Event Layer)
 *   [EventBus (`docs/architecture/core/event_bus.md`)](./architecture/core/event_bus.md)：包含 `EventBus` (會話安全隔離、publishAsync 異步等待與宣告式訂閱)、**事件分類規範** (SystemEvent、HookEvent、AgentEvent)、`GlobalEventMap` 泛型推導與 `DataPointer` 資料指標機制。

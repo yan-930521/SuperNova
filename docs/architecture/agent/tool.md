@@ -28,13 +28,14 @@ related_docs:
 *   **LLM 框架解耦 (Adapter Pattern)**：
     `BaseTool` 本身是領域層的實體，完全不依賴特定 LLM 提供商。但它內建了 `toLangChainTool()` 轉譯方法，可以將自身動態打包為 `@langchain/core/tools` 相容的 `DynamicStructuredTool`。若未來更換框架，僅需修改此橋接方法。
 
-## 2. 工具掛載場景 (Capability Provider Pattern)
+## 2. 工具掛載與無狀態化 (Stateless Tools & Registry)
 
-系統採用 **Capability Provider (能力提供者)** 設計模式。Agent 本身預設不帶任何環境互動工具，而是向其所處的環境請求可用工具。
+系統採用全域註冊表與無狀態工具設計：
 
-### A. 檔案與系統操作工具 (由 `WorkspaceManager` 提供)
-*   **掛載機制**：`WorkspaceManager` 提供 `loadTools(sessionId, agentId)` 介面。根據需求動態實例化並回傳對應的 `BaseTool[]`。
-*   **優勢**：工具內部實作直接呼叫 `WorkspaceManager` 的私有或受保護方法，並透過閉包 (Closure) 綁定 `sessionId` 與 `agentId`，Agent 執行時完全不需要處理路徑。
+*   **無狀態化 (Stateless)**：工具實體本身不保存 `sessionId` 或 `agentId`。執行時的環境與會話資訊完全由 `ToolContext` 傳入。
+*   **全域工具註冊表 (ToolRegistry)**：
+    *   系統啟動時，會實例化單一的 `ToolRegistry` 並註冊所有可用的 `BaseTool`（包含工作區與代理人工具）。
+    *   Agent 透過 `allowedTools` 字串陣列向 `ToolRegistry` 請求所需的工具實例參考。這使得工具的分配具備極高的動態性與可配置性。
 
 ## 3. 執行資料流 (Data Flow)
 
