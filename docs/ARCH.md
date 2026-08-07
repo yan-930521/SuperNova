@@ -43,8 +43,7 @@ related_docs:
 ## 6. 目錄架構與依賴邊界 (Directory Structure & Boundaries)
 系統程式碼嚴格劃分基礎設施與業務邏輯的邊界：
 *   **`src/core/` (核心與基礎設施層)**：包含底層通用組件與內核骨架（如 `EventBus`、`DataBlock`、`LogManager`、以及核心的 `BaseAgent`、`MainAgent`、`TaskAgent`、`EmbodiedAgent` 等大腦實體，還有負責統籌的 `AgentManager`）。`core` 目錄下的所有對外公開模組已統一透過 `src/core/index.ts` 匯出 (Export Boundary)。
-*   **`src/package/` (業務擴充與外掛層)**：包含特定領域的延伸應用與自訂邏輯（如 `underworld` Minecraft 整合、`server` WebSocket 伺服器介接）。業務邏輯層**必須**透過 `src/core/index.ts` 引用內核與核心大腦，嚴禁繞過 index 進行深層耦合。
-*   **`web/` (前端展示層)**：請參閱 [Web UI 與 WebSocket 伺服器整合架構 (`docs/architecture/webui.md`)](./architecture/webui.md)。基於 React/Vite 的獨立前端，透過 `src/package/server` 提供之 WebSocket / REST API 與核心引擎雙向通訊，達成狀態監控與對話渲染。
+*   **`src/package/` (業務擴充與外掛層)**：包含特定領域的延伸應用與自訂邏輯（如 `underworld` Minecraft 整合）。業務邏輯層**必須**透過 `src/core/index.ts` 引用內核與核心大腦，嚴禁繞過 index 進行深層耦合。
 
 ---
 
