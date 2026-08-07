@@ -20,7 +20,7 @@ import { MemoryVfsStorageDriver } from './storagedriver/MemoryVfsStorageDriver';
  * 將所有檔案讀寫與指令執行委託給底層的驅動者。
  */
 export class WorkspaceManager implements IWorkspaceManager, ILifecycle {
-    // 一個 Session 唯一共享一個儲存驅動器實例，Key 為 sessionId
+    // 每個 Agent 綁定自己的儲存驅動器實例，Key 為 agentId
     private activeDrivers: Map<string, IStorageDriver> = new Map();
 
     constructor(
@@ -71,7 +71,7 @@ export class WorkspaceManager implements IWorkspaceManager, ILifecycle {
         agentId: string = sessionId,
         type: WorkspaceType = 'PERSISTENT'
     ): Promise<string> {
-        let driver = this.activeDrivers.get(sessionId);
+        let driver = this.activeDrivers.get(agentId);
 
         if (!driver) {
             // 依據工作區類型，動態配置策略驅動實例 (Strategy Pattern)
@@ -79,7 +79,7 @@ export class WorkspaceManager implements IWorkspaceManager, ILifecycle {
                 type === 'VOLATILE'
                     ? new MemoryVfsStorageDriver()
                     : new GitLocalStorageDriver(this.basePersistentPath);
-            this.activeDrivers.set(sessionId, driver);
+            this.activeDrivers.set(agentId, driver);
         }
 
         return driver.init(sessionId, agentId, type);
@@ -89,7 +89,7 @@ export class WorkspaceManager implements IWorkspaceManager, ILifecycle {
      * 提交工作區變更 (委託給特定驅動)
      */
     public async commitChanges(sessionId: string, agentId: string, message: string): Promise<void> {
-        const driver = this.getRequiredDriver(sessionId);
+        const driver = this.getRequiredDriver(agentId);
         await driver.commit(sessionId, agentId, message);
     }
 
@@ -100,7 +100,7 @@ export class WorkspaceManager implements IWorkspaceManager, ILifecycle {
         sessionId: string,
         agentId: string
     ): Promise<{ success: boolean; conflictDetails?: string; ciLogs?: string }> {
-        const driver = this.getRequiredDriver(sessionId);
+        const driver = this.getRequiredDriver(agentId);
         const result = await driver.merge(sessionId, agentId);
         return {
             success: result.success,
@@ -113,16 +113,13 @@ export class WorkspaceManager implements IWorkspaceManager, ILifecycle {
      * 銷毀工作區
      */
     public async destroyWorkspace(sessionId: string, agentId: string): Promise<void> {
-        const driver = this.activeDrivers.get(sessionId);
+        const driver = this.activeDrivers.get(agentId);
         if (!driver) return;
 
         try {
             await driver.destroy(sessionId, agentId);
         } finally {
-            // 如果銷毀的是 Session 根，則清除該驅動記錄
-            if (agentId === sessionId) {
-                this.activeDrivers.delete(sessionId);
-            }
+            this.activeDrivers.delete(agentId);
         }
     }
 
@@ -130,7 +127,7 @@ export class WorkspaceManager implements IWorkspaceManager, ILifecycle {
      * 讀取檔案
      */
     public async readFile(sessionId: string, agentId: string, relativePath: string): Promise<string> {
-        const driver = this.getRequiredDriver(sessionId);
+        const driver = this.getRequiredDriver(agentId);
         return driver.readFile(sessionId, agentId, relativePath);
     }
 
@@ -147,7 +144,7 @@ export class WorkspaceManager implements IWorkspaceManager, ILifecycle {
      * 寫入檔案
      */
     public async writeFile(sessionId: string, agentId: string, relativePath: string, content: string): Promise<void> {
-        const driver = this.getRequiredDriver(sessionId);
+        const driver = this.getRequiredDriver(agentId);
         await driver.writeFile(sessionId, agentId, relativePath, content);
     }
 
@@ -155,7 +152,7 @@ export class WorkspaceManager implements IWorkspaceManager, ILifecycle {
      * 列出檔案列表
      */
     public async listFiles(sessionId: string, agentId: string, relativePath?: string): Promise<string[]> {
-        const driver = this.getRequiredDriver(sessionId);
+        const driver = this.getRequiredDriver(agentId);
         return driver.listFiles(sessionId, agentId, relativePath);
     }
 
@@ -168,36 +165,18 @@ export class WorkspaceManager implements IWorkspaceManager, ILifecycle {
         command: string,
         options?: { timeoutMs?: number }
     ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-        const driver = this.getRequiredDriver(sessionId);
+        const driver = this.getRequiredDriver(agentId);
         return driver.executeCommand(sessionId, agentId, command, options);
     }
 
     /**
      * 內部輔助方法：獲取與 Session 綁定的儲存驅動
      */
-    private getRequiredDriver(sessionId: string): IStorageDriver {
-        const driver = this.activeDrivers.get(sessionId);
+    private getRequiredDriver(agentId: string): IStorageDriver {
+        const driver = this.activeDrivers.get(agentId);
         if (!driver) {
-            throw new Error(`[WorkspaceManager] Storage driver for session ${sessionId} not initialized.`);
+            throw new Error(`[WorkspaceManager] Storage driver for agent ${agentId} not initialized.`);
         }
         return driver;
-    }
-
-    public loadTools(sessionId: string, agentId: string): BaseTool[] {
-        const driver = this.getRequiredDriver(sessionId);
-
-        const tools: BaseTool[] = [
-            new ReadFileTool(this, sessionId, agentId),
-            new WriteFileTool(this, sessionId, agentId),
-            new ListFilesTool(this, sessionId, agentId),
-            new ReadBlobTool(this, sessionId)
-        ];
-
-        // 根據底層驅動能力，動態注入 Bash 工具
-        if (driver.supportsCommandExecution) {
-            tools.push(new RunBashTool(this, sessionId, agentId));
-        }
-
-        return tools;
     }
 }
