@@ -7,7 +7,9 @@ import { GraphEdge, GraphNode, IGraphRepository } from '../infra/persistence/IGr
 import { IDataBlockRepository } from '../infra/persistence/IRepository';
 import { ILifecycle } from '../lifecycle/ILifecycle';
 import { DataBlock } from '../messaging/DataBlock';
-import { AgentEvent, HookEvent, IEvent, IEventBus, SystemEvent } from '../messaging/IBus';
+import {
+    AgentEvent, HookEvent, IEvent, IEventBus, PromptSectionIndex, SystemEvent
+} from '../messaging/IBus';
 import { IdGenerator } from '../utils/IdGenerator';
 import { GRAPH_EXTRACTOR_PROMPT, GRAPH_EXTRACTOR_TYPE, SESSION_SUMMARY_PROMPT } from './prompt';
 
@@ -151,29 +153,36 @@ export class MemoryManager implements ILifecycle {
             // 產生 Query 的向量
             const queryEmbedding = await this.llmProvider.generateEmbeddings(queryText);
 
-            // 在 Repository 中尋找最相近的 N 個節點
-            const topNodes = await this.graphRepo.searchNodesByVector(event.sessionId || "global", queryEmbedding, 5);
+            // 在 Repository 中尋找最相近的 TopK 節點並向外擴展深度為 2 的子圖
+            const graphContext = await this.graphRepo.searchGraphContext(event.sessionId || "global", queryEmbedding, 5, 2);
             
-            if (topNodes && topNodes.length > 0) {
+            if (graphContext && graphContext.nodes.length > 0) {
                 // 將檢索出的節點轉為文字格式注入 System Prompt
                 let memoryContext = "## RETRIEVED GRAPH MEMORY CONTEXT\n";
                 memoryContext += "Based on your current input, the following related entities and concepts were retrieved from your long-term memory:\n\n";
 
-                topNodes.forEach((node, index) => {
-                    memoryContext += `- [${node.type}] ${node.id}: ${node.description}\n`;
+                memoryContext += "### Entities:\n";
+                graphContext.nodes.forEach((node) => {
+                    memoryContext += `- [${node.label}] ${node.id}: ${node.memory}\n`;
                 });
+
+                if (graphContext.edges.length > 0) {
+                    memoryContext += "\n### Relations:\n";
+                    graphContext.edges.forEach((edge) => {
+                        memoryContext += `- ${edge.sourceId} --[${edge.relation}]--> ${edge.targetId}\n`;
+                    });
+                }
 
                 if (!context.injectedPrompts) {
                     context.injectedPrompts = [];
                 }
                 
-                // 這裡需要匯入 PromptSectionIndex.MEMORY_CONTEXT，或直接用 7
                 context.injectedPrompts.push({
-                    index: 7, // PromptSectionIndex.MEMORY_CONTEXT
+                    index: PromptSectionIndex.MEMORY_CONTEXT,
                     content: memoryContext
                 });
                 
-                this.logger.info(`[MemoryManager] Injected ${topNodes.length} graph memory nodes for context retrieval.`);
+                this.logger.info(`[MemoryManager] Injected ${graphContext.nodes.length} graph memory nodes and ${graphContext.edges.length} edges for context retrieval.`);
             }
         } catch (err: any) {
             this.logger.error(`[MemoryManager] Failed to retrieve dynamic context: ${err.message}`);

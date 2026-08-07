@@ -242,4 +242,28 @@ export class JsonGraphRepository implements IGraphRepository {
 
         return { nodes, edges };
     }
+
+    async searchGraphContext(sessionId: string, vector: number[], topK: number = 5, depth: number = 1): Promise<{ nodes: GraphNode[]; edges: GraphEdge[]; }> {
+        // 先找出 TopK 相關的最核心節點
+        const rootNodes = await this.searchNodesByVector(sessionId, vector, topK);
+        
+        const allNodes = new Map<string, GraphNode>();
+        const allEdges = new Map<string, GraphEdge>();
+
+        // 將每一個核心節點作為起點，向外擴展 depth 層的 subgraph
+        for (const root of rootNodes) {
+            const subgraph = await this.getSubgraph(sessionId, root.id, depth);
+            for (const n of subgraph.nodes) {
+                allNodes.set(n.id, n);
+            }
+            for (const e of subgraph.edges) {
+                allEdges.set(e.id, e);
+            }
+        }
+
+        return {
+            nodes: Array.from(allNodes.values()),
+            edges: Array.from(allEdges.values())
+        };
+    }
 }

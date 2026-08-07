@@ -58,4 +58,13 @@ export interface IGraphRepository extends IRepository<GraphNode> {
         nodes: GraphNode[];
         edges: GraphEdge[];
     }>;
+
+    /**
+     * 檢索並擴展圖譜 (Search & Expand)
+     * 先透過向量搜尋出 Top K 節點，再以這些節點為起點向外擴展深度為 depth 的子圖。
+     */
+    searchGraphContext(sessionId: string, vector: number[], topK?: number, depth?: number): Promise<{
+        nodes: GraphNode[];
+        edges: GraphEdge[];
+    }>;
 }
