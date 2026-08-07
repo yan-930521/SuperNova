@@ -137,75 +137,78 @@ export class MemoryManager implements ILifecycle {
      * 利用 cosine similarity 找出圖譜中與當前對話最相關的節點並注入 Prompt。
      */
     private async handleBeforeAgentStep(event: IEvent<HookEvent.BeforeAgentStep>): Promise<void> {
-        if (!this.config.agent.enable_graph_memory) return;
-
         const context = event.payload;
-        if (!context || !context.currentMessages || context.currentMessages.length === 0) return;
+        if (!context) return;
 
         try {
-            // 找出最後一筆用戶或系統輸入作為檢索用的 Query
-            const lastMsg = context.currentMessages[context.currentMessages.length - 1];
-            let queryText = lastMsg.toMarkdown();
+            // ==========================================
+            // 1. Graph Memory 檢索與注入 (若開啟)
+            // ==========================================
+            if (this.config.agent.enable_graph_memory && context.currentMessages && context.currentMessages.length > 0) {
+                // 找出最後一筆用戶或系統輸入作為檢索用的 Query
+                const lastMsg = context.currentMessages[context.currentMessages.length - 1];
+                let queryText = lastMsg.toMarkdown();
 
-            // 若長度不足或為空，可以考慮不檢索，或結合歷史
-            if (queryText.length < 3) return;
+                // 若長度不足或為空，可以考慮不檢索，或結合歷史
+                if (queryText.length >= 3) {
+                    // 產生 Query 的向量
+                    const queryEmbedding = await this.llmProvider.generateEmbeddings(queryText);
 
-            // 產生 Query 的向量
-            const queryEmbedding = await this.llmProvider.generateEmbeddings(queryText);
+                    // 在 Repository 中尋找最相近的 TopK 節點並向外擴展深度為 1 的子圖
+                    const graphContext = await this.graphRepo.searchGraphContext(event.sessionId || "global", queryEmbedding, 5, 1);
+                    
+                    if (graphContext && graphContext.nodes.length > 0) {
+                        let memoryContext = "## RETRIEVED GRAPH MEMORY CONTEXT\n";
+                        memoryContext += "Based on your current input, the following related entities and concepts were retrieved from your long-term memory:\n\n";
 
-            // 在 Repository 中尋找最相近的 TopK 節點並向外擴展深度為 2 的子圖
-            const graphContext = await this.graphRepo.searchGraphContext(event.sessionId || "global", queryEmbedding, 5, 2);
+                        memoryContext += "### Entities:\n";
+                        graphContext.nodes.forEach((node) => {
+                            memoryContext += `- [${node.label}] ${node.id}: ${node.memory}\n`;
+                        });
 
-            if (graphContext && graphContext.nodes.length > 0) {
-                // 將檢索出的節點轉為文字格式注入 System Prompt
-                let memoryContext = "## RETRIEVED GRAPH MEMORY CONTEXT\n";
-                memoryContext += "Based on your current input, the following related entities and concepts were retrieved from your long-term memory:\n\n";
+                        if (graphContext.edges.length > 0) {
+                            memoryContext += "\n### Relations:\n";
+                            graphContext.edges.forEach((edge) => {
+                                memoryContext += `- ${edge.sourceId} --[${edge.relation}]--> ${edge.targetId}\n`;
+                            });
+                        }
 
-                memoryContext += "### Entities:\n";
-                graphContext.nodes.forEach((node) => {
-                    memoryContext += `- [${node.label}] ${node.id}: ${node.memory}\n`;
-                });
-
-                if (graphContext.edges.length > 0) {
-                    memoryContext += "\n### Relations:\n";
-                    graphContext.edges.forEach((edge) => {
-                        memoryContext += `- ${edge.sourceId} --[${edge.relation}]--> ${edge.targetId}\n`;
-                    });
+                        if (!context.injectedPrompts) context.injectedPrompts = [];
+                        
+                        context.injectedPrompts.push({
+                            index: PromptSectionIndex.MEMORY_CONTEXT,
+                            content: memoryContext
+                        });
+                        
+                        this.logger.info(`[MemoryManager] Injected ${graphContext.nodes.length} graph memory nodes and ${graphContext.edges.length} edges for context retrieval.`);
+                    }
                 }
-
-                if (!context.injectedPrompts) {
-                    context.injectedPrompts = [];
-                }
-
-                context.injectedPrompts.push({
-                    index: PromptSectionIndex.MEMORY_CONTEXT,
-                    content: memoryContext
-                });
-
-                this.logger.info(`[MemoryManager] Injected ${graphContext.nodes.length} graph memory nodes and ${graphContext.edges.length} edges for context retrieval.`);
             }
 
-            // 讀取近期 (最近 3 天) 的每日總結 (Episodic Memory)
-            const recentSummaries = await this.dataBlockRepo.getRecentSummaries(event.sessionId || "global", context.agentId || "main", 3);
-            
-            if (recentSummaries && recentSummaries.length > 0) {
-                let episodicContext = "## RECENT EPISODIC MEMORIES (SESSION SUMMARIES)\n";
-                episodicContext += "Here is a summary of the most recent sessions you had with the user. Use this context to maintain continuity in your interactions:\n\n";
-
-                recentSummaries.forEach((summary, i) => {
-                    episodicContext += `### Session -${recentSummaries.length - i} Days:\n${summary}\n\n`;
-                });
-
-                if (!context.injectedPrompts) {
-                    context.injectedPrompts = [];
-                }
+            // ==========================================
+            // 2. Episodic Memory (每日總結) 檢索與注入 (若開啟)
+            // ==========================================
+            if (this.config.agent.enable_daily_summary) {
+                // 讀取近期 (最近 3 天) 的每日總結 (Episodic Memory)
+                const recentSummaries = await this.dataBlockRepo.getRecentSummaries(event.sessionId || "global", context.agentId || "main", 3);
                 
-                context.injectedPrompts.push({
-                    index: 6, // PromptSectionIndex.EPISODIC_MEMORY
-                    content: episodicContext
-                });
+                if (recentSummaries && recentSummaries.length > 0) {
+                    let episodicContext = "## RECENT EPISODIC MEMORIES (DIARY ENTRIES)\n";
+                    episodicContext += "Here are your most recent diary entries. Use this context to maintain continuity in your interactions:\n\n";
 
-                this.logger.info(`[MemoryManager] Injected ${recentSummaries.length} daily summaries for episodic memory retrieval.`);
+                    recentSummaries.forEach((summary, i) => {
+                        episodicContext += `### Session -${recentSummaries.length - i} Days:\n${summary}\n\n`;
+                    });
+
+                    if (!context.injectedPrompts) context.injectedPrompts = [];
+                    
+                    context.injectedPrompts.push({
+                        index: 6, // PromptSectionIndex.EPISODIC_MEMORY
+                        content: episodicContext
+                    });
+
+                    this.logger.info(`[MemoryManager] Injected ${recentSummaries.length} daily summaries for episodic memory retrieval.`);
+                }
             }
 
         } catch (err: any) {
