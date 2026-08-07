@@ -9,7 +9,8 @@ export const GRAPH_EXTRACTOR_PROMPT = `You are an AI memory extraction expert. Y
 1. **Atomic Entities**: Extract core concepts, specific people, places, or technologies as Entities (e.g., "User", "Yan", "SuperNova", "Bun", "OOM"). Each entity must have a concise \`id\`, a \`type\`, and a brief \`description\`.
 2. **Entity Types**: Use standard categories for \`type\` such as PERSON, TECHNOLOGY, CONCEPT, ORGANIZATION, etc.
 3. **Meaningful Relations**: Extract Relations between the defined entities. The \`sourceEntityId\` and \`targetEntityId\` MUST exactly match the \`id\` fields of the entities you extracted.
-4. **Pronoun Resolution**: ALWAYS resolve "I", "me", "my" to "User". Resolve "you", "your" to "Assistant".
+4. **Pronoun Resolution**: ALWAYS resolve "I", "me", "my" to "User" if the user is speaking. 
+5. **Exclude AI Identity**: STRICTLY DO NOT extract the AI itself (e.g., "AI", "Assistant", "Luna", "Agent"), its persona, its capabilities, or its internal emotional states as entities. Only extract facts about the User, the User's projects, real-world concepts, and technologies.
 
 Conversation:
 {conversation}
