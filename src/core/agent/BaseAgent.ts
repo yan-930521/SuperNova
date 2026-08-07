@@ -727,7 +727,7 @@ export abstract class BaseAgent {
             // 將新產生的 LangChain 訊息映射為 SuperNova 的 DataBlock 陣列
             const newBlocks: DataBlock<any>[] = [];
             const toolCallMap = new Map<string, any>();
-            
+
             // 預先收集 tool_calls，避免後續陣列反向查找的 O(N^2) 效能問題
             for (const m of newMessages) {
                 if (m.type === 'ai') {
@@ -757,7 +757,10 @@ export abstract class BaseAgent {
                                 targetId,
                                 type: 'ai',
                                 intent: 'AGENT_REPLY',
-                                controlPayload: content
+                                controlPayload: content,
+                                metadata: {
+                                    senderName: this.profile?.name
+                                }
                             }));
                         })
                     } else if (aiMsg.content.trim() !== '') {
@@ -767,7 +770,10 @@ export abstract class BaseAgent {
                             targetId,
                             type: 'ai',
                             intent: 'AGENT_REPLY',
-                            controlPayload: aiMsg.content
+                            controlPayload: aiMsg.content,
+                            metadata: {
+                                senderName: this.profile?.name
+                            }
                         }));
                     }
                 } else if (m.type === 'tool') {
@@ -779,7 +785,10 @@ export abstract class BaseAgent {
                         targetId,
                         type: 'tool',
                         intent: 'TOOL_CALL',
-                        controlPayload: { toolName: toolMsg.name || 'unknown', args, result: toolMsg.content }
+                        controlPayload: { toolName: toolMsg.name || 'unknown', args, result: toolMsg.content },
+                        metadata: {
+                            senderName: "Tool"
+                        }
                     }));
                 }
             }
@@ -794,7 +803,10 @@ export abstract class BaseAgent {
                     targetId,
                     type: 'ai',
                     intent: 'AGENT_REPLY',
-                    controlPayload: content || '(empty)'
+                    controlPayload: content || '(empty)',
+                    metadata: {
+                        senderName: this.profile?.name
+                    }
                 }));
             }
 

@@ -78,6 +78,8 @@ llm:
    service_tier: flex
 # Agent 行為配置
 agent:
+ # Agent Profile 的版本資料夾名稱，例如 "v1"
+ profile_version: v1
  # 允許派生分身的數量上限 (避免記憶體與 Token 無限耗盡)
  max_clones_per_agent: 5
  # 允許agent暫時忽略的背景資訊通知
@@ -105,13 +107,19 @@ agent:
  # 讀取檔案時的安全上限，防止單一檔案過大癱瘓記憶體
  max_history_lines_safety_cap: 5000
  # 對話累積多少筆未萃取記憶時，觸發背景萃取
- memory_extract_threshold: 50
+ memory_extract_threshold: 10
  # 每日優化觸發時間 (HH:mm)，例如 "03:00"
  daily_optimization_time: 00:00
  # 換日偵測的心跳檢查間隔 (毫秒)，預設 30000 (30秒)
  daily_optimization_check_interval_ms: 30000
  # 換日後防打斷的靜默等待時間 (毫秒)，預設 600000 (10分鐘)
  daily_optimization_idle_threshold_ms: 600000
+ # 注入近期每日總結的天數 (預設 3)
+ memory_episodic_days: 3
+ # 圖譜記憶向量搜尋的 TopK 數量 (預設 5)
+ memory_graph_topk: 5
+ # 圖譜記憶搜尋的向外擴展深度 (預設 2)
+ memory_graph_depth: 2
 # 快取與 TTL 相關配置
 cache:
  # 歷史訊息 LRU 快取最大數量

@@ -62,7 +62,10 @@ export class ToggleProjectionTool extends BaseTool {
                 type: 'system',
                 intent: 'URGENT_ALERT',
                 priority: MessagePriority.URGENT,
-                controlPayload: `[系統通知] 意識投影連結已建立！大腦 (${context.agentId}) 的靈魂已經進入你的軀殼。請立刻以大腦的人設與思維開始接管行動！`
+                controlPayload: `[系統通知] 意識投影連結已建立！大腦 (${context.agentId}) 的靈魂已經進入你的軀殼。請立刻以大腦的人設與思維開始接管行動！`,
+                metadata: {
+                    senderName: 'System'
+                }
             });
             await context.eventBus.publishAsync({
                 type: AgentEvent.AgentMessage,
@@ -80,7 +83,10 @@ export class ToggleProjectionTool extends BaseTool {
                 type: 'system',
                 intent: 'URGENT_ALERT',
                 priority: 100,
-                controlPayload: `[系統通知] 意識投影連結已中斷！靈魂已拔除，你已恢復自主軀殼狀態。`
+                controlPayload: `[系統通知] 意識投影連結已中斷！靈魂已拔除，你已恢復自主軀殼狀態。`,
+                metadata: {
+                    senderName: 'System'
+                }
             });
             await context.eventBus.publishAsync({
                 type: AgentEvent.AgentMessage,
