@@ -23,7 +23,7 @@ export class TaskAgent extends BaseAgent {
         // 如果沒有被指派 profile (例如是 Clone)，則載入預設的左腦設定
         if (!this.profile) {
             try {
-                const rawContent = PromptLoader.loadProfile('v1/task_agent', this.config, '{}');
+                const rawContent = PromptLoader.loadProfile('task_agent', this.config, '{}');
                 const profileData = JSON.parse(rawContent);
                 this.setProfile(profileData);
             } catch (error) {

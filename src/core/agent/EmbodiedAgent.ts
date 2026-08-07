@@ -2,7 +2,7 @@ import { Config } from '../config/Config';
 import { IDataBlockRepository } from '../infra/persistence/IRepository';
 import { IEventBus } from '../messaging/IBus';
 import { PromptLoader } from '../utils/PromptLoader';
-import { AgentType, BaseAgent, AgentOptions } from './BaseAgent';
+import { AgentOptions, AgentType, BaseAgent } from './BaseAgent';
 
 /**
  * EmbodiedAgent
@@ -23,7 +23,7 @@ export class EmbodiedAgent extends BaseAgent {
     // 從 JSON 設定檔載入 EmbodiedAgent 專屬身份與認知
     if (!this.profile) {
       try {
-        const rawContent = PromptLoader.loadProfile('v1/embodied_agent', this.config, '{}');
+        const rawContent = PromptLoader.loadProfile('embodied_agent', this.config, '{}');
         const profileData = JSON.parse(rawContent);
         this.setProfile(profileData);
       } catch (error) {

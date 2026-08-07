@@ -1,5 +1,5 @@
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import { ChatOpenAI } from '@langchain/openai';
+import { ChatOpenAI, OpenAIEmbeddings } from '@langchain/openai';
 import { Config } from '../config/Config';
 import { ILifecycle } from '../lifecycle/ILifecycle';
 import { LogManager } from '../infra/LogManager';
@@ -9,6 +9,7 @@ import { LogManager } from '../infra/LogManager';
  */
 export class LLMProvider implements ILifecycle {
     private llmInstances = new Map<string, BaseChatModel>();
+    private embeddingsInstance?: OpenAIEmbeddings;
     private config: Config;
 
     constructor(config: Config) {
@@ -19,11 +20,17 @@ export class LLMProvider implements ILifecycle {
         LogManager.recorder.info('[LLMProvider] Initializing LLM Provider...');
         // 可以在這裡預先載入 default preset
         this.getModel(this.config.llm.default_preset);
+
+        // 初始化向量模型 (讀取 Config)
+        this.embeddingsInstance = new OpenAIEmbeddings({
+            modelName: this.config.llm.embedding_model,
+        });
     }
 
     public async stop(): Promise<void> {
         LogManager.recorder.info('[LLMProvider] Shutting down LLM Provider, clearing instances...');
         this.llmInstances.clear();
+        this.embeddingsInstance = undefined;
     }
 
     /**
@@ -41,5 +48,23 @@ export class LLMProvider implements ILifecycle {
             }));
         }
         return this.llmInstances.get(finalPresetName)!;
+    }
+
+    /**
+     * 呼叫 OpenAI API 產生向量 (Embeddings)
+     * 用於將字串轉為高維度向量陣列，以供 MemoryManager 計算 Cosine Similarity
+     * @param text 要向量化的目標文本
+     * @returns 浮點數向量陣列
+     */
+    public async generateEmbeddings(text: string): Promise<number[]> {
+        if (!this.embeddingsInstance) {
+            throw new Error("[LLMProvider] Embeddings instance not initialized.");
+        }
+        try {
+            return await this.embeddingsInstance.embedQuery(text);
+        } catch (error) {
+            LogManager.recorder.error('[LLMProvider] Failed to generate embeddings', { payload: { text, error } });
+            throw error;
+        }
     }
 }
