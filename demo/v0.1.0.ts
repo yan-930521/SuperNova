@@ -1,4 +1,5 @@
 import { config as dotenvConfig } from 'dotenv';
+import * as fs from 'fs';
 import * as readline from 'readline';
 
 import { AgentManager } from '../src/core/agent/AgentManager';
@@ -18,8 +19,14 @@ async function main() {
     console.log('=============================================');
     console.log('Initializing system...');
 
+    // 每次執行 demo 前刪除舊的 config.yaml，強制使用預設值
+    const configPath = './config.yaml';
+    if (fs.existsSync(configPath)) {
+        fs.unlinkSync(configPath);
+    }
+
     const loader = new ConfigLoader();
-    const config = await loader.bootstrap('./config.yaml');
+    const config = await loader.bootstrap(configPath);
     const kernel = new RuntimeKernel(config);
 
     // 1. 透過內核啟動所有系統組件 (IoC, Repo, Managers)
