@@ -78,11 +78,7 @@ export class JsonGraphRepository implements IGraphRepository {
     async addNode(sessionId: string, node: GraphNode): Promise<void> {
         await this.ensureSessionLoaded(sessionId);
         
-        // 1. Save to Node Cache
-        this.nodeCaches.get(sessionId)!.set(node.id, node);
-        await this.persistNodes(sessionId);
-
-        // 2. Save to Vectra if embedding exists
+        // 1. Save to Vectra if embedding exists (必須先做，因為稍後會刪除 embedding)
         if (node.embedding && node.embedding.length > 0) {
             const index = this.vectorIndices.get(sessionId)!;
             await index.beginUpdate();
@@ -93,6 +89,13 @@ export class JsonGraphRepository implements IGraphRepository {
             });
             await index.endUpdate();
         }
+
+        // 2. 為了節省記憶體與硬碟空間，從 Node 中移除龐大的 1536 維度陣列，因為 Vectra 已經存了
+        const { embedding, ...nodeWithoutEmbedding } = node;
+
+        // 3. Save to Node Cache & Persist
+        this.nodeCaches.get(sessionId)!.set(nodeWithoutEmbedding.id, nodeWithoutEmbedding as GraphNode);
+        await this.persistNodes(sessionId);
     }
 
     async updateNode(sessionId: string, node: GraphNode): Promise<void> {
