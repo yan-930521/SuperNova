@@ -3,7 +3,7 @@
 [![TypeScript](https://img.shields.io/badge/Language-TypeScript-blue.svg)](https://www.typescriptlang.org/)
 [![Runtime](https://img.shields.io/badge/Runtime-Bun-black.svg)](https://bun.sh/)
 [![Architecture](https://img.shields.io/badge/Architecture-Event--Driven-orange.svg)](#architecture-highlights)
-[![Stage](https://img.shields.io/badge/Stage-v0.1.0-green.svg)](#development-roadmap)
+[![Stage](https://img.shields.io/badge/Stage-v0.2.0--dev-green.svg)](#development-roadmap)
 
 SuperNova 是一個專注於效能與狀態管理的 **Agent Runtime (代理人執行引擎)**。它運行於 Bun 高性能環境之上，透過事件驅動架構，有效解決長效型 AI 系統常見的上下文爆炸與目標飄移 (Goal Drift) 問題，使 Agent 能在複雜、跨領域的長期任務中保持穩定的認知與執行力。
 

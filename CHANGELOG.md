@@ -8,6 +8,10 @@
 
 ## [Unreleased]
 
+---
+
+## [0.1.0] - 2026-08-07
+
 ### Added (新增功能與基礎設施)
 - **圖向量混合記憶系統 (Graph & Episodic Memory System)**：
   - **長期記憶 (Graph Memory)**：系統可自動在背景將對話提煉為原子化的實體 (Entities) 與關係 (Relations) 網路，並結合 OpenAI Embeddings 轉換為向量儲存。
