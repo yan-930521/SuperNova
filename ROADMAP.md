@@ -2,19 +2,26 @@
 
 本文件概述了 SuperNova（基於 TS/Bun 的 Agent Runtime）近期的核心里程碑與未來發展願景。
 
-## v0.1.0 - Minimum Viable Product (MVP)
+## v0.1.0 - Foundation & Memory System (已完成)
 
-當前首要目標為建立具備上下文感知能力的圖向量混合記憶基礎設施。
+目前已完成 SuperNova 核心基礎設施與「圖向量混合記憶系統」的建置，為後續的自主進化打下穩固根基。
 
-### Phase 1: 向量嵌入 (Vector Embeddings)
-- [ ] **擴充 LLMProvider**：新增 `generateEmbeddings` 方法，為系統提供通用的向量化能力。
-- [ ] **記憶向量化**：將記憶系統中萃取出的 `GraphNode`（圖譜節點）內容轉換為向量，並妥善儲存以便於後續快速檢索。
-
-### Phase 2: 動態上下文檢索 (Dynamic Context Retrieval)
-- [ ] **實作生命週期 Hook**：在 `BaseAgent` 核心中實作 `BeforeAgentStep` 攔截點。
-- [ ] **相似度檢索**：利用餘弦相似度 (Cosine Similarity) 計算，找出與當前情境最相關的圖譜記憶 (Graph Tuples)。
-- [ ] **上下文注入**：將檢索到的高關聯記憶動態注入至 Agent 的 System Prompt 中，以增強代理人的記憶感知與決策能力。
-
+### 🌟 核心技術亮點 (Technical Highlights)
+1. **圖向量混合記憶 (Graph & Episodic Memory System)**
+   - **長期記憶 (Graph Memory)**：透過 LLM 自動提煉原子化實體 (Entities) 與關係 (Relations)，結合 OpenAI Embeddings 與 Vectra 本地向量資料庫進行儲存。
+   - **情節記憶 (Episodic Memory)**：透過每日換日機制，將凌亂的對話自動濃縮為「AI 日記」，保留互動氛圍與使用者的潛規則。
+   - **動態上下文檢索 (Dynamic Context Injection)**：實作 `BeforeAgentStep` 生命週期 Hook，自動尋找高關聯圖譜記憶與近期日記，無縫注入大腦。
+2. **底層架構與配置 (Architecture & Config)**
+   - **動態配置引擎 (Zod-based Config Engine)**：採用 Zod Schema 進行強型別校驗與動態覆寫，提供防呆與配置彈性。
+   - **工作區隔離 (Two-Tier Workspace Isolation)**：實作「持久層」與「揮發層」兩級工作區，保證 Session 具備隔離的實驗沙盒。
+   - **異步事件驅動 (Asynchronous EventBus)**：完全摒棄直接 Method Call，所有生命週期與狀態切換均走 EventBus，具備防卡死與高度解耦。
+3. **效能與穩健性 (Performance & Reliability)**
+   - **歷史壓縮短路機制 (Compaction Fast-Fail)**：導入 `isOffloaded` 標記，在背景歷史壓縮時達成 $O(1)$ 極速短路檢查，大幅減輕 OOM 壓力。
+   - **快取基礎設施 (LRUCache)**：引入通用 LRUCache 與增量快取機制，消滅高頻事件廣播與歷史打撈造成的記憶體無上限增長。
+   - **歷史檔案安全保護 (History Safety Cap)**：強制實作防禦性 JSONL 檔案讀取切片，防止惡意巨型檔案癱瘓記憶體。
+4. **代理人與會話管理 (Agent & Session State)**
+   - **無狀態執行與意識投影 (Stateless & Projection)**：導入會話層 Projection State，並將 Agent 升級為無狀態執行模式，大幅提升併發處理能力與狀態隔離性。
+   - **透明化 ReAct 迴圈 (Transparent ReAct Loop)**：完整捕獲 LLM 思考過程 (Thoughts) 與工具執行狀態，建立高可觀測性的互動基礎 (`demo/v0.1.0.ts`)。
 ---
 
 ## v0.2.0 - 虛擬具身智能與自主進化 (Virtual Embodied AI & Autonomous Evolution)
