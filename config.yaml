@@ -1,6 +1,6 @@
 # 系統全局配置
 # 系統版本號碼
-version: v0.1.0
+version: v0.2.0-dev
 # 安全性相關配置
 security:
  # 工具執行的預設超時時間 (ms)

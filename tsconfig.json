@@ -9,5 +9,5 @@
     "forceConsistentCasingInFileNames": true,
     "types": ["bun"]
   },
-  "exclude": ["web", "./node_modules"]
+  "exclude": ["web", "./node_modules", "./src/package/*"]
 }

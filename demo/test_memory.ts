@@ -86,7 +86,7 @@ async function main() {
     
     // 手動觸發 MemoryManager 的圖譜萃取
     const startTime = Date.now();
-    await memoryManager.extractAndSaveSessionMemory(SESSION_ID, AGENT_ID, "Yan");
+    await memoryManager.extractAndSaveSessionMemory(SESSION_ID, AGENT_ID);
     const duration = Date.now() - startTime;
     
     console.log(`\n[Test] Extraction Completed in ${duration}ms!`);
