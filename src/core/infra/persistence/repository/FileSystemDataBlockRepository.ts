@@ -227,6 +227,36 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
         this.logger.info(`[DataBlockRepository] Saved daily summary for session ${sessionId} to ${summaryFile}`);
     }
 
+    public async getRecentSummaries(sessionId: string, agentId: string, maxDays: number = 3): Promise<string[]> {
+        const dailyDirName = this.config?.storage?.daily_dir ?? DEFAULT_CONFIG.storage.daily_dir;
+        const dailyDir = path.join(this.baseDir, sessionId, dailyDirName);
+        if (!existsSync(dailyDir)) return [];
+
+        try {
+            const dirents = await fs.readdir(dailyDir, { withFileTypes: true });
+            
+            // 找出所有與該 agentId 相關的總結檔案 (格式為 {dateStr}_{agentId}.md)
+            const summaryFiles = dirents
+                .filter(d => d.isFile() && d.name.endsWith(`_${agentId}.md`))
+                .map(d => d.name)
+                .sort((a, b) => b.localeCompare(a)) // 檔名降冪排序 (最新的在前面)
+                .slice(0, maxDays);
+
+            const summaries: string[] = [];
+            for (const file of summaryFiles) {
+                const filePath = path.join(dailyDir, file);
+                const content = await fs.readFile(filePath, 'utf-8');
+                summaries.push(content);
+            }
+            
+            // 回傳時反轉，讓最舊的在前面，最新的在後面，符合閱讀直覺
+            return summaries.reverse();
+        } catch (err: any) {
+            this.logger.error(`[DataBlockRepository] Failed to read recent summaries: ${err.message}`);
+            return [];
+        }
+    }
+
     public async listAgentsForSession(sessionId: string): Promise<string[]> {
         const agentDirName = this.config.storage.agent_dir ?? DEFAULT_CONFIG.storage.agent_dir;
         const sessionAgentsDir = path.join(this.baseDir, sessionId, agentDirName);

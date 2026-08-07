@@ -62,7 +62,7 @@ export class MemoryManager implements ILifecycle {
      */
     private async handleSessionClosed(event: IEvent<SystemEvent.SessionClosed>): Promise<void> {
         if (!this.config.agent.enable_graph_memory) return;
-        
+
         const sessionId = event.payload.sessionId;
         if (!sessionId) return;
 
@@ -155,7 +155,7 @@ export class MemoryManager implements ILifecycle {
 
             // 在 Repository 中尋找最相近的 TopK 節點並向外擴展深度為 2 的子圖
             const graphContext = await this.graphRepo.searchGraphContext(event.sessionId || "global", queryEmbedding, 5, 2);
-            
+
             if (graphContext && graphContext.nodes.length > 0) {
                 // 將檢索出的節點轉為文字格式注入 System Prompt
                 let memoryContext = "## RETRIEVED GRAPH MEMORY CONTEXT\n";
@@ -176,14 +176,38 @@ export class MemoryManager implements ILifecycle {
                 if (!context.injectedPrompts) {
                     context.injectedPrompts = [];
                 }
-                
+
                 context.injectedPrompts.push({
                     index: PromptSectionIndex.MEMORY_CONTEXT,
                     content: memoryContext
                 });
-                
+
                 this.logger.info(`[MemoryManager] Injected ${graphContext.nodes.length} graph memory nodes and ${graphContext.edges.length} edges for context retrieval.`);
             }
+
+            // 讀取近期 (最近 3 天) 的每日總結 (Episodic Memory)
+            const recentSummaries = await this.dataBlockRepo.getRecentSummaries(event.sessionId || "global", context.agentId || "main", 3);
+            
+            if (recentSummaries && recentSummaries.length > 0) {
+                let episodicContext = "## RECENT EPISODIC MEMORIES (SESSION SUMMARIES)\n";
+                episodicContext += "Here is a summary of the most recent sessions you had with the user. Use this context to maintain continuity in your interactions:\n\n";
+
+                recentSummaries.forEach((summary, i) => {
+                    episodicContext += `### Session -${recentSummaries.length - i} Days:\n${summary}\n\n`;
+                });
+
+                if (!context.injectedPrompts) {
+                    context.injectedPrompts = [];
+                }
+                
+                context.injectedPrompts.push({
+                    index: 6, // PromptSectionIndex.EPISODIC_MEMORY
+                    content: episodicContext
+                });
+
+                this.logger.info(`[MemoryManager] Injected ${recentSummaries.length} daily summaries for episodic memory retrieval.`);
+            }
+
         } catch (err: any) {
             this.logger.error(`[MemoryManager] Failed to retrieve dynamic context: ${err.message}`);
         }
@@ -203,9 +227,10 @@ export class MemoryManager implements ILifecycle {
                 const allBlocks = await this.dataBlockRepo.findByAgent(sessionId, agentId);
                 if (!allBlocks || allBlocks.length === 0) continue;
 
-                const dialogueLines = allBlocks
-                    .filter(b => b.type === 'human' || b.type === 'ai')
-                    .map(b => `${b.type === 'human' ? 'User' : 'Assistant'}: ${b.controlPayload}`);
+                const dialogueLines = allBlocks.map(b => {
+                    let senderName = b.metadata.senderName ?? b.type === 'human' ? "User" : "AI"
+                    return `${senderName}: ${b.controlPayload}`
+                });
 
                 const dialogue = dialogueLines.join('\n');
 
@@ -310,10 +335,8 @@ export class MemoryManager implements ILifecycle {
      * 從對話歷史中萃取並保存記憶圖譜
      * @param sessionId 當前的 Session ID
      * @param agentId 要萃取歷史的 Agent ID (預設 main)
-     * @param agentName Agent 名稱
-     * @param userIName 使用者 名稱
      */
-    public async extractAndSaveSessionMemory(sessionId: string, agentId: string = 'main', agentName: string = "AI", userName: string = "User"): Promise<void> {
+    public async extractAndSaveSessionMemory(sessionId: string, agentId: string = 'main'): Promise<void> {
         // 從資料庫載入該 Agent 的所有對話歷史
         const blocks = await this.dataBlockRepo.findByAgent(sessionId, agentId);
         if (!blocks || blocks.length === 0) return;
@@ -330,7 +353,10 @@ export class MemoryManager implements ILifecycle {
             const batchBlocks = unextractedBlocks.slice(i, i + BATCH_SIZE);
 
             // 將過濾出的 DataBlocks 轉換為對話文本字串
-            const dialogueLines = batchBlocks.map(b => `${b.type === 'human' ? userName : agentName}: ${b.controlPayload}`);
+            const dialogueLines = batchBlocks.map(b => {
+                let senderName = b.metadata.senderName ?? b.type === 'human' ? "User" : "AI"
+                return `${senderName}: ${b.controlPayload}`
+            });
             const dialogue = dialogueLines.join('\n');
 
             if (!dialogue || dialogue.trim().length === 0) {
@@ -360,18 +386,18 @@ export class MemoryManager implements ILifecycle {
             // ==========================================
             // 2. 第二階段：沉澱至圖譜資料庫 (Graph Repository)
             // ==========================================
-            
+
             // 先儲存所有實體節點 (Nodes)
             for (const entity of graphResult.entities) {
                 const nodeId = `Entity:${entity.id.trim().replace(/\s+/g, '_')}`;
-                
+
                 let node = await this.graphRepo.getNode(sessionId, nodeId);
                 if (!node) {
                     this.logger.debug(`[MemoryManager] Generating embedding for new node: ${entity.id}`);
                     // 將 description 加入記憶體文本，增加向量比對的語意豐富度
                     const memoryText = `${entity.id}: ${entity.description}`;
                     const embedding = await this.llmProvider.generateEmbeddings(memoryText);
-                    
+
                     node = {
                         id: nodeId,
                         label: entity.type || "Entity",
@@ -393,7 +419,7 @@ export class MemoryManager implements ILifecycle {
                 for (const relation of graphResult.relations) {
                     const sourceNodeId = `Entity:${relation.sourceEntityId.trim().replace(/\s+/g, '_')}`;
                     const targetNodeId = `Entity:${relation.targetEntityId.trim().replace(/\s+/g, '_')}`;
-                    
+
                     const edge: GraphEdge = {
                         id: IdGenerator.graphEdge(),
                         sourceId: sourceNodeId,

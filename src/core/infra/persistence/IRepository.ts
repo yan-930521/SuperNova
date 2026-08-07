@@ -65,6 +65,11 @@ export interface IDataBlockRepository extends IRepository<DataBlock<any>> {
   saveDailySummary(sessionId: string, dateString: string, summaryMarkdown: string): Promise<void>;
 
   /**
+   * 讀取近期 N 天的每日總結檔案內容
+   */
+  getRecentSummaries(sessionId: string, agentId: string, maxDays?: number): Promise<string[]>;
+
+  /**
    * 取得特定 Session 底下所有擁有歷史記錄的 Agent ID 列表
    */
   listAgentsForSession(sessionId: string): Promise<string[]>;
