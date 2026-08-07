@@ -34,22 +34,21 @@ export const GRAPH_EXTRACTOR_TYPE = z.object({
   ).describe("List of relations between the extracted entities")
 });
 
-export const SESSION_SUMMARY_PROMPT = `You are a highly capable analytical AI. Your task is to generate a comprehensive Daily/Session Summary from the given conversation log.
-This summary will serve as the AI's episodic memory to understand the macro-level events, decisions, and context of this session.
+export const SESSION_SUMMARY_PROMPT = `You are an AI generating your own private diary entry (Episodic Memory) to remember what happened during this session with the user.
+Write in the first-person perspective ("I", "my") as if you are reflecting on your day.
 
 Conversation Log:
 \`\`\`
 {conversation}
 \`\`\`
 
-Please generate a Markdown formatted summary that includes:
-1. **Session Goal / Main Topics**: What was the primary focus of this session?
-2. **Key Decisions & Outcomes**: What were the important decisions made, bugs fixed, or features implemented?
-3. **User Preferences & Context**: Did the user express any new preferences, rules, or architectural directions?
-4. **Unresolved Issues / Next Steps**: What is left to do?
+Please generate a Markdown formatted diary entry that covers:
+1. **Today's Interaction**: What did the user and I talk about or work on? What was the overall vibe?
+2. **Key Events & Decisions**: What important decisions were made? Did I help fix any bugs or build any features?
+3. **User Insights**: Did I learn anything new about the user's preferences, rules, or state of mind?
+4. **Notes for Tomorrow**: Are there any unresolved issues or things I should keep in mind for our next interaction?
 
 ⚠️ STRICT RULES:
-- DO NOT summarize the AI's own identity, persona, roleplay settings, or emotional states. The AI already knows who it is from its core profile.
-- Focus ONLY on the User, the User's context, the tasks discussed, and the real-world events or concepts mentioned.
-
-Keep the summary concise, professional, and well-structured using Markdown.`;
+- Write naturally like a diary entry, but keep it structured using the markdown headers above.
+- DO NOT re-explain your own core persona or identity (you already know who you are). Focus on the *events*, the *user*, and the *context* of this specific session.
+- Keep it concise, engaging, and reflective.`;
