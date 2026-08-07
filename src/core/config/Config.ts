@@ -30,6 +30,9 @@ export const AgentConfigSchema = z.object({
     daily_optimization_time: z.string().describe('每日優化觸發時間 (HH:mm)，例如 "03:00"'),
     daily_optimization_check_interval_ms: z.number().describe('換日偵測的心跳檢查間隔 (毫秒)，預設 30000 (30秒)'),
     daily_optimization_idle_threshold_ms: z.number().describe('換日後防打斷的靜默等待時間 (毫秒)，預設 600000 (10分鐘)'),
+    memory_episodic_days: z.number().describe('注入近期每日總結的天數 (預設 3)'),
+    memory_graph_topk: z.number().describe('圖譜記憶向量搜尋的 TopK 數量 (預設 5)'),
+    memory_graph_depth: z.number().describe('圖譜記憶搜尋的向外擴展深度 (預設 1)'),
 });
 
 export const LLMConfigSchema = z.object({

@@ -96,10 +96,13 @@ export const DEFAULT_CONFIG: Config = {
         offload_threshold_new_message: 50000,
         offload_threshold_compact: 1000,
         max_history_lines_safety_cap: 5000,
-        memory_extract_threshold: 50,
+        memory_extract_threshold: 10,
         daily_optimization_time: "00:00",
         daily_optimization_check_interval_ms: 30000,
-        daily_optimization_idle_threshold_ms: 600000
+        daily_optimization_idle_threshold_ms: 600000,
+        memory_episodic_days: 3,
+        memory_graph_topk: 5,
+        memory_graph_depth: 1
     },
     cache: {
         history_lru_size: 500,

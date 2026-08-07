@@ -154,8 +154,10 @@ export class MemoryManager implements ILifecycle {
                     // 產生 Query 的向量
                     const queryEmbedding = await this.llmProvider.generateEmbeddings(queryText);
 
-                    // 在 Repository 中尋找最相近的 TopK 節點並向外擴展深度為 1 的子圖
-                    const graphContext = await this.graphRepo.searchGraphContext(event.sessionId || "global", queryEmbedding, 5, 1);
+                    // 在 Repository 中尋找最相近的 TopK 節點並向外擴展子圖
+                    const topK = this.config.agent.memory_graph_topk;
+                    const depth = this.config.agent.memory_graph_depth;
+                    const graphContext = await this.graphRepo.searchGraphContext(event.sessionId || "global", queryEmbedding, topK, depth);
                     
                     if (graphContext && graphContext.nodes.length > 0) {
                         let memoryContext = "## RETRIEVED GRAPH MEMORY CONTEXT\n";
@@ -189,8 +191,9 @@ export class MemoryManager implements ILifecycle {
             // 2. Episodic Memory (每日總結) 檢索與注入 (若開啟)
             // ==========================================
             if (this.config.agent.enable_daily_summary) {
-                // 讀取近期 (最近 3 天) 的每日總結 (Episodic Memory)
-                const recentSummaries = await this.dataBlockRepo.getRecentSummaries(event.sessionId || "global", context.agentId || "main", 3);
+                // 讀取近期配置天數的每日總結 (Episodic Memory)
+                const maxDays = this.config.agent.memory_episodic_days;
+                const recentSummaries = await this.dataBlockRepo.getRecentSummaries(event.sessionId || "global", context.agentId || "main", maxDays);
                 
                 if (recentSummaries && recentSummaries.length > 0) {
                     let episodicContext = "## RECENT EPISODIC MEMORIES (DIARY ENTRIES)\n";
