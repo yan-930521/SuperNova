@@ -12,7 +12,6 @@ import { AgentOptions, AgentState, AgentType, BaseAgent, BaseAgentData } from '.
  */
 export class MainAgent extends BaseAgent {
     public readonly type = AgentType.MAIN;
-    public readonly canClone = true;
 
     constructor(
         id: string,

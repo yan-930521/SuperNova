@@ -100,7 +100,6 @@ export interface BaseAgentData extends IEntity {
     readonly id: string;
     readonly sessionId: string;
     readonly type: AgentType;
-    readonly canClone: boolean;
     readonly state: string;           // AgentState enum 的字串表示
     readonly usageStats: {
         promptTokens: number;
@@ -114,6 +113,8 @@ export interface BaseAgentData extends IEntity {
     readonly profile?: AgentProfile;
     readonly emotionalState?: EmotionalState;
     readonly workspaceType?: WorkspaceType;
+    readonly allowedTools?: string[];
+    readonly isTemp?: boolean;
 }
 
 /**
@@ -153,6 +154,8 @@ export interface AgentOptions {
     eventBus: IEventBus;
     config: Config;
     dataBlockRepo: IDataBlockRepository;
+    allowedTools?: string[];
+    isTemp?: boolean;
 }
 
 /**
@@ -161,7 +164,6 @@ export interface AgentOptions {
  */
 export abstract class BaseAgent {
     public abstract readonly type: AgentType;
-    public abstract readonly canClone: boolean;
 
     /** 當前生命週期狀態 */
     protected state: AgentState;
@@ -196,6 +198,8 @@ export abstract class BaseAgent {
 
     /** 裝備的工具清單 */
     protected tools: BaseTool[] = [];
+    protected allowedTools?: string[];
+    protected isTemp?: boolean;
     private reactAgentCache = new Map<string, ReactAgent>();
     private cachedToolsSignature: string = '';
     private toolsSignatureCache = new WeakMap<BaseTool[], string>();
@@ -245,6 +249,9 @@ export abstract class BaseAgent {
 
         this.logger.addTransport(new FileTransport('DEBUG', this.oplogDir, this.config.storage.oplog_file));
         this.logger.info(`Initializing agent: ${this.id} under session: ${this.sessionId}`);
+
+        this.allowedTools = options.allowedTools;
+        this.isTemp = options.isTemp;
 
         // 統一呼叫 Hook 註冊，確保所有繼承的 Agent 都在基礎建設就緒後掛載監聽器
         this.setupHooks();
@@ -859,13 +866,14 @@ export abstract class BaseAgent {
             id: this.id,
             sessionId: this.sessionId,
             type: this.type,
-            canClone: this.canClone,
             state: this.state,
             usageStats: { ...this.usageStats },
             timestamp: Date.now(),
             profile: this.profile ? structuredClone(this.profile) : undefined,
             emotionalState: this.emotionalState ? structuredClone(this.emotionalState) : undefined,
-            workspaceType: this.workspaceType
+            workspaceType: this.workspaceType,
+            allowedTools: this.allowedTools ? [...this.allowedTools] : undefined,
+            isTemp: this.isTemp
         };
     }
 
@@ -883,6 +891,12 @@ export abstract class BaseAgent {
         }
         if (data.emotionalState) {
             this.emotionalState = structuredClone(data.emotionalState);
+        }
+        if (data.allowedTools) {
+            this.allowedTools = [...data.allowedTools];
+        }
+        if (data.isTemp !== undefined) {
+            this.isTemp = data.isTemp;
         }
 
         this.logger.debug(`Agent state hydrated from snapshot.`);

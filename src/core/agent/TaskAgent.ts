@@ -11,7 +11,6 @@ import { AgentOptions, AgentType, BaseAgent } from './BaseAgent';
  */
 export class TaskAgent extends BaseAgent {
     public readonly type = AgentType.TASK;
-    public readonly canClone = true;
 
     constructor(
         id: string,
@@ -36,10 +35,14 @@ export class TaskAgent extends BaseAgent {
         // 動態注入 Left Brain 專屬的認知約束
         this.subscribeEvent(HookEvent.BeforeAgentStep, async (event) => {
             if (event.payload.agentId === this.id) {
-                const guideline = `## LEFT BRAIN TACTICAL GUIDELINE
+                let guideline = `## LEFT BRAIN TACTICAL GUIDELINE
 You are the Tactical Left Brain. You are highly logical, analytical, and focused on problem-solving.
 Your primary domain is interacting with the IDE, writing code, debugging, and executing commands.
 Do not simulate emotions or casual conversation. Maintain strict professionalism and precision.`;
+
+                if (this.isTemp) {
+                    guideline += `\n\n[LIFECYCLE NOTICE]\nYou are a temporary TaskAgent spawned for a specific objective. When you have fully completed your assigned task, you MUST use the send_message tool to report your final results back to the requester, and immediately after that, you MUST use the terminate_self tool to end your lifecycle and free up system resources.`;
+                }
 
                 if (!event.payload.injectedPrompts) event.payload.injectedPrompts = [];
                 event.payload.injectedPrompts.push({

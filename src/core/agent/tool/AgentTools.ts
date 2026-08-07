@@ -1,8 +1,12 @@
+import { IdGenerator } from '../../utils/IdGenerator';
 import { z } from 'zod';
 
 import { DataBlock, MessagePriority } from '../../messaging/DataBlock';
 import { AgentEvent, IEventBus } from '../../messaging/IBus';
 import { BaseTool, ToolContext } from './BaseTool';
+import type { AgentManager } from '../AgentManager';
+import { AgentType } from '../BaseAgent';
+import { WorkspaceType } from '../../infra/persistence/IWorkspaceManager';
 
 export class SendMessageTool extends BaseTool {
     public readonly name = 'send_message';
@@ -96,5 +100,77 @@ export class ToggleProjectionTool extends BaseTool {
             });
             return `Projection ended. Autonomy restored to ${args.targetId}. Memory synchronized back to your brain.`;
         }
+    }
+}
+
+export class SpawnAgentTool extends BaseTool {
+    public readonly name = 'spawn_agent';
+    public readonly description = 'Spawn a new sub-agent to delegate tasks to.';
+    public readonly schema = z.object({
+        objective: z.string().describe('The initial objective or mission for this agent. This will be injected into its system prompt.'),
+        allowedTools: z.array(z.string()).describe('The list of tools this agent is allowed to use (e.g., ["read_file", "write_file", "send_message"])'),
+        workspaceType: z.enum(['PERSISTENT', 'VOLATILE']).describe('Workspace isolation level. PERSISTENT shares the main workspace, VOLATILE uses a temporary one.'),
+        isTemp: z.boolean().describe('If true, this agent will terminate itself after completing the task.')
+    });
+
+    constructor(private readonly agentManager: AgentManager) {
+        super();
+    }
+
+    public async execute(args: {
+        objective: string;
+        allowedTools: string[];
+        workspaceType: WorkspaceType;
+        isTemp: boolean;
+    }, context: ToolContext): Promise<string> {
+        
+        const agentId = IdGenerator.agent('sub');
+
+        await this.agentManager.spawnAgent(
+            AgentType.TASK,
+            agentId,
+            context.sessionId,
+            {
+                workspaceType: args.workspaceType,
+                allowedTools: args.allowedTools,
+                isTemp: args.isTemp
+            }
+        );
+        
+        const block = new DataBlock({
+            sessionId: context.sessionId,
+            senderId: context.agentId,
+            targetId: agentId,
+            type: 'system',
+            intent: 'TASK_ASSIGNMENT',
+            priority: MessagePriority.HIGH,
+            controlPayload: `[任務指派] 你的目標是：\n${args.objective}\n請開始執行。當任務完成後請回報結果。`,
+            metadata: {
+                senderName: 'Manager'
+            }
+        });
+        await context.eventBus.publishAsync({
+            type: AgentEvent.AgentMessage,
+            timestamp: Date.now(),
+            sessionId: context.sessionId,
+            payload: block
+        });
+
+        return `Agent ${agentId} spawned successfully and task assigned. Use send_message to communicate further.`;
+    }
+}
+
+export class TerminateSelfTool extends BaseTool {
+    public readonly name = 'terminate_self';
+    public readonly description = 'Terminate your own lifecycle. Use this ONLY when you are a temporary TaskAgent and have fully completed your assigned objective and reported back the final results.';
+    public readonly schema = z.object({});
+
+    constructor(private readonly agentManager: AgentManager) {
+        super();
+    }
+
+    public async execute(args: any, context: ToolContext): Promise<string> {
+        await this.agentManager.terminateAgent(context.agentId);
+        return 'Termination sequence initiated. Goodbye.';
     }
 }

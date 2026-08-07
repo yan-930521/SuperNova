@@ -11,16 +11,14 @@ export class ReadFileTool extends BaseTool {
   });
 
   constructor(
-    private readonly workspaceManager: IWorkspaceManager,
-    private readonly sessionId: string,
-    private readonly agentId: string
+    private readonly workspaceManager: IWorkspaceManager
   ) {
     super();
   }
 
   public async execute(args: { relativePath: string }, context: ToolContext): Promise<string> {
     try {
-      const content = await this.workspaceManager.readFile(this.sessionId, this.agentId, args.relativePath);
+      const content = await this.workspaceManager.readFile(context.sessionId, context.agentId, args.relativePath);
       return content;
     } catch (error: any) {
       return `Failed to read file: ${error.message}`;
@@ -36,15 +34,14 @@ export class ReadBlobTool extends BaseTool {
   });
 
   constructor(
-    private readonly workspaceManager: IWorkspaceManager,
-    private readonly sessionId: string
+    private readonly workspaceManager: IWorkspaceManager
   ) {
     super();
   }
 
   public async execute(args: { blobId: string }, context: ToolContext): Promise<string> {
     try {
-      const content = await this.workspaceManager.readBlob(this.sessionId, args.blobId);
+      const content = await this.workspaceManager.readBlob(context.sessionId, args.blobId);
       return content;
     } catch (error: any) {
       return `Failed to read blob ${args.blobId}: ${error.message}`;
@@ -61,16 +58,14 @@ export class WriteFileTool extends BaseTool {
   });
 
   constructor(
-    private readonly workspaceManager: IWorkspaceManager,
-    private readonly sessionId: string,
-    private readonly agentId: string
+    private readonly workspaceManager: IWorkspaceManager
   ) {
     super();
   }
 
   public async execute(args: { relativePath: string; content: string }, context: ToolContext): Promise<string> {
     try {
-      await this.workspaceManager.writeFile(this.sessionId, this.agentId, args.relativePath, args.content);
+      await this.workspaceManager.writeFile(context.sessionId, context.agentId, args.relativePath, args.content);
       return `Successfully wrote to ${args.relativePath}`;
     } catch (error: any) {
       return `Failed to write file: ${error.message}`;
@@ -86,16 +81,14 @@ export class ListFilesTool extends BaseTool {
   });
 
   constructor(
-    private readonly workspaceManager: IWorkspaceManager,
-    private readonly sessionId: string,
-    private readonly agentId: string
+    private readonly workspaceManager: IWorkspaceManager
   ) {
     super();
   }
 
   public async execute(args: { relativePath?: string }, context: ToolContext): Promise<string> {
     try {
-      const files = await this.workspaceManager.listFiles(this.sessionId, this.agentId, args.relativePath);
+      const files = await this.workspaceManager.listFiles(context.sessionId, context.agentId, args.relativePath);
       return files.join('\n');
     } catch (error: any) {
       return `Failed to list files: ${error.message}`;
@@ -111,16 +104,14 @@ export class RunBashTool extends BaseTool {
   });
 
   constructor(
-    private readonly workspaceManager: IWorkspaceManager,
-    private readonly sessionId: string,
-    private readonly agentId: string
+    private readonly workspaceManager: IWorkspaceManager
   ) {
     super();
   }
 
   public async execute(args: { command: string }, context: ToolContext): Promise<string> {
     try {
-      const result = await this.workspaceManager.runBash(this.sessionId, this.agentId, args.command);
+      const result = await this.workspaceManager.runBash(context.sessionId, context.agentId, args.command);
       return `ExitCode: ${result.exitCode}\nSTDOUT:\n${result.stdout}\nSTDERR:\n${result.stderr}`;
     } catch (error: any) {
       return `Failed to run bash command: ${error.message}`;

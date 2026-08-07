@@ -11,7 +11,6 @@ import { AgentOptions, AgentType, BaseAgent } from './BaseAgent';
  */
 export class EmbodiedAgent extends BaseAgent {
   public readonly type = AgentType.EMBODIED;
-  public readonly canClone = false;
 
   constructor(
     id: string,

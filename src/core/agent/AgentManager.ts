@@ -10,7 +10,7 @@ import { EmbodiedAgent } from './EmbodiedAgent';
 import { LLMProvider } from './LLMProvider';
 import { MainAgent } from './MainAgent';
 import { TaskAgent } from './TaskAgent';
-import { SendMessageTool, ToggleProjectionTool } from './tool/AgentTools';
+import { ToolRegistry } from './tool/ToolRegistry';
 
 /**
  * 代理人管理器 (AgentManager)
@@ -21,6 +21,7 @@ export class AgentManager implements ILifecycle {
 
     // 記憶體中的活躍 Agent 池 (Key: agentId)
     private readonly activeAgents: Map<string, BaseAgent> = new Map();
+    private readonly toolRegistry: ToolRegistry;
     private readonly sessionAgents: Map<string, Set<string>> = new Map();
 
     private addAgentToPool(agent: BaseAgent) {
@@ -52,7 +53,9 @@ export class AgentManager implements ILifecycle {
         private readonly dataBlockRepo: IDataBlockRepository,
         private readonly workspaceManager: IWorkspaceManager,
         private readonly llmProvider: LLMProvider
-    ) { }
+    ) {
+        this.toolRegistry = new ToolRegistry(this.workspaceManager, this);
+    }
 
     // ==========================================
     // 生命週期 (ILifecycle)
@@ -117,9 +120,9 @@ export class AgentManager implements ILifecycle {
         type: AgentType,
         id: string,
         sessionId: string,
-        options?: AgentOptions
+        options?: Partial<AgentOptions>
     ): BaseAgent {
-        const mergedOptions: AgentOptions = { 
+        const mergedOptions: AgentOptions = {
             ...options,
             llmProvider: this.llmProvider,
             eventBus: this.eventBus,
@@ -145,25 +148,29 @@ export class AgentManager implements ILifecycle {
         type: AgentType,
         id: string,
         sessionId: string,
-        options?: AgentOptions
+        options?: Partial<AgentOptions>
     ): Promise<BaseAgent> {
         if (this.activeAgents.has(id)) {
             throw new Error(`Agent with ID ${id} is already active.`);
         }
 
-        const agent = this.createAgentInstance(type, id, sessionId, options);
+        const toolNamesToLoad = options?.allowedTools ?? this.getDefaultTools(type);
+        if (options?.isTemp && !toolNamesToLoad.includes('terminate_self')) {
+            toolNamesToLoad.push('terminate_self');
+        }
+
+        const agent = this.createAgentInstance(type, id, sessionId, {
+            ...options,
+            allowedTools: toolNamesToLoad
+        });
 
         try {
             // 掛載工作區與工具
             const workspaceType = options?.workspaceType || 'PERSISTENT';
-            await this.workspaceManager.initWorkspace(sessionId, id, workspaceType as any);
+            await this.workspaceManager.initWorkspace(sessionId, id, workspaceType);
 
             const tools: BaseTool[] = [];
-            if (type === AgentType.MAIN) tools.push(new ToggleProjectionTool());
-            if (type === AgentType.MAIN || type === AgentType.TASK) {
-                tools.push(...this.workspaceManager.loadTools(sessionId, id));
-            }
-            tools.push(new SendMessageTool());
+            tools.push(...this.toolRegistry.getTools(toolNamesToLoad));
 
             agent.updateTools(tools);
 
@@ -173,7 +180,7 @@ export class AgentManager implements ILifecycle {
 
             // 初始存檔 (需確保已經在 activeAgents 內)
             await this.saveAgent(id);
-            
+
             this.logger.info(`[AgentManager] Spawned new agent ${id} of type ${type}`);
             return agent;
         } catch (err) {
@@ -271,16 +278,16 @@ export class AgentManager implements ILifecycle {
         // 掛載工作區與工具
         await this.workspaceManager.initWorkspace(sessionId, agentId, data.workspaceType || 'PERSISTENT');
 
-        const tools: any[] = [];
-        if (data.type === AgentType.MAIN) tools.push(new ToggleProjectionTool());
-        if (data.type === AgentType.MAIN || data.type === AgentType.TASK) {
-            tools.push(...this.workspaceManager.loadTools(sessionId, agentId));
+        const tools: BaseTool[] = [];
+        const toolNamesToLoad = (data as any).allowedTools ?? this.getDefaultTools(data.type);
+        if (data.isTemp && !toolNamesToLoad.includes('terminate_self')) {
+            toolNamesToLoad.push('terminate_self');
         }
-        tools.push(new SendMessageTool());
+        tools.push(...this.toolRegistry.getTools(toolNamesToLoad));
 
         agent.updateTools(tools);
         agent.setReady();
-        
+
         // 完全就緒後才放入活躍池
         this.addAgentToPool(agent);
 
@@ -296,5 +303,15 @@ export class AgentManager implements ILifecycle {
         const promises = Array.from(agentIds).map(id => this.dehydrate(id));
         await Promise.all(promises);
         this.logger.info(`[AgentManager] All agents in session ${sessionId} have been dehydrated.`);
+    }
+
+    public getDefaultTools(type: AgentType): string[] {
+        if (type === AgentType.MAIN) {
+            return ['toggle_projection', 'read_file', 'write_file', 'list_files', 'run_bash', 'read_blob', 'send_message', 'spawn_agent'];
+        }
+        if (type === AgentType.TASK) {
+            return ['read_file', 'write_file', 'list_files', 'run_bash', 'read_blob', 'send_message'];
+        }
+        return ['send_message'];
     }
 }
