@@ -24,7 +24,7 @@ export class MainAgent extends BaseAgent {
         // 從 JSON 設定檔載入 MainAgent 專屬身份與認知
         if (!this.profile) {
             try {
-                const rawContent = PromptLoader.loadProfile('v1/main_agent', this.config, '{}');
+                const rawContent = PromptLoader.loadProfile('main_agent', this.config, '{}');
                 const profileData = JSON.parse(rawContent);
                 this.setProfile(profileData);
             } catch (error) {
@@ -32,16 +32,14 @@ export class MainAgent extends BaseAgent {
             }
         }
 
-        this.initEmotionalState();
+        // this.initEmotionalState();
     }
 
     /**
      * 註冊針對 MainAgent 的 Hook 監聽器 (由 BaseAgent 建構子統一調用)
      */
-    /**
-     * 註冊針對 MainAgent 的 Hook 監聽器 (由 BaseAgent 建構子統一調用)
-     */
     protected setupHooks(): void {
+        /*
         // 1. 動態注入情緒模型到 System Prompt
         this.subscribeEvent(HookEvent.BeforeAgentStep, async (event) => {
             if (event.payload.agentId === this.id && this.emotionalState) {
@@ -122,11 +120,13 @@ export class MainAgent extends BaseAgent {
                 }
             }
         }, { sessionId: this.sessionId });
+        */
     }
 
     /**
      * 初始化情感狀態
      */
+    /*
     private initEmotionalState(): void {
         if (!this.emotionalState) {
             this.emotionalState = {
@@ -143,11 +143,13 @@ export class MainAgent extends BaseAgent {
             };
         }
     }
+    */
 
     /**
      * 新版極簡情緒轉變演算法
      * 新情緒數值 = 舊數值 + 事件衝擊力 (Impact) * 敏感度權重 (Personality Weight)
      */
+    /*
     public appraiseEvent(impacts: Partial<Omit<BaseAgentData['emotionalState'], 'attentionMode'>>, personalityWeight: number = 1.0): void {
         if (!this.emotionalState) return;
 
@@ -171,4 +173,5 @@ export class MainAgent extends BaseAgent {
             }
         }
     }
+    */
 }
