@@ -8,7 +8,7 @@ import { ConfigLoader } from '../src/core/config/ConfigLoader';
 import { RuntimeKernel } from '../src/core/lifecycle/RuntimeKernel';
 import { DataBlock } from '../src/core/messaging/DataBlock';
 import { EventBus } from '../src/core/messaging/EventBus';
-import { AgentEvent, IEvent } from '../src/core/messaging/IBus';
+import { AgentEvent, IEvent, SystemEvent } from '../src/core/messaging/IBus';
 import { SessionManager } from '../src/core/session/SessionManager';
 
 dotenvConfig();
@@ -66,9 +66,24 @@ async function main() {
     const ask = () => {
         rl.question('\nYou: ', (input) => {
             const text = input.trim();
-            if (text.toLowerCase() === 'exit' || text.toLowerCase() === 'quit') {
-                console.log('系統關閉中，正在儲存記憶...');
-                kernel.stop().then(() => process.exit(0));
+            if (text === 'exit') {
+                console.log('系統關閉中...');
+                kernel.stop().then(() => {
+                    rl.close();
+                    process.exit(0);
+                });
+                return;
+            }
+
+            if (text === '/day') {
+                console.log('[系統] 手動觸發換日優化與總結 (SessionOptimization)...');
+                eventBus.publish({
+                    type: SystemEvent.SessionOptimization,
+                    timestamp: Date.now(),
+                    sessionId: sessionId,
+                    payload: { sessionId, targetDate: new Date().toLocaleDateString('en-CA') }
+                });
+                setTimeout(ask, 1000);
                 return;
             }
 
@@ -84,7 +99,10 @@ async function main() {
                 targetId: MainAgentId,
                 type: 'human',
                 intent: 'USER_INPUT',
-                controlPayload: text
+                controlPayload: text,
+                metadata: {
+                    senderName: "Yan"
+                }
             });
 
             // 透過標準的 AgentMessage 頻道廣播
