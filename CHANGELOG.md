@@ -35,7 +35,7 @@
 
 ### Changed (效能與架構優化)
 - **組態引擎翻新 (Config Engine)**：
-  - 翻新組態引擎，使用 Zod 進行動態 Schema 遍歷，並支援產生帶有 `__keyname` 註解的 JSON。
+  - 翻新組態引擎，使用 Zod 進行動態 Schema 遍歷，並全面改用 YAML 格式生成與讀取設定檔，大幅提升開發者可讀性與維護性。
 - **記憶體管線 (Memory Pipeline)**：
   - 簡化背景記憶管線，改為單一階段的圖記憶體 (Graph Memory) 萃取。
 - **歷史寫入批次優化 (Batch I/O Pipelining)**：

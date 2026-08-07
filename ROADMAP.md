@@ -6,13 +6,13 @@
 
 目前已完成 SuperNova 核心基礎設施與「圖向量混合記憶系統」的建置，為後續的自主進化打下穩固根基。
 
-### 🌟 核心技術亮點 (Technical Highlights)
+### 核心技術亮點 (Technical Highlights)
 1. **圖向量混合記憶 (Graph & Episodic Memory System)**
    - **長期記憶 (Graph Memory)**：透過 LLM 自動提煉原子化實體 (Entities) 與關係 (Relations)，結合 OpenAI Embeddings 與 Vectra 本地向量資料庫進行儲存。
    - **情節記憶 (Episodic Memory)**：透過每日換日機制，將凌亂的對話自動濃縮為「AI 日記」，保留互動氛圍與使用者的潛規則。
    - **動態上下文檢索 (Dynamic Context Injection)**：實作 `BeforeAgentStep` 生命週期 Hook，自動尋找高關聯圖譜記憶與近期日記，無縫注入大腦。
 2. **底層架構與配置 (Architecture & Config)**
-   - **動態配置引擎 (Zod-based Config Engine)**：採用 Zod Schema 進行強型別校驗與動態覆寫，提供防呆與配置彈性。
+   - **動態配置引擎 (Zod-based Config Engine)**：採用 Zod Schema 進行強型別校驗與動態覆寫，全面支援 YAML 格式設定檔生成與讀取，提供極佳的防呆與配置彈性。
    - **工作區隔離 (Two-Tier Workspace Isolation)**：實作「持久層」與「揮發層」兩級工作區，保證 Session 具備隔離的實驗沙盒。
    - **異步事件驅動 (Asynchronous EventBus)**：完全摒棄直接 Method Call，所有生命週期與狀態切換均走 EventBus，具備防卡死與高度解耦。
 3. **效能與穩健性 (Performance & Reliability)**
