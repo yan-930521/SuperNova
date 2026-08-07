@@ -8,7 +8,7 @@ web/*
 .dev/*
 .worktrees/*
 src/package/*
-config.json
+config.yaml
 bun.lockb
 workspace/session/*
 workspace/profiles/*

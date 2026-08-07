@@ -19,7 +19,7 @@ async function main() {
     console.log('Initializing system...');
 
     const loader = new ConfigLoader();
-    const config = await loader.bootstrap('./config.json');
+    const config = await loader.bootstrap('./config.yaml');
     const kernel = new RuntimeKernel(config);
 
     // 1. 透過內核啟動所有系統組件 (IoC, Repo, Managers)

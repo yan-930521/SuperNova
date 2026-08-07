@@ -1,3 +1,4 @@
+import { YAML } from 'bun';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { z } from 'zod';
@@ -6,31 +7,43 @@ import { LogManager } from '../infra/LogManager';
 import { Config, ConfigSchema, DeepPartial } from './Config';
 import { DEFAULT_CONFIG } from './DefaultConfig';
 
-function generateCommentedConfig(schema: z.ZodTypeAny | undefined, values: any): any {
+const generateYamlTemplate = (schema: z.ZodTypeAny | undefined, values: any, indent: number = 0): string => {
     if (values === null || typeof values !== 'object' || Array.isArray(values)) {
-        return values;
+        return '';
     }
 
     const isObjectSchema = schema instanceof z.ZodObject;
     const isRecordSchema = schema instanceof z.ZodRecord;
+    
+    let yamlString = '';
+    const spaces = ' '.repeat(indent);
 
-    const result: any = {};
-
-    if (schema?.description) {
-        result['__comment__'] = schema.description;
+    if (schema?.description && indent === 0) {
+        yamlString += `${spaces}# ${schema.description.replace(/\n/g, `\n${spaces}# `)}\n`;
     }
 
     for (const key in values) {
         const fieldSchema = isObjectSchema ? schema.shape[key] : (isRecordSchema ? schema.valueType : undefined);
+        const value = values[key];
         
         if (fieldSchema?.description) {
-            result[`__comment_${key}__`] = fieldSchema.description;
+            yamlString += `\n${spaces}# ${fieldSchema.description.replace(/\n/g, `\n${spaces}# `)}\n`;
         }
-
-        result[key] = generateCommentedConfig(fieldSchema, values[key]);
+        
+        if (value === null || typeof value !== 'object') {
+            yamlString += `${spaces}${key}: ${YAML.stringify(value).trim()}\n`;
+        } else if (Array.isArray(value)) {
+            yamlString += `${spaces}${key}:\n`;
+            for (const item of value) {
+                yamlString += `${spaces}  - ${YAML.stringify(item).trim()}\n`;
+            }
+        } else {
+            yamlString += `${spaces}${key}:\n`;
+            yamlString += generateYamlTemplate(fieldSchema, value, indent + 2);
+        }
     }
 
-    return result;
+    return yamlString;
 }
 
 /**
@@ -51,12 +64,10 @@ export class ConfigLoader {
             // 嘗試訪問檔案
             await fs.access(targetPath);
 
-            // 檔案存在，執行讀取與解析
+            // 檔案存在，執行讀取與解析 (使用 Bun 內建 YAML)
             const content = await fs.readFile(targetPath, 'utf-8');
             try {
-                // 移除 // 與 /* */ 註解，以便支援過渡期 jsonc 格式 (向下相容)
-                const cleanContent = content.replace(/\/\/.*|\/\*[\s\S]*?\*\//g, '');
-                customConfig = JSON.parse(cleanContent);
+                customConfig = YAML.parse(content) || {};
             } catch (parseError) {
                 // 若解析失敗，記錄錯誤並拋出，防止以損壞的配置啟動
                 LogManager.recorder.error(`[ConfigLoader] Failed to parse config file at ${targetPath}:`, { payload: { error: parseError }, type: 'SYSTEM' });
@@ -73,11 +84,10 @@ export class ConfigLoader {
                     await fs.mkdir(dir, { recursive: true });
                 }
 
-                // 利用 Zod schema 與 describe 產生帶有 __comment 鍵的 JSON 結構
-                const commentedConfig = generateCommentedConfig(ConfigSchema, DEFAULT_CONFIG);
-                const defaultConfigJson = JSON.stringify(commentedConfig, null, 2);
+                // 利用 Zod schema 與 describe 產生完美的 YAML 註解模板
+                const defaultYaml = generateYamlTemplate(ConfigSchema, DEFAULT_CONFIG);
                 
-                await fs.writeFile(targetPath, defaultConfigJson, 'utf-8');
+                await fs.writeFile(targetPath, defaultYaml.trim() + '\n', 'utf-8');
             } else {
                 // 其他系統級別的檔案訪問錯誤
                 throw error;
