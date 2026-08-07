@@ -8,8 +8,8 @@ import {
 import { DataBlock, MessagePriority } from '../src/core/messaging/DataBlock';
 
 async function runOomBenchmark() {
-    console.log("🔥 啟動十萬級歷史對話 OOM 防禦戰壓測...");
-    console.log("==========================================");
+    console.log("🔥 Starting 100k-scale Historical Dialogue OOM Defense Stress Test...");
+    console.log("==================================================================");
 
     const testDir = path.join(process.cwd(), "workspace", "benchmark_oom_test");
     if (fs.existsSync(testDir)) {
@@ -33,7 +33,7 @@ async function runOomBenchmark() {
     const startMemory = process.memoryUsage().heapUsed;
     const startTime = Bun.nanoseconds();
 
-    console.log(`開始向系統灌入 ${totalMessages.toLocaleString()} 筆對話，理論總容量大約 500 MB...\n`);
+    console.log(`Starting to inject ${totalMessages.toLocaleString()} messages into the system, theoretical total capacity is about 500 MB...\n`);
 
     for (let i = 0; i < totalMessages; i += batchSize) {
         const blocks: DataBlock<any>[] = [];
@@ -53,7 +53,7 @@ async function runOomBenchmark() {
         await repo.saveForAgent(SESSION_ID, AGENT_ID, blocks);
         
         const currentMemory = process.memoryUsage().heapUsed;
-        console.log(`✅ 已寫入 ${i + batchSize} 筆巨量歷史... 當前 Heap 記憶體: ${(currentMemory / 1024 / 1024).toFixed(2)} MB`);
+        console.log(`✅ Written ${i + batchSize} massive historical entries... Current Heap Memory: ${(currentMemory / 1024 / 1024).toFixed(2)} MB`);
     }
 
     const endTime = Bun.nanoseconds();
@@ -62,18 +62,18 @@ async function runOomBenchmark() {
     const durationMs = (endTime - startTime) / 1_000_000;
     const memoryDelta = (endMemory - startMemory) / 1024 / 1024;
 
-    console.log("\n📊 OOM 壓測總結:");
+    console.log("\n📊 OOM Benchmark Summary:");
     console.log(`------------------------------------------`);
-    console.log(`- 總計寫入: ${totalMessages.toLocaleString()} 筆歷史對話 (每筆 ~5KB)`);
-    console.log(`- 理論總負載: ~500 MB 的記憶體壓力`);
-    console.log(`- 總 I/O 耗時: ${durationMs.toFixed(2)} ms`);
-    console.log(`- 記憶體實際漲幅 (Memory Delta): ${memoryDelta.toFixed(2)} MB`);
+    console.log(`- Total written: ${totalMessages.toLocaleString()} historical messages (~5KB each)`);
+    console.log(`- Theoretical load: ~500 MB of memory pressure`);
+    console.log(`- Total I/O time: ${durationMs.toFixed(2)} ms`);
+    console.log(`- Actual Memory Delta: ${memoryDelta.toFixed(2)} MB`);
     
     if (memoryDelta < 50) {
-        console.log("\n🛡️ 結論：成功防禦 OOM！");
-        console.log("記憶體漲幅遠低於理論資料量，證明底層的 Offloading 與滑動視窗(LRU)機制完美攔截了所有的記憶體洩漏！");
+        console.log("\n🛡️ Conclusion: Successfully defended against OOM!");
+        console.log("The memory increase is far below the theoretical data volume, proving that the underlying Offloading and Sliding Window (LRU) mechanisms perfectly intercepted all memory leaks!");
     } else {
-        console.log("\n⚠️ 結論：記憶體漲幅過高，系統可能有 Leak，請檢查 LRUCache 上限！");
+        console.log("\n⚠️ Conclusion: Memory increase is too high, the system might have a leak. Please check the LRUCache limit!");
     }
 
     // 清理殘留的測試資料夾
