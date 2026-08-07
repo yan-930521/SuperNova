@@ -80,6 +80,8 @@ export interface ContextOverride {
     envState?: string;
     /** 動態注入的系統 Prompt 區段 */
     injectedPrompts?: IPromptSection[];
+    /** 當前觸發 Agent 的新訊息 (供 Hook 動態檢索 Context 使用) */
+    currentMessages?: DataBlock[];
 }
 
 /**
@@ -912,7 +914,8 @@ export abstract class BaseAgent {
             // 觸發 BEFORE_AGENT_STEP Hook (單次觸發)
             const contextPayload: ContextOverride = {
                 agentId: this.id,
-                injectedPrompts: []
+                injectedPrompts: [],
+                currentMessages: messages
             };
 
             await this.invokeBeforeStepHook(contextPayload);

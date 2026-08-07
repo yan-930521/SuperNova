@@ -7,11 +7,9 @@ import { GraphEdge, GraphNode, IGraphRepository } from '../infra/persistence/IGr
 import { IDataBlockRepository } from '../infra/persistence/IRepository';
 import { ILifecycle } from '../lifecycle/ILifecycle';
 import { DataBlock } from '../messaging/DataBlock';
-import { AgentEvent, IEvent, IEventBus, SystemEvent } from '../messaging/IBus';
+import { AgentEvent, HookEvent, IEvent, IEventBus, SystemEvent } from '../messaging/IBus';
 import { IdGenerator } from '../utils/IdGenerator';
-import {
-    GRAPH_EXTRACTOR_PROMPT, GRAPH_EXTRACTOR_TYPE, SESSION_SUMMARY_PROMPT
-} from './prompt';
+import { GRAPH_EXTRACTOR_PROMPT, GRAPH_EXTRACTOR_TYPE, SESSION_SUMMARY_PROMPT } from './prompt';
 
 /**
  * 記憶萃取引擎 (Memory Manager)
@@ -46,6 +44,7 @@ export class MemoryManager implements ILifecycle {
         this.eventBus.subscribe(AgentEvent.AgentMessage, this.handleAgentMessage.bind(this));
         this.eventBus.subscribe(SystemEvent.SessionOptimization, this.handleSessionOptimization.bind(this));
         this.eventBus.subscribe(SystemEvent.Tick, this.handleTick.bind(this));
+        this.eventBus.subscribe(HookEvent.BeforeAgentStep, this.handleBeforeAgentStep.bind(this));
     }
 
     public async start(): Promise<void> {
@@ -128,6 +127,56 @@ export class MemoryManager implements ILifecycle {
             }
         } catch (err: any) {
             this.logger.error(`[MemoryManager] Error checking extraction threshold: ${err.message}`);
+        }
+    }
+
+    /**
+     * 處理 BeforeAgentStep，實作動態上下文檢索 (Dynamic Context Retrieval)
+     * 利用 cosine similarity 找出圖譜中與當前對話最相關的節點並注入 Prompt。
+     */
+    private async handleBeforeAgentStep(event: IEvent<HookEvent.BeforeAgentStep>): Promise<void> {
+        if (!this.config.agent.enable_graph_memory) return;
+
+        const context = event.payload;
+        if (!context || !context.currentMessages || context.currentMessages.length === 0) return;
+
+        try {
+            // 找出最後一筆用戶或系統輸入作為檢索用的 Query
+            const lastMsg = context.currentMessages[context.currentMessages.length - 1];
+            let queryText = lastMsg.toMarkdown();
+
+            // 若長度不足或為空，可以考慮不檢索，或結合歷史
+            if (queryText.length < 3) return;
+
+            // 產生 Query 的向量
+            const queryEmbedding = await this.llmProvider.generateEmbeddings(queryText);
+
+            // 在 Repository 中尋找最相近的 N 個節點
+            const topNodes = await this.graphRepo.searchNodesByVector(event.sessionId || "global", queryEmbedding, 5);
+            
+            if (topNodes && topNodes.length > 0) {
+                // 將檢索出的節點轉為文字格式注入 System Prompt
+                let memoryContext = "## RETRIEVED GRAPH MEMORY CONTEXT\n";
+                memoryContext += "Based on your current input, the following related entities and concepts were retrieved from your long-term memory:\n\n";
+
+                topNodes.forEach((node, index) => {
+                    memoryContext += `- [${node.type}] ${node.id}: ${node.description}\n`;
+                });
+
+                if (!context.injectedPrompts) {
+                    context.injectedPrompts = [];
+                }
+                
+                // 這裡需要匯入 PromptSectionIndex.MEMORY_CONTEXT，或直接用 7
+                context.injectedPrompts.push({
+                    index: 7, // PromptSectionIndex.MEMORY_CONTEXT
+                    content: memoryContext
+                });
+                
+                this.logger.info(`[MemoryManager] Injected ${topNodes.length} graph memory nodes for context retrieval.`);
+            }
+        } catch (err: any) {
+            this.logger.error(`[MemoryManager] Failed to retrieve dynamic context: ${err.message}`);
         }
     }
 
@@ -252,9 +301,10 @@ export class MemoryManager implements ILifecycle {
      * 從對話歷史中萃取並保存記憶圖譜
      * @param sessionId 當前的 Session ID
      * @param agentId 要萃取歷史的 Agent ID (預設 main)
-     * @param userInfo 使用者基本資料 (幫助 Prompt 判斷 "I" 或 "User" 的指代)
+     * @param agentName Agent 名稱
+     * @param userIName 使用者 名稱
      */
-    public async extractAndSaveSessionMemory(sessionId: string, agentId: string = 'main', userInfo: string = "User"): Promise<void> {
+    public async extractAndSaveSessionMemory(sessionId: string, agentId: string = 'main', agentName: string = "AI", userName: string = "User"): Promise<void> {
         // 從資料庫載入該 Agent 的所有對話歷史
         const blocks = await this.dataBlockRepo.findByAgent(sessionId, agentId);
         if (!blocks || blocks.length === 0) return;
@@ -271,7 +321,7 @@ export class MemoryManager implements ILifecycle {
             const batchBlocks = unextractedBlocks.slice(i, i + BATCH_SIZE);
 
             // 將過濾出的 DataBlocks 轉換為對話文本字串
-            const dialogueLines = batchBlocks.map(b => `${b.type === 'human' ? 'User' : 'Assistant'}: ${b.controlPayload}`);
+            const dialogueLines = batchBlocks.map(b => `${b.type === 'human' ? userName : agentName}: ${b.controlPayload}`);
             const dialogue = dialogueLines.join('\n');
 
             if (!dialogue || dialogue.trim().length === 0) {
