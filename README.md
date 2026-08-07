@@ -48,6 +48,11 @@ SuperNova 是一個專注於效能與狀態管理的 **Agent Runtime (代理人�
 - **全非同步併發架構 (Full Async Concurrency)**：整份專案大量運用併發操作處理高 I/O 任務 (例如：平行寫入多個 Session 日誌、批次離線壓縮記憶體、並行呼叫外部 LLM API)，徹底榨乾 Event Loop 效能，確保 AI 代理在處理龐大上下文時絕不被 I/O 阻塞拖慢。
 - **泛型 LRU 快取與 Memoization**：底層實作獨立且可重用的泛型 `LRUCache` (如維護上限 50 Key)，搭配增量快取機制，杜絕記憶體無限膨脹並大幅消除重複的序列化開銷。
 
+### 4. 多代理人協作與委派 (Multi-Agent Delegation)
+- **細粒度工具權限分配**：系統在喚醒或生成 Agent 時能動態篩選出該代理人被允許使用的特定工具，達成權限邊界的嚴格劃分。
+- **自主子代理生命週期**：`MainAgent` 能夠隨時建立臨時的 `TaskAgent`，指派目標、工作區與特定工具，而這些臨時子代理在完成任務後能夠自主使用 `TerminateSelfTool` 清除自身狀態，釋放系統資源。
+- **Agent級工作區驅動實例**：底層 I/O 在處理工作區讀寫時，使用 `agentId` 映射獨立儲存驅動（如純記憶體 VOLATILE 或 Git PERSISTENT），即使在同一 Session 底下，不同的子代理也能擁有各自的隔離空間。
+
 ---
 
 ## Development Roadmap

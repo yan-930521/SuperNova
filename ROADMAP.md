@@ -40,5 +40,8 @@
   - 新增 Task 系統，讓主腦與開發者能清楚看見每一步驟的執行進度。
   - **步驟級暫存 (Step-level Caching)**：任務的每一次關鍵步驟，都強制與目前的 Git Workspace 系統連動進行暫存隔離，確保隨時可乾淨地回溯與檢查。
   - **多代理人衝突處理 (Multi-Agent Conflict Resolution)**：為未來的多任務並行打下基礎，利用 Git 樹狀分支優勢，自動處理多位 Sub-Agent 同時操作檔案時的 Merge 衝突與狀態合併。
-- **動態工具分配 (Configurable Tool Delegation)**
+- **動態工具分配 (Configurable Tool Delegation) (已完成)**
   - 工具資源不再無腦全域掛載。除了高風險工具需嚴格控管外，`MainAgent` 在建立或喚醒子代理人 (Sub-Agent) 時，可根據任務需求，靈活且精準地「分配 (Delegate)」特定的工具集合給子代理人。
+  - **技術亮點 (Technical Highlights)**：
+    - 將 ToolRegistry 改由 AgentManager 直轄的無狀態物件，不再依賴全域單例，達成完全的生命週期反轉控制。
+    - 支援 SpawnAgentTool 生成免洗代理人 (`isTemp: true`)，並自動強迫配置 `TerminateSelfTool`，同時結合 WorkspaceManager 以 agentId 映射工作區驅動機制，實現了安全的隔離與任務完結後的記憶體釋放。

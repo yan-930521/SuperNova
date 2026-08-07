@@ -7,6 +7,15 @@
 ---
 
 ## [Unreleased]
+### Added (新增功能與基礎設施)
+- **多代理人動態委派系統 (Multi-Agent Dynamic Delegation)**：
+  - **ToolRegistry 解耦與反轉控制**：將 `ToolRegistry` 由全域 DI 容器抽離，改為受 `AgentManager` 內部直轄的無狀態管理員，徹底解決模組間的循環依賴。
+  - **SpawnAgentTool 與 TerminateSelfTool**：`MainAgent` 現在擁有直接產出任務型子代理人 (TaskAgent) 的能力，可動態指派目標 (Objective)、工作區隔離級別 (WorkspaceType) 與工具權限 (AllowedTools)；而子代理人在設定為 `isTemp: true` 的情況下，可於任務結束後使用 `TerminateSelfTool` 自行銷毀，釋放資源。
+  - **細粒度工具權限分配 (Configurable Tool Delegation)**：透過新的 ToolRegistry 架構，系統在喚醒或生成 Agent 時能動態篩選出該代理人被允許使用的特定工具，達成權限邊界的嚴格劃分。
+
+### Fixed (穩定性與併發修復)
+- **多代理人工作區驅動器衝突 (Workspace Driver Resolution Conflict)**：
+  - 修復了同一個 Session 下若存在多個代理人，在存取 `WorkspaceManager` 時無法分別綁定不同驅動型態 (例如 `GitLocalStorageDriver` vs `MemoryVfsStorageDriver`) 的重大缺陷，將底層的快取對應鍵 (Cache Key) 由 `sessionId` 修正為 `agentId`，完整實踐了代理人級別的工作區實體隔離。
 
 ---
 
