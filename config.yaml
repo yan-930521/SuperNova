@@ -1,0 +1,123 @@
+# 系統全局配置
+# 系統版本號碼
+version: v0.1.0
+# 安全性相關配置
+security:
+    # 工具執行的預設超時時間 (ms)
+    default_tool_timeout_ms: 30000
+    # 是否允許執行 TIER_3 (高風險/外部) 工具
+    allow_tier_3_tools: false
+    # 安全 token 上限預警值
+    max_safe_tokens: 100000
+# 儲存路徑相關配置
+storage:
+    # 儲存根目錄 (workspace)
+    base_dir: ./workspace
+    # 會話子目錄
+    session_dir: session
+    # Agent 專屬實體工作區子目錄
+    agent_dir: agent
+    # Profile目錄
+    agent_profile_dir: profiles
+    # 圖譜資料庫子目錄
+    graph_dir: graph
+    # 每日總結存放目錄
+    daily_dir: daily
+    # Blob目錄
+    blob_dir: blobs
+    session_file: session.json
+    history_file: history.jsonl
+    agent_state_file: state.json
+    oplog_file: .oplog.jsonl
+    graph_nodes_file: nodes.json
+    graph_edges_file: edges.json
+# 大語言模型相關配置
+llm:
+    # 預設使用的 preset 名稱
+    default_preset: REASONING_FAST
+    # 自定義的多組設定檔 (如 SMART, FAST 等)
+    presets:
+        DEFAULT:
+            modelName: gpt-5.6-luna
+            temperature: 1
+            maxTokens: 8192
+            reasoning:
+                effort: low
+                summary: auto
+            parallel_tool_calls: true
+            service_tier: flex
+        REASONING_FAST:
+            modelName: gpt-5.6-luna
+            temperature: 1
+            maxTokens: 8192
+            reasoning:
+                effort: low
+                summary: auto
+            parallel_tool_calls: true
+            service_tier: flex
+        FAST:
+            modelName: gpt-4o-mini
+            temperature: 0.2
+            maxTokens: 4096
+            parallel_tool_calls: true
+        CHEAP:
+            modelName: gpt-5.6-luna
+            temperature: 0.2
+            maxTokens: 4096
+            service_tier: flex
+            parallel_tool_calls: true
+        EXTRACTION:
+            modelName: gpt-4o-mini
+            temperature: 0.1
+            maxTokens: 8192
+            parallel_tool_calls: true
+# Agent 行為配置
+agent:
+    # 允許派生分身的數量上限 (避免記憶體與 Token 無限耗盡)
+    max_clones_per_agent: 5
+    # 允許agent暫時忽略的背景資訊通知
+    force_wakeup_threshold: 5
+    # context engineering 時 節省token
+    save_tokens: true
+    # 保留最近 n 筆不壓縮，避免 LLM 忘記剛執行的細節，僅在 save_tokens = true 時啟用
+    uncompressed_tail: 5
+    # 最大上下文窗口
+    max_context_window: 128000
+    # 是否開啟對話時間感知插針
+    enable_temporal_injection: true
+    # 是否開啟記憶圖譜背景萃取功能
+    enable_graph_memory: true
+    # 是否開啟每日總結功能
+    enable_daily_summary: true
+    # 是否開啟超大文本自動卸載 (Data Pointer) 功能
+    enable_payload_offload: true
+    # 觸發時間感知插針的時間間隔閾值 (毫秒)
+    temporal_threshold_ms: 1800000
+    # 收到新訊息時，超過此長度 (字元) 的 Payload 將自動卸載
+    offload_threshold_new_message: 50000
+    # 背景歷史壓縮時，超過此長度 (字元) 的舊歷史 Payload 將被強制卸載
+    offload_threshold_compact: 1000
+    # 讀取檔案時的安全上限，防止單一檔案過大癱瘓記憶體
+    max_history_lines_safety_cap: 5000
+    # 對話累積多少筆未萃取記憶時，觸發背景萃取
+    memory_extract_threshold: 50
+    # 每日優化觸發時間 (HH:mm)，例如 "03:00"
+    daily_optimization_time: 00:00
+    # 換日偵測的心跳檢查間隔 (毫秒)，預設 30000 (30秒)
+    daily_optimization_check_interval_ms: 30000
+    # 換日後防打斷的靜默等待時間 (毫秒)，預設 600000 (10分鐘)
+    daily_optimization_idle_threshold_ms: 600000
+# 快取與 TTL 相關配置
+cache:
+    # 歷史訊息 LRU 快取最大數量
+    history_lru_size: 500
+    # 系統提示詞 LRU 快取最大數量
+    prompt_lru_size: 100
+    # 系統提示詞快取有效時間 (毫秒)
+    prompt_ttl_ms: 60000
+    # 意識投影歷史 LRU 快取最大數量
+    projection_lru_size: 10
+    # 意識投影歷史快取有效時間 (毫秒)
+    projection_ttl_ms: 5000
+    # EventBus 監聽者快取最大數量
+    event_bus_lru_size: 500

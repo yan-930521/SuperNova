@@ -19,7 +19,7 @@ const generateYamlTemplate = (schema: z.ZodTypeAny | undefined, values: any, ind
     const spaces = ' '.repeat(indent);
 
     if (schema?.description && indent === 0) {
-        yamlString += `${spaces}# ${schema.description.replace(/\n/g, `\n${spaces}# `)}\n`;
+        yamlString += `${spaces}# ${schema.description.replace(/\n/g, `${spaces}# `)}\n`;
     }
 
     for (const key in values) {
@@ -27,7 +27,7 @@ const generateYamlTemplate = (schema: z.ZodTypeAny | undefined, values: any, ind
         const value = values[key];
         
         if (fieldSchema?.description) {
-            yamlString += `\n${spaces}# ${fieldSchema.description.replace(/\n/g, `\n${spaces}# `)}\n`;
+            yamlString += `${spaces}# ${fieldSchema.description.replace(/\n/g, `${spaces}# `)}\n`;
         }
         
         if (value === null || typeof value !== 'object') {
@@ -39,7 +39,7 @@ const generateYamlTemplate = (schema: z.ZodTypeAny | undefined, values: any, ind
             }
         } else {
             yamlString += `${spaces}${key}:\n`;
-            yamlString += generateYamlTemplate(fieldSchema, value, indent + 2);
+            yamlString += generateYamlTemplate(fieldSchema, value, indent + 1);
         }
     }
 
