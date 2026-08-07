@@ -32,6 +32,7 @@ export const DEFAULT_CONFIG: Config = {
     },
     llm: {
         default_preset: 'REASONING_FAST',
+        embedding_model: 'text-embedding-3-small',
         presets: {
             DEFAULT: {
                 modelName: 'gpt-5.6-luna',
@@ -69,14 +70,19 @@ export const DEFAULT_CONFIG: Config = {
                 parallel_tool_calls: true
             },
             EXTRACTION: {
-                modelName: 'gpt-4o-mini',
+                modelName: 'gpt-5.6-luna',
                 temperature: 0.1,
                 maxTokens: 8192,
-                parallel_tool_calls: true
+                reasoning: {
+                    effort: 'none'
+                },
+                parallel_tool_calls: true,
+                service_tier: 'flex'
             }
         }
     },
     agent: {
+        profile_version: 'v1',
         max_clones_per_agent: 5,
         force_wakeup_threshold: 5,
         save_tokens: true,

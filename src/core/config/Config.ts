@@ -12,6 +12,7 @@ export const CacheConfigSchema = z.object({
 });
 
 export const AgentConfigSchema = z.object({
+    profile_version: z.string().describe('Agent Profile 的版本資料夾名稱，例如 "v1"'),
     max_clones_per_agent: z.number().describe('允許派生分身的數量上限 (避免記憶體與 Token 無限耗盡)'),
     force_wakeup_threshold: z.number().describe('允許agent暫時忽略的背景資訊通知'),
     save_tokens: z.boolean().describe('context engineering 時 節省token'),
@@ -33,6 +34,7 @@ export const AgentConfigSchema = z.object({
 
 export const LLMConfigSchema = z.object({
     default_preset: z.string().describe('預設使用的 preset 名稱'),
+    embedding_model: z.string().describe('生成向量(Embeddings)時使用的模型名稱'),
     presets: z.record(z.string(), z.any()).describe('自定義的多組設定檔 (如 SMART, FAST 等)')
 });
 

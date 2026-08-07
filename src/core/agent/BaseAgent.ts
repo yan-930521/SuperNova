@@ -42,6 +42,8 @@ export interface EmotionalState {
  * (僅保留靜態核心設定，動態狀態與任務資訊未來將由 Context/State 接管)
  */
 export interface AgentProfile {
+    /** Agent 的專屬姓名或代號 */
+    name?: string;
     /** Agent 的基本身分描述 */
     identity?: string;
     /** 核心任務目標 */

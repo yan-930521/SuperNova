@@ -60,7 +60,8 @@ export class PromptLoader {
    * @param fallback 回退文本
    */
   public static loadProfile(profile: string, config: Config, fallback: string = ""): string {
-    const relativePath = path.resolve(config.storage.base_dir, config.storage.agent_profile_dir, `${profile}.json`);
+    const versionDir = config.agent?.profile_version || 'v1';
+    const relativePath = path.resolve(config.storage.base_dir, config.storage.agent_profile_dir, versionDir, `${profile}.json`);
     return this.load(relativePath, fallback);
   }
 
