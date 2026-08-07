@@ -95,25 +95,25 @@ async function main() {
 
     if (fs.existsSync(nodesFile)) {
         const nodesData = JSON.parse(fs.readFileSync(nodesFile, 'utf-8'));
-        console.log(`\n📌 成功萃取了 ${nodesData.length} 個知識節點 (Nodes):`);
+        console.log(`\n📌 Successfully extracted ${nodesData.length} Knowledge Nodes:`);
         for (const node of nodesData) {
             const embedStr = node.embedding && node.embedding.length > 0 
                 ? `[Vector Array: ${node.embedding.length} dims]` 
                 : '[NO EMBEDDING]';
-            console.log(`  - 實體: ${node.id.padEnd(25)} | 記憶: ${node.memory.padEnd(20)} | 向量: ${embedStr}`);
+            console.log(`  - Entity: ${node.id.padEnd(25)} | Memory: ${node.memory.padEnd(20)} | Vector: ${embedStr}`);
         }
     } else {
-        console.log('⚠️ 找不到 Nodes 檔案！萃取可能失敗了。');
+        console.log('⚠️ Nodes file not found! Extraction may have failed.');
     }
 
     if (fs.existsSync(edgesFile)) {
         const edgesData = JSON.parse(fs.readFileSync(edgesFile, 'utf-8'));
-        console.log(`\n🔗 成功萃取了 ${edgesData.length} 條關係邊 (Edges):`);
+        console.log(`\n🔗 Successfully extracted ${edgesData.length} Relational Edges:`);
         for (const edge of edgesData) {
             console.log(`  - ${edge.sourceId} --[${edge.relation}]--> ${edge.targetId}`);
         }
     } else {
-        console.log('⚠️ 找不到 Edges 檔案！');
+        console.log('⚠️ Edges file not found!');
     }
 
     console.log('\n[Test] Shutting down kernel...');
