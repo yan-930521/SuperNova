@@ -9,6 +9,10 @@
 ## [Unreleased]
 
 ### Added (新增功能與基礎設施)
+- **圖向量混合記憶系統 (Graph & Episodic Memory System)**：
+  - **長期記憶 (Graph Memory)**：系統可自動在背景將對話提煉為原子化的實體 (Entities) 與關係 (Relations) 網路，並結合 OpenAI Embeddings 轉換為向量儲存。
+  - **情節記憶 (Episodic Memory)**：具備換日總結功能，能將冗長的對話歷史自動濃縮為「AI 的私人日記」，保存情境與使用者潛規則。
+  - **動態上下文檢索與注入 (Dynamic Context Retrieval)**：系統具備「回想」能力，在 Agent 執行每一步驟前，會根據當下情境透過向量相似度 (Cosine Similarity) 自動尋找相關的圖譜記憶，並連同近期日記一併無縫注入到大腦 (System Prompt) 中。
 - **工作區隔離 (Workspace Isolation)**：
   - 實作 Git Worktree 工作區隔離機制，確保會話 (Session) 的檔案狀態獨立。這也為未來處理多代理人 (Multi-Agent) 協作時的 Git 衝突 (Conflict) 解決與狀態合併打下穩固基礎。
 - **歷史與快取 (History & Cache)**：
