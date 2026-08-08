@@ -2,8 +2,9 @@ import { z } from 'zod';
 
 import { DynamicStructuredTool } from '@langchain/core/tools';
 
-import { DataBlock } from '../messaging/DataBlock';
+import { Config } from '../config';
 import { AgentEvent, IEventBus } from '../domain/IBus';
+import { DataBlock } from '../messaging/DataBlock';
 
 /**
  * 工具執行上下文
@@ -16,6 +17,8 @@ export interface ToolContext {
     agentId: string;
     /** 事件總線 (供攔截 Tool 紀錄使用) */
     eventBus: IEventBus;
+    /** 系統配置 */
+    config: Config
 }
 
 export interface ToolControlPayload {

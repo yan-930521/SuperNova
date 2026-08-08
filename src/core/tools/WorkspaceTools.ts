@@ -77,7 +77,7 @@ export class ListFilesTool extends BaseTool {
   public readonly name = 'list_files';
   public readonly description = 'List files in a directory within the workspace. Provide the relative path, or leave empty for root.';
   public readonly schema = z.object({
-    relativePath: z.string().optional().describe('The relative path of the directory to list. Leave empty for root directory.'),
+    relativePath: z.string().nullable().describe('The relative path of the directory to list. Leave empty for root directory.'),
   });
 
   constructor(

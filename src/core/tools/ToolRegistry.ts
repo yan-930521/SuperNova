@@ -1,8 +1,11 @@
+import { ITaskManager } from '../domain/ITask';
 import { IWorkspaceManager } from '../domain/IWorkspaceManager';
+import { LLMProvider } from '../infra/llm/LLMProvider';
 import {
     SendMessageTool, SpawnAgentTool, TerminateSelfTool, ToggleProjectionTool
 } from './AgentTools';
 import { BaseTool } from './BaseTool';
+import { CheckTaskDashboardTool, PlanTasksTool, StrategizeAndPlanTool } from './TaskTools';
 import {
     ListFilesTool, ReadBlobTool, ReadFileTool, RunBashTool, WriteFileTool
 } from './WorkspaceTools';
@@ -13,7 +16,9 @@ export class ToolRegistry {
 
     constructor(
         workspaceManager: IWorkspaceManager,
-        agentManager: AgentManager
+        agentManager: AgentManager,
+        taskManager: ITaskManager,
+        llmProvider: LLMProvider
     ) {
         // Workspace Tools
         this.register(new ReadFileTool(workspaceManager));
@@ -27,6 +32,11 @@ export class ToolRegistry {
         this.register(new ToggleProjectionTool());
         this.register(new SpawnAgentTool(agentManager));
         this.register(new TerminateSelfTool(agentManager));
+
+        // Task Tools
+        this.register(new PlanTasksTool(taskManager));
+        this.register(new CheckTaskDashboardTool(taskManager));
+        this.register(new StrategizeAndPlanTool(taskManager, llmProvider));
     }
 
     private register(tool: BaseTool) {

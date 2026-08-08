@@ -22,13 +22,17 @@ export const DEFAULT_CONFIG: Config = {
         agent_profile_dir: 'profiles',
         graph_dir: 'graph',
         daily_dir: 'daily',
-        blob_dir: "blobs",
+        blob_dir: 'blob',
         session_file: 'session.json',
         history_file: 'history.jsonl',
-        agent_state_file: 'state.json',
-        oplog_file: '.oplog.jsonl',
-        graph_nodes_file: 'nodes.json',
-        graph_edges_file: 'edges.json'
+        agent_state_file: 'agent.json',
+        oplog_file: 'oplog.jsonl',
+        graph_nodes_file: 'graph_nodes.json',
+        graph_edges_file: 'graph_edges.json'
+    },
+    task: {
+        force_mcts: false,
+        mcts_max_iterations: 3,
     },
     llm: {
         default_preset: 'REASONING_FAST',

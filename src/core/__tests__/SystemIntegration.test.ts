@@ -45,9 +45,38 @@ describe('System Integration & Inbox Dispatch Test', () => {
         },
         llm: {
             default_preset: 'FAST',
+            embedding_model: 'mock-model',
             presets: {
                 'FAST': { modelName: 'mock-model' }
             }
+        },
+        agent: {
+            profile_version: 'v1',
+            max_clones_per_agent: 3,
+            force_wakeup_threshold: 1,
+            save_tokens: true,
+            uncompressed_tail: 3,
+            max_context_window: 100000,
+            enable_temporal_injection: true,
+            enable_graph_memory: true,
+            enable_daily_summary: true,
+            enable_payload_offload: true,
+            temporal_threshold_ms: 1000,
+            offload_threshold_new_message: 5000,
+            offload_threshold_compact: 10000,
+            max_history_lines_safety_cap: 1000,
+            memory_extract_threshold: 10,
+            daily_optimization_time: '03:00',
+            daily_optimization_check_interval_ms: 30000,
+            daily_optimization_idle_threshold_ms: 60000,
+            memory_episodic_days: 3,
+            memory_graph_topk: 5,
+            memory_graph_depth: 2
+        },
+        task: {
+            force_mcts: false,
+            mcts_max_iterations: 3
+        }
         }
     } as any;
 

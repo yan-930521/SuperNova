@@ -63,6 +63,11 @@ export const SecurityConfigSchema = z.object({
     max_safe_tokens: z.number().describe('安全 token 上限預警值'),
 });
 
+export const TaskConfigSchema = z.object({
+    force_mcts: z.boolean().describe('是否強制對複雜任務啟用 LATS/MCTS 策略搜尋'),
+    mcts_max_iterations: z.number().describe('LATS 搜尋最大迭代次數'),
+});
+
 export const ConfigSchema = z.object({
     version: z.string().describe('系統版本號碼'),
     security: SecurityConfigSchema.describe('安全性相關配置'),
@@ -70,10 +75,12 @@ export const ConfigSchema = z.object({
     llm: LLMConfigSchema.describe('大語言模型相關配置'),
     agent: AgentConfigSchema.describe('Agent 行為配置'),
     cache: CacheConfigSchema.describe('快取與 TTL 相關配置'),
+    task: TaskConfigSchema.describe('任務與 DAG 規劃配置'),
 }).describe('系統全局配置');
 
 export type CacheConfig = Readonly<z.infer<typeof CacheConfigSchema>>;
 export type AgentConfig = Readonly<z.infer<typeof AgentConfigSchema>>;
+export type TaskConfig = Readonly<z.infer<typeof TaskConfigSchema>>;
 export type ModelPreset = Partial<OpenAIChatInput & ChatOpenAICallOptions>;
 export type LLMConfig = Readonly<Omit<z.infer<typeof LLMConfigSchema>, 'presets'> & { presets: Record<string, ModelPreset> }>;
 export type StorageConfig = Readonly<z.infer<typeof StorageConfigSchema>>;

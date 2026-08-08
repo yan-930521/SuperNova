@@ -54,7 +54,7 @@ export class LogManager {
      */
     public static readonly recorder: LogManager = (() => {
         const logger = new LogManager({ type: 'SYSTEM' });
-        logger.addTransport(new ConsoleTransport('INFO'));
+        logger.addTransport(new ConsoleTransport('DEBUG'));
         return logger;
     })();
 

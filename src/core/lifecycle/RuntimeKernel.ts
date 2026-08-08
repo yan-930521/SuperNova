@@ -15,6 +15,7 @@ import { EventBus } from '../messaging/EventBus';
 import { SystemEvent } from '../domain/IBus';
 import { SessionManager } from '../session/SessionManager';
 import { PromptLoader } from '../utils/PromptLoader';
+import { TaskManager } from '../task/TaskManager';
 import { ILifecycle } from './ILifecycle';
 
 /**
@@ -65,9 +66,11 @@ export class RuntimeKernel implements ILifecycle {
 
       // 4. 實例化高階管理器
       const memoryManager = new MemoryManager(this.config, graphRepo, dataBlockRepo, eventBus, llmProvider);
+      
+      const taskManager = new TaskManager(eventBus);
 
       // AgentManager 負責所有 Agent 狀態管理與生命週期，注入 agentStateRepo 與 eventBus 等
-      const agentManager = new AgentManager(this.config, agentStateRepo, eventBus, dataBlockRepo, workspaceManager, llmProvider);
+      const agentManager = new AgentManager(this.config, agentStateRepo, eventBus, dataBlockRepo, workspaceManager, llmProvider, taskManager);
 
       // SessionManager 負責管理會話，統一攔截與派發 AgentMessage
       const sessionManager = new SessionManager(this.config, sessionRepo, workspaceManager, agentManager, dataBlockRepo, eventBus);
@@ -77,6 +80,7 @@ export class RuntimeKernel implements ILifecycle {
       this.container.register('EventBus', eventBus);
       this.container.register('WorkspaceManager', workspaceManager);
       this.container.register('LLMProvider', llmProvider);
+      this.container.register('TaskManager', taskManager);
       this.container.register('SessionManager', sessionManager);
       this.container.register('AgentManager', agentManager);
       this.container.register('MemoryManager', memoryManager);

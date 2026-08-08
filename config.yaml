@@ -24,13 +24,19 @@ storage:
  # 每日總結存放目錄
  daily_dir: daily
  # Blob目錄
- blob_dir: blobs
+ blob_dir: blob
  session_file: session.json
  history_file: history.jsonl
- agent_state_file: state.json
- oplog_file: .oplog.jsonl
- graph_nodes_file: nodes.json
- graph_edges_file: edges.json
+ agent_state_file: agent.json
+ oplog_file: oplog.jsonl
+ graph_nodes_file: graph_nodes.json
+ graph_edges_file: graph_edges.json
+# 任務與 DAG 規劃配置
+task:
+ # 是否強制對複雜任務啟用 LATS/MCTS 策略搜尋
+ force_mcts: false
+ # LATS 搜尋最大迭代次數
+ mcts_max_iterations: 3
 # 大語言模型相關配置
 llm:
  # 預設使用的 preset 名稱

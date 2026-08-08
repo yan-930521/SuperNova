@@ -56,7 +56,10 @@ bun run bench:core  # 測試 LRUCache 與 EventBus 吞吐量
 bun run bench:oom   # 測試 10 萬筆歷史對話寫入與 OOM 防禦
 ```
 
-> **更多 Scripts**：執行 `bun run demo:minecraft` 可啟動 Minecraft 具身智能整合範例。系統配置請參閱根目錄的 `config.yaml`。
+> **更多 Scripts**：
+> - 執行 `bun run demo:task_lats` 可觀看 **LATS 策略規劃與 TaskDAG 生成** 的完整終端機輸出範例。
+> - 執行 `bun run demo:minecraft` 可啟動 Minecraft 具身智能整合範例。
+> - 系統配置請參閱根目錄的 `config.yaml`。
 
 ---
 
@@ -85,27 +88,42 @@ SuperNova/
 
 ### 1. 核心狀態與排程 (Core State & Scheduling)
 - **分離決策與執行迴圈**：將 Agent 拆分為 `MainAgent` (決策中樞)、`TaskAgent` (任務執行) 以及 `EmbodiedAgent` (具身感知)，防止底層程式碼與物理操作細節污染全局 Prompt。
+
 - **動態上下文投影 (Context Projection)**：`MainAgent` 在必要時可無縫接管子代理人 (如 `EmbodiedAgent`)。系統會將該子代理人的獨立歷史紀錄與專屬工具集動態投影 (Projection) 給主腦，使主腦能親自下場操作子工具以完成特定高難度任務。
+
 - **基於 EventBus 的非同步喚醒**：Agent 呼叫工具後即主動 `suspend` (掛起)，待工具執行完畢再由事件流觸發 `resume`，全程無阻塞 (Non-blocking) 等待。
+
 - **狀態持久化 (Dehydrate / Rehydrate)**：當 Agent 處於閒置狀態，系統會將包含歷史紀錄與 Token 消耗等變數序列化寫入磁碟 (JSONL)，並在需要時反序列化還原。
 
 ### 2. 記憶體與上下文優化 (Memory & Context Optimization)
 - **大字串卸載 (Payload Offloading)**：當系統偵測到單次輸入超過字元閾值，會自動將內容寫入實體 Blob 檔案，並在 Prompt 中替換為短字串 `DataPointer`，避免耗盡 Token 上限。
+
 - **圖向量混合記憶 (Graph & Episodic Memory)**：
-  - **長期記憶 (Graph Memory)**：當未處理訊息達到設定閾值時，觸發背景 LLM 將對話轉譯為原子化實體與關係，並使用 OpenAI Embeddings 轉換為向量儲存。在 Agent 思考前，系統透過餘弦相似度 (Cosine Similarity) 自動檢索關聯圖譜並無縫注入 Prompt，達成上下文感知。
-  - **情節記憶 (Episodic Memory)**：利用心跳引擎動態追蹤換日點，在使用者閒置時觸發背景 LLM，將單日雜亂對話收斂為「AI 私人日記」。系統會在後續對話中自動載入近期日記，保留互動氛圍與使用者偏好。
+  - **長期記憶 (Graph Memory)**：當未處理訊息達到設定閾值時，觸發背景 LLM 將對話轉譯為原子化實體與關係，並使用 OpenAI Embeddings 轉換為向量儲存。<br/>在 Agent 思考前，系統透過餘弦相似度 (Cosine Similarity) 自動檢索關聯圖譜並無縫注入 Prompt，達成上下文感知。
+  - **情節記憶 (Episodic Memory)**：利用心跳引擎動態追蹤換日點，在使用者閒置時觸發背景 LLM，將單日雜亂對話收斂為「AI 私人日記」。<br/>系統會在後續對話中自動載入近期日記，保留互動氛圍與使用者偏好。
+
 - **歷史壓縮 (History Compaction)**：為了解決長文本延遲，系統採用滑動視窗機制。掉出視窗的老舊對話紀錄會被執行高強度的 Offloading 壓縮並落盤，搭配 O(1) 檢查標記，極速略過已壓縮區塊。
 
 ### 3. 工程基礎建設 (Infrastructure)
 - **領域驅動與乾淨架構 (Clean Architecture & DDD)**：將抽象介面完全提取至 `domain` 層進行解耦，底層實作細分為 `infra/repositories`, `infra/storage`, `infra/llm` 等獨立模組，搭配集中式的 `prompts/` 管線，為系統的長遠演化與多代理人擴展打下強固的地基。
+
 - **動態配置引擎 (Zod-based Config Engine)**：全系統採用 Zod Schema 進行強型別組態定義，並支援即時動態覆寫與生成 YAML 格式設定檔（附帶註解），確保各模組 (Storage, Memory, LLM) 啟動時的防呆機制。
-- **Git Worktree 工作區隔離 (Workspace Isolation)**：為每一個 Session 開闢獨立的 Git Worktree，Agent 的任何檔案讀寫與工具操作皆被限制在專屬的分支目錄中。這不僅確保操作可追溯與可 `git checkout` 回滾，未來更能完美支援多代理人 (Multi-Agent) 並發協作時的 Git Merge 衝突處理與狀態合併。
+
+- **Git Worktree 工作區隔離 (Workspace Isolation)**：為每一個 Session 開闢獨立的 Git Worktree，Agent 的任何檔案讀寫與工具操作皆被限制在專屬的分支目錄中。<br/>這不僅確保操作可追溯與可 `git checkout` 回滾，未來更能完美支援多代理人 (Multi-Agent) 並發協作時的 Git Merge 衝突處理與狀態合併。
+
 - **全非同步併發架構 (Full Async Concurrency)**：整份專案大量運用併發操作處理高 I/O 任務 (例如：平行寫入多個 Session 日誌、批次離線壓縮記憶體、並行呼叫外部 LLM API)，充分利用 Event Loop 的並行能力，確保 AI 代理在處理龐大上下文時絕不被 I/O 阻塞拖慢。
+
 - **泛型 LRU 快取與 Memoization**：底層實作獨立且可重用的泛型 `LRUCache` (如維護上限 50 Key)，搭配增量快取機制，杜絕記憶體無限膨脹並大幅消除重複的序列化開銷。
 
 ### 4. 多代理人協作與委派 (Multi-Agent Delegation)
+- **非同步事件任務引擎 (Async Task & TaskDAG)**：實作 `StrategizeAndPlanTool` 作為非同步背景任務。<br/>MainAgent 在呼叫工具後能立即釋放資源處理其他訊息，待背景生成完畢後再由 `EventBus` 強行插針回報任務進度，達成全非同步並發。
+
+- **LATS 策略規劃引擎 (Language Agent Tree Search)**：在將任務分解為 TaskDAG 之前，引擎會自動透過 MCTS (蒙地卡羅樹狀搜尋) 與 UCB1 演算法，對目標進行深度的自我推演、打分與反思，搜尋出最佳解題軌跡，杜絕 Agent 陷入局部最佳解。
+
 - **細粒度工具權限分配**：系統在喚醒或生成 Agent 時能動態篩選出該代理人被允許使用的特定工具，達成權限邊界的嚴格劃分。
+
 - **自主子代理生命週期**：`MainAgent` 能夠隨時建立臨時的 `TaskAgent`，指派目標、工作區與特定工具，而這些臨時子代理在完成任務後能夠自主使用 `TerminateSelfTool` 清除自身狀態，釋放系統資源。
+
 - **Agent級工作區驅動實例**：底層 I/O 在處理工作區讀寫時，使用 `agentId` 映射獨立儲存驅動（如純記憶體 VOLATILE 或 Git PERSISTENT），即使在同一 Session 底下，不同的子代理也能擁有各自的隔離空間。
 
 ---

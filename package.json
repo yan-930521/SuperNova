@@ -9,6 +9,7 @@
     "lint": "bun x tsc --noEmit",
     "demo": "bun ./demo/v0.1.0.ts",
     "demo:minecraft": "bun ./src/package/underworld/index.ts",
+    "demo:task_lats": "bun ./demo/task_lats_demo.ts",
     "test:memory": "bun ./demo/test_memory.ts",
     "test:reasoning": "bun ./demo/test_reasoning.ts",
     "bench:core": "bun ./demo/benchmark.ts",

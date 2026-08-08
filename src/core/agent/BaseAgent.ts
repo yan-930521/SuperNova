@@ -7,16 +7,16 @@ import { ChatPromptTemplate } from '@langchain/core/prompts';
 
 import { DEFAULT_CONFIG } from '../config';
 import { Config } from '../config/Config';
-import { LogManager } from '../infra/LogManager';
-import { IDataBlockRepository, IEntity } from '../domain/IRepository';
-import { WorkspaceType } from '../domain/IWorkspaceManager';
-import { ConsoleTransport } from '../infra/transports/ConsoleTransport';
-import { FileTransport } from '../infra/transports/FileTransport';
-import { DataBlock, MessagePriority } from '../messaging/DataBlock';
 import {
     AgentEvent, GlobalEventMap, HookEvent, IEvent, IEventBus, IPromptSection, PromptSectionIndex
 } from '../domain/IBus';
+import { IDataBlockRepository, IEntity } from '../domain/IRepository';
+import { WorkspaceType } from '../domain/IWorkspaceManager';
 import { LLMProvider } from '../infra/llm/LLMProvider';
+import { LogManager } from '../infra/LogManager';
+import { ConsoleTransport } from '../infra/transports/ConsoleTransport';
+import { FileTransport } from '../infra/transports/FileTransport';
+import { DataBlock, MessagePriority } from '../messaging/DataBlock';
 import { SYSTEM_PROMPTS } from '../prompts/agent.prompt';
 import { BaseTool } from '../tools/BaseTool';
 
@@ -692,7 +692,8 @@ export abstract class BaseAgent {
                     const lcTools = activeTools.map(t => t.toLangChainTool({
                         sessionId: this.sessionId,
                         agentId: this.id,
-                        eventBus: this.eventBus
+                        eventBus: this.eventBus,
+                        config: this.config
                     }));
 
                     agentToUse = createAgent({

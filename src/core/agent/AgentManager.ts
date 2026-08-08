@@ -1,16 +1,17 @@
 import { Config } from '../config/Config';
-import { LogManager } from '../infra/LogManager';
-import { IWorkspaceManager } from '../domain/IWorkspaceManager';
-import { IAgentStateRepository, IDataBlockRepository } from '../domain/IRepository';
-import { ILifecycle } from '../lifecycle/ILifecycle';
 import { HookEvent, IEvent, IEventBus, PromptSectionIndex } from '../domain/IBus';
+import { IAgentStateRepository, IDataBlockRepository } from '../domain/IRepository';
+import { ITaskManager } from '../domain/ITask';
+import { IWorkspaceManager } from '../domain/IWorkspaceManager';
+import { LLMProvider } from '../infra/llm/LLMProvider';
+import { LogManager } from '../infra/LogManager';
+import { ILifecycle } from '../lifecycle/ILifecycle';
 import { BaseTool } from '../tools/BaseTool';
+import { ToolRegistry } from '../tools/ToolRegistry';
 import { AgentOptions, AgentType, BaseAgent } from './BaseAgent';
 import { EmbodiedAgent } from './EmbodiedAgent';
-import { LLMProvider } from '../infra/llm/LLMProvider';
 import { MainAgent } from './MainAgent';
 import { TaskAgent } from './TaskAgent';
-import { ToolRegistry } from '../tools/ToolRegistry';
 
 /**
  * 代理人管理器 (AgentManager)
@@ -52,9 +53,10 @@ export class AgentManager implements ILifecycle {
         private readonly eventBus: IEventBus,
         private readonly dataBlockRepo: IDataBlockRepository,
         private readonly workspaceManager: IWorkspaceManager,
-        private readonly llmProvider: LLMProvider
+        private readonly llmProvider: LLMProvider,
+        private readonly taskManager: ITaskManager
     ) {
-        this.toolRegistry = new ToolRegistry(this.workspaceManager, this);
+        this.toolRegistry = new ToolRegistry(this.workspaceManager, this, this.taskManager, this.llmProvider);
     }
 
     // ==========================================
@@ -307,7 +309,7 @@ export class AgentManager implements ILifecycle {
 
     public getDefaultTools(type: AgentType): string[] {
         if (type === AgentType.MAIN) {
-            return ['toggle_projection', 'read_file', 'write_file', 'list_files', 'run_bash', 'read_blob', 'send_message', 'spawn_agent'];
+            return ['toggle_projection', 'read_file', 'write_file', 'list_files', 'run_bash', 'read_blob', 'send_message', 'spawn_agent', 'plan_tasks', 'check_task_dashboard'];
         }
         if (type === AgentType.TASK) {
             return ['read_file', 'write_file', 'list_files', 'run_bash', 'read_blob', 'send_message'];

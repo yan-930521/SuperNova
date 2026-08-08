@@ -8,12 +8,18 @@
 
 ## [Unreleased]
 ### Added (新增功能與基礎設施)
+- **多代理人任務排程系統 (Task & TaskDAG System)**：
+  - **LATS 策略規劃引擎 (Language Agent Tree Search)**：實作基於 MCTS (蒙地卡羅樹狀搜尋) 與 UCB1 演算法的前置規劃引擎，Agent 在面對複雜任務時，會先在自然語言層面自我推演、打分與反思，搜尋出最佳解題軌跡，杜絕陷入局部最佳解。
+  - **TaskDAG 依賴圖翻譯**：將 LATS 產生的文字策略無縫交由 LLM 翻譯為精確的 Task JSON，並交由背景 `TaskManager` 維護，支援依賴解鎖與防呆。
+  - **非同步事件驅動工具 (Async + Event-driven Tools)**：`StrategizeAndPlanTool` 正式改寫為非同步背景任務。工具呼叫後立即釋放 Agent 狀態，任務完成後再透過 EventBus 強行插針 (Inject) 發送 `BACKGROUND_TASK_COMPLETED` 訊息，徹底解放 Agent 運算效能與多工能力。
 - **多代理人動態委派系統 (Multi-Agent Dynamic Delegation)**：
   - **ToolRegistry 解耦與反轉控制**：將 `ToolRegistry` 由全域 DI 容器抽離，改為受 `AgentManager` 內部直轄的無狀態管理員，徹底解決模組間的循環依賴。
   - **SpawnAgentTool 與 TerminateSelfTool**：`MainAgent` 現在擁有直接產出任務型子代理人 (TaskAgent) 的能力，可動態指派目標 (Objective)、工作區隔離級別 (WorkspaceType) 與工具權限 (AllowedTools)；而子代理人在設定為 `isTemp: true` 的情況下，可於任務結束後使用 `TerminateSelfTool` 自行銷毀，釋放資源。
   - **細粒度工具權限分配 (Configurable Tool Delegation)**：透過新的 ToolRegistry 架構，系統在喚醒或生成 Agent 時能動態篩選出該代理人被允許使用的特定工具，達成權限邊界的嚴格劃分。
 
 ### Changed (效能與架構優化)
+- **Prompt 與 Schema 集中化管理**：
+  - 將所有散落於各模組的 System Prompts 與 Zod 結構化輸出 Schema 統一遷移至 `src/core/prompts/` (例如 `task.prompt.ts`)，並透過統一管線載入，實現演算法邏輯與提示詞的完全解耦。
 - **領域驅動與乾淨架構重構 (Clean Architecture & DDD Refactoring)**：
   - 徹底分離 `domain`, `infra`, `tools`, `prompts` 四大核心目錄。將抽象介面層提取至 `domain`，將對外部依賴較深的具體實作扁平化至 `infra/repositories` 與 `infra/storage`。
   - 將工具系統抽離 Agent 模組至專屬的 `tools/` 目錄，為未來的 Agent-Evolvable CodeSkill 動態掛載與沙盒系統打下堅實基礎。

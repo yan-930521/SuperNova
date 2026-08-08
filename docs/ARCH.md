@@ -2,7 +2,7 @@
 title: SuperNova 全局架構
 version: 0.1.0
 status: APPROVED
-last_updated: 2026-08-06
+last_updated: 2026-08-08
 related_codes:
   - ../src/core/index.ts
 related_docs:
@@ -24,6 +24,7 @@ related_docs:
 
 ## 2. 調度與事件層 (Scheduling & Event Layer)
 *   [EventBus (`docs/architecture/core/event_bus.md`)](./architecture/core/event_bus.md)：包含 `EventBus` (會話安全隔離、publishAsync 異步等待與宣告式訂閱)、**事件分類規範** (SystemEvent、HookEvent、AgentEvent)、`GlobalEventMap` 泛型推導與 `DataPointer` 資料指標機制。
+*   [任務排程系統 (`docs/architecture/task/task_dag.md`)](./architecture/task/task_dag.md)：基於**有向無環圖 (TaskDAG)** 的工作流引擎。由 `TaskManager` 在幕後維護，支援依賴解鎖、防呆防死鎖與父節點失敗時的級聯取消 (Cascading Cancellation)。結合 **LATS (Language Agent Tree Search)** 作為前置規劃引擎，先在自然語言層面搜尋最佳策略 (Strategy Search & Reflection, 透過 UCB1 演算法)，再收斂生成精確的任務圖。透過 `StrategizeAndPlanTool` 實作 **非同步事件驅動 (Async + Event-driven)**：工具呼叫後立即回傳，背景運算完成後透過 EventBus 發送 `BACKGROUND_TASK_COMPLETED` 的系統訊息，徹底解放 Agent 多工能力。
 
 ## 3. 狀態與記憶層 (State & Memory Layer)
 *   [記憶與狀態管理 (docs/architecture/core/memory.md)](./architecture/core/memory.md)：包含 `DataBlock` (資料載體、雙軸語意編碼、Claim Check Pattern)、透過 `SessionManager` 實現的收件箱機制、透過 `IDataBlockRepository` 實現的歷史紀錄管理，以及系統安全熔斷機制 (Circuit Breaker)。支援 `DataPointer` 大資料卸載與延遲加載機制，並已整合泛型 `LRUCache` 以確保效能與記憶體安全。具備時間感知插針 (Temporal Injection)、換日總結 (Daily Summary) 與防打斷延遲 (Debounce) 機制。
@@ -31,7 +32,8 @@ related_docs:
 *   [會話與工作階段管理 (`docs/architecture/core/session.md`)](./architecture/core/session.md)：定義 `Session` 與 `Thread` 的生命週期狀態機。負責全局訊息派發 (`SessionManager.dispatchInboxForAgent`)，透過監聽 `AgentStateChanged` 事件主動釋放積壓訊息。已實現 **「統一喚醒 (Unified Wakeup)」** 機制與 **「會話廣播 (Broadcast)」** 分層回覆架構。支援基於 `ISessionRepository`、`IDataBlockRepository`、`IAgentStateRepository` 等儲存庫的持久化。
 
 ## 4. 系統基礎建設 (Infrastructure)
-*   [基礎建設與配置 (`docs/architecture/core/base.md`)](./architecture/core/base.md)：包含配置管理 (`Config`, `ConfigLoader`, `DefaultConfig`)、**RuntimeKernel (依賴注入中樞)**、`ComponentContainer` (IoC 容器)、`ILifecycle` 生命週期介面、系統日誌 (`LogManager` 雙軌架構)、持久化儲存 (`IRepository`, `JsonFileRepository`)、WorkspaceManager (雙層工作區拓撲與 StorageDriver 動態配置)，以及工具類別 (`PromptLoader`, `GraphValidator`, `IdGenerator`)。
+*   [基礎建設與配置 (`docs/architecture/core/base.md`)](./architecture/core/base.md)：包含配置管理 (`Config`, `ConfigLoader`, `DefaultConfig`)、**RuntimeKernel (依賴注入中樞)**、`ComponentContainer` (IoC 容器)、`ILifecycle` 生命週期介面、系統日誌 (`LogManager` 雙軌架構)、持久化儲存 (`IRepository`, `JsonFileRepository`)、WorkspaceManager (雙層工作區拓撲與 StorageDriver 動態配置)，以及工具類別 (`GraphValidator`, `IdGenerator`)。
+*   **Prompt 與 Schema 集中化管理**：所有 LLM 互動相關的提示詞 (System Prompts) 與 Zod 結構化輸出 (Structured Output) 定義，皆統一提取至 `src/core/prompts/` 目錄 (如 `task.prompt.ts`, `memory.prompt.ts` 等)，由 `PromptLoader` 負責初始化與載入，實現與演算法邏輯的徹底解耦。
 
 ---
 
