@@ -50,9 +50,9 @@
     "type": "git",
     "url": "git+https://github.com/yan-930521/SuperNova.git"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": ["agent", "runtime", "event-driven", "bun", "typescript", "agentic-ai"],
+  "author": "tw.sakura",
+  "license": "Apache-2.0",
   "bugs": {
     "url": "https://github.com/yan-930521/SuperNova/issues"
   },

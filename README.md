@@ -2,8 +2,9 @@
 
 [![TypeScript](https://img.shields.io/badge/Language-TypeScript-blue.svg)](https://www.typescriptlang.org/)
 [![Runtime](https://img.shields.io/badge/Runtime-Bun-black.svg)](https://bun.sh/)
-[![Architecture](https://img.shields.io/badge/Architecture-Event--Driven-orange.svg)](#architecture-highlights)
+[![Architecture](https://img.shields.io/badge/Architecture-Event--Driven-orange.svg)](#technical-highlights-系統技術實作)
 [![Stage](https://img.shields.io/badge/Stage-v0.2.0--dev-green.svg)](#development-roadmap)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
 SuperNova 是一個專注於效能與狀態管理的 **Agent Runtime (代理人執行引擎)**。它運行於 Bun 高性能環境之上，透過事件驅動架構，有效解決長效型 AI 系統常見的上下文爆炸與目標飄移 (Goal Drift) 問題，使 Agent 能在複雜、跨領域的長期任務中保持穩定的認知與執行力。
 
@@ -25,6 +26,59 @@ SuperNova 是一個專注於效能與狀態管理的 **Agent Runtime (代理人�
 
 ---
 
+## Prerequisites
+
+- [Bun](https://bun.sh/) >= 1.3.14
+- [Git](https://git-scm.com/) >= 2.x
+- OpenAI API Key（用於 LLM 推理與 Embedding 向量化）
+
+---
+
+## Quick Start
+
+```bash
+# 安裝依賴
+bun install
+
+# 配置環境變數
+cp .env.template .env
+# 編輯 .env 填入你的 OpenAI API Key
+
+# 執行主程式 Demo
+bun run demo
+
+# 型別檢查與測試
+bun run lint
+bun test
+
+# 執行效能壓測 (Performance Benchmarks)
+bun run bench:core  # 測試 LRUCache 與 EventBus 吞吐量
+bun run bench:oom   # 測試 10 萬筆歷史對話寫入與 OOM 防禦
+```
+
+> **更多 Scripts**：執行 `bun run demo:minecraft` 可啟動 Minecraft 具身智能整合範例。系統配置請參閱根目錄的 `config.yaml`。
+
+---
+
+## Project Structure
+
+```text
+SuperNova/
+├── src/
+│   ├── core/        # 核心引擎：EventBus、Agent、Memory、Session 等
+│   └── package/     # 業務擴充：Minecraft 整合等領域應用
+├── demo/            # 示範程式與效能壓測腳本
+├── docs/            # 架構設計文件（ARCH.md 為入口）
+├── web/             # Web 前端介面
+├── scripts/         # 輔助腳本
+├── config.yaml      # 系統組態設定檔
+└── .env.template    # 環境變數範本
+```
+
+> **架構邊界**：`src/core/` 透過 `src/core/index.ts` 統一匯出。`src/package/` 必須透過此入口引用核心模組，嚴禁深層耦合。
+
+---
+
 ## Technical Highlights (系統技術實作)
 
 本專案專注於解決長效型 Agentic System 常見的記憶體耗盡、Token 爆量與狀態管理問題，透過以下具體工程手法實作：
@@ -40,12 +94,12 @@ SuperNova 是一個專注於效能與狀態管理的 **Agent Runtime (代理人�
 - **圖向量混合記憶 (Graph & Episodic Memory)**：
   - **長期記憶 (Graph Memory)**：當未處理訊息達到設定閾值時，觸發背景 LLM 將對話轉譯為原子化實體與關係，並使用 OpenAI Embeddings 轉換為向量儲存。在 Agent 思考前，系統透過餘弦相似度 (Cosine Similarity) 自動檢索關聯圖譜並無縫注入 Prompt，達成上下文感知。
   - **情節記憶 (Episodic Memory)**：利用心跳引擎動態追蹤換日點，在使用者閒置時觸發背景 LLM，將單日雜亂對話收斂為「AI 私人日記」。系統會在後續對話中自動載入近期日記，保留互動氛圍與使用者偏好。
-- **歷史壓縮 (History Compaction)**：為了解決長文本延遲，系統採用滑動視窗機制。掉出視窗的老舊對話紀錄會被執行高強度的 Offloading 壓縮並落盤，搭配 `$O(1)$` 檢查標記，極速略過已壓縮區塊。
+- **歷史壓縮 (History Compaction)**：為了解決長文本延遲，系統採用滑動視窗機制。掉出視窗的老舊對話紀錄會被執行高強度的 Offloading 壓縮並落盤，搭配 O(1) 檢查標記，極速略過已壓縮區塊。
 
 ### 3. 工程基礎建設 (Infrastructure)
 - **動態配置引擎 (Zod-based Config Engine)**：全系統採用 Zod Schema 進行強型別組態定義，並支援即時動態覆寫與生成 YAML 格式設定檔（附帶註解），確保各模組 (Storage, Memory, LLM) 啟動時的防呆機制。
 - **Git Worktree 工作區隔離 (Workspace Isolation)**：為每一個 Session 開闢獨立的 Git Worktree，Agent 的任何檔案讀寫與工具操作皆被限制在專屬的分支目錄中。這不僅確保操作可追溯與可 `git checkout` 回滾，未來更能完美支援多代理人 (Multi-Agent) 並發協作時的 Git Merge 衝突處理與狀態合併。
-- **全非同步併發架構 (Full Async Concurrency)**：整份專案大量運用併發操作處理高 I/O 任務 (例如：平行寫入多個 Session 日誌、批次離線壓縮記憶體、並行呼叫外部 LLM API)，徹底榨乾 Event Loop 效能，確保 AI 代理在處理龐大上下文時絕不被 I/O 阻塞拖慢。
+- **全非同步併發架構 (Full Async Concurrency)**：整份專案大量運用併發操作處理高 I/O 任務 (例如：平行寫入多個 Session 日誌、批次離線壓縮記憶體、並行呼叫外部 LLM API)，充分利用 Event Loop 的並行能力，確保 AI 代理在處理龐大上下文時絕不被 I/O 阻塞拖慢。
 - **泛型 LRU 快取與 Memoization**：底層實作獨立且可重用的泛型 `LRUCache` (如維護上限 50 Key)，搭配增量快取機制，杜絕記憶體無限膨脹並大幅消除重複的序列化開銷。
 
 ### 4. 多代理人協作與委派 (Multi-Agent Delegation)
@@ -57,14 +111,18 @@ SuperNova 是一個專注於效能與狀態管理的 **Agent Runtime (代理人�
 
 ## Development Roadmap
 
-- **v0.1.0 (Current MVP)**: 奠定非同步 EventBus、動態圖譜記憶與滑動視窗隔離的穩健基礎設施。
-- **v0.2.0 (Code-based Evolution)**: 引入**虛擬具身智能 (Virtual Embodied AI)** 與**可進化 CodeSkill 系統**。使 Agent 能夠針對自身程式碼工具進行自我撰寫、重構與優化，並搭配自動化 Metrics（成功率、延遲）達成演算法級別的自主進化。同步實作步驟級的 Git Worktree Task 快取與動態工具分配 (Tool Delegation) 以增強系統可靠性。
+| 版本 | 階段 | 概述 |
+|:---|:---|:---|
+| **v0.1.0** | 已完成 | 奠定非同步 EventBus、動態圖譜記憶與滑動視窗隔離的穩健基礎設施 |
+| **v0.2.0** | 開發中 | 引入虛擬具身智能 (Virtual Embodied AI) 與可進化 CodeSkill 系統 |
+
+> 詳細規劃請參閱 [ROADMAP.md](ROADMAP.md)。
 
 ---
 
 ## 效能實測 (Performance Benchmark)
 
-SuperNova 透過內建的 `mitata` 進行極端壓力測試，以下為在一般消費級 CPU (12th Gen i5) 上的表現，證明了在面對超大上下文與高頻事件時，核心基礎設施的 I/O 吞吐能力：
+SuperNova 透過內建的 `mitata` 進行極端壓力測試，以下為在一般消費級環境 (12th Gen i5 / Windows 11 / Bun 1.3.14) 上的表現，證明了在面對超大上下文與高頻事件時，核心基礎設施的 I/O 吞吐能力：
 
 ```text
 benchmark                                        avg (min … max) p75 / p99    (min … top 1%)
@@ -84,14 +142,16 @@ EventBus: High-frequency Publish                  784.82 ns/iter 782.74 ns  █
 > **數據解讀**：
 > - **記憶體快取命中 (LRUCache Hit)**：每次耗時不到 1 微秒，吞吐量高達 **228 萬次/秒**。
 > - **核心事件派發 (EventBus Publish)**：全非同步廣播耗時低於 1 微秒，吞吐量約 **127 萬次/秒**，徹底杜絕了多代理人協作時的 I/O 阻塞瓶頸。
-> - **防禦 OOM 測試 (10萬筆資料寫入)**：在瞬間灌入 500 MB (10萬筆) 的巨量歷史對話時，系統僅耗時 **2.1 秒** 寫入完畢，且透過滑動視窗與垃圾回收機制，將記憶體死死封鎖在 300MB 出頭，**絕不發生 OOM 崩潰**。
+> - **防禦 OOM 測試 (10萬筆資料寫入)**：在瞬間灌入 500 MB (10萬筆) 的巨量歷史對話時，系統僅耗時 **2.1 秒** 寫入完畢，且透過滑動視窗與垃圾回收機制，將記憶體穩定控制在約 300MB，**有效防止 OOM 崩潰**。
 
 ---
 
-## Why Bun?
+## Design Decisions
+
+### Why Bun?
 
 | 考量 | 選擇理由 |
-|------|---------|
+|------|---------| 
 | 啟動與執行效率 | Bun 的冷啟動速度與運行時效能遠超傳統 Node.js，適合 Agent 高頻長時運行 |
 | 原生 TypeScript | 無需額外編譯步驟，直接執行 `.ts` 檔案 |
 | 測試框架 | 內建高效的 `bun test` 運行器 |
@@ -99,23 +159,13 @@ EventBus: High-frequency Publish                  784.82 ns/iter 782.74 ns  █
 
 ---
 
-## Quick Start
+## Contributing
 
-```bash
-# 安裝依賴
-bun install
+歡迎貢獻！請先閱讀 [CONTRIBUTING.md](CONTRIBUTING.md) 了解開發規範與提交流程。
 
-# 執行主程式 Demo
-bun run demo
+## License
 
-# 型別檢查與測試
-bun run lint
-bun test
-
-# 執行效能壓測 (Performance Benchmarks)
-bun run bench:core  # 測試 LRUCache 與 EventBus 吞吐量
-bun run bench:oom   # 測試 10 萬筆歷史對話寫入與 OOM 防禦
-```
+本專案採用 [Apache License 2.0](LICENSE) 授權。
 
 ---
 
