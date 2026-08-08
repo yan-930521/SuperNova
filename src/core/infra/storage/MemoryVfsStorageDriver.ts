@@ -1,9 +1,9 @@
 import { fs as virtualFs } from 'memfs';
 import * as path from 'path';
 
-import { LogManager } from '../../LogManager';
-import { IStorageDriver } from '../IStorageDriver';
-import { WorkspaceType } from '../IWorkspaceManager';
+import { LogManager } from '../LogManager';
+import { IStorageDriver } from '../../domain/IStorageDriver';
+import { WorkspaceType } from '../../domain/IWorkspaceManager';
 
 /**
  * 記憶體虛擬檔案系統 (VOLATILE) 儲存驅動器

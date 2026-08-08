@@ -1,8 +1,8 @@
 import { Config } from '../config/Config';
-import { IDataBlockRepository } from '../infra/persistence/IRepository';
+import { IDataBlockRepository } from '../domain/IRepository';
 import {
     AgentEvent, HookEvent, IEventBus, PromptSectionIndex, SystemEvent
-} from '../messaging/IBus';
+} from '../domain/IBus';
 import { PromptLoader } from '../utils/PromptLoader';
 import { AgentOptions, AgentState, AgentType, BaseAgent, BaseAgentData } from './BaseAgent';
 

@@ -1,16 +1,16 @@
 import { Config } from '../config/Config';
 import { LogManager } from '../infra/LogManager';
-import { IWorkspaceManager } from '../infra/persistence';
-import { IAgentStateRepository, IDataBlockRepository } from '../infra/persistence/IRepository';
+import { IWorkspaceManager } from '../domain/IWorkspaceManager';
+import { IAgentStateRepository, IDataBlockRepository } from '../domain/IRepository';
 import { ILifecycle } from '../lifecycle/ILifecycle';
-import { HookEvent, IEvent, IEventBus, PromptSectionIndex } from '../messaging/IBus';
-import { BaseTool } from './';
+import { HookEvent, IEvent, IEventBus, PromptSectionIndex } from '../domain/IBus';
+import { BaseTool } from '../tools/BaseTool';
 import { AgentOptions, AgentType, BaseAgent } from './BaseAgent';
 import { EmbodiedAgent } from './EmbodiedAgent';
-import { LLMProvider } from './LLMProvider';
+import { LLMProvider } from '../infra/llm/LLMProvider';
 import { MainAgent } from './MainAgent';
 import { TaskAgent } from './TaskAgent';
-import { ToolRegistry } from './tool/ToolRegistry';
+import { ToolRegistry } from '../tools/ToolRegistry';
 
 /**
  * 代理人管理器 (AgentManager)

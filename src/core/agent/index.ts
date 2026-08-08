@@ -3,5 +3,5 @@ export * from './MainAgent';
 export * from './TaskAgent';
 export * from './EmbodiedAgent';
 export * from './AgentManager';
-export * from './tool/BaseTool';
-export * from './tool/ToolRegistry';
+export * from '../tools/BaseTool';
+export * from '../tools/ToolRegistry';

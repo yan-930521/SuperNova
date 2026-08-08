@@ -1,18 +1,18 @@
 import * as path from 'path';
 
 import { AgentManager } from '../agent/AgentManager';
-import { LLMProvider } from '../agent/LLMProvider';
+import { LLMProvider } from '../infra/llm/LLMProvider';
 import { Config } from '../config/Config';
 import { ComponentContainer } from '../container/ComponentContainer';
 import { LogManager } from '../infra/LogManager';
-import {
-    FileSystemAgentStateRepository, FileSystemDataBlockRepository, FileSystemSessionRepository
-} from '../infra/persistence';
-import { JsonGraphRepository } from '../infra/persistence/repository/JsonGraphRepository';
-import { WorkspaceManager } from '../infra/persistence/WorkspaceManager';
+import { FileSystemAgentStateRepository } from '../infra/repositories/FileSystemAgentStateRepository';
+import { FileSystemDataBlockRepository } from '../infra/repositories/FileSystemDataBlockRepository';
+import { FileSystemSessionRepository } from '../infra/repositories/FileSystemSessionRepository';
+import { JsonGraphRepository } from '../infra/repositories/JsonGraphRepository';
+import { WorkspaceManager } from '../infra/workspace/WorkspaceManager';
 import { MemoryManager } from '../memory/MemoryManager';
 import { EventBus } from '../messaging/EventBus';
-import { SystemEvent } from '../messaging/IBus';
+import { SystemEvent } from '../domain/IBus';
 import { SessionManager } from '../session/SessionManager';
 import { PromptLoader } from '../utils/PromptLoader';
 import { ILifecycle } from './ILifecycle';

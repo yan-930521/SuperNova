@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'bun:test';
 import { EventBus } from '../EventBus';
-import { IEvent } from '../IBus';
+import { IEventBus } from '../../domain/IBus';
+import { IEvent } from '../../domain/IBus';
 
 describe('EventBus High-Level Features Test', () => {
   it('should support sessionId isolation and filtering', async () => {
@@ -33,7 +34,7 @@ describe('EventBus High-Level Features Test', () => {
     bus.publish(event);
 
     // 等待 setImmediate 執行完畢
-    await new Promise(resolve => setImmediate(resolve));
+    await new Promise<void>(resolve => setImmediate(() => resolve()));
 
     // 3. 驗證隔離
     expect(session1Count).toBe(1);
@@ -46,7 +47,7 @@ describe('EventBus High-Level Features Test', () => {
     let val = 0;
 
     bus.subscribe('ASYNC_EVENT', async (event: any) => {
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise<void>(resolve => setTimeout(() => resolve(), 50));
       val = 42;
     });
 
@@ -80,7 +81,7 @@ describe('EventBus High-Level Features Test', () => {
     // 呼叫 publish，它不會拋出錯誤，而是內部捕獲
     bus.publish(event);
 
-    await new Promise(resolve => setImmediate(resolve));
+    await new Promise<void>(resolve => setImmediate(() => resolve()));
     
     // 程式沒有崩潰，代表測試通過
     expect(true).toBe(true);

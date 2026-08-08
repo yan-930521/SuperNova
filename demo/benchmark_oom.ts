@@ -4,7 +4,7 @@ import * as path from 'path';
 import { DEFAULT_CONFIG } from '../src/core/config/DefaultConfig';
 import {
     FileSystemDataBlockRepository
-} from '../src/core/infra/persistence/repository/FileSystemDataBlockRepository';
+} from '../src/core/infra/repositories/FileSystemDataBlockRepository';
 import { DataBlock, MessagePriority } from '../src/core/messaging/DataBlock';
 
 async function runOomBenchmark() {

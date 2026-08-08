@@ -2,16 +2,16 @@ import { existsSync } from 'fs';
 import { readFile } from 'fs/promises';
 import * as path from 'path';
 
-import { BaseTool } from '../../agent/tool/BaseTool';
+import { BaseTool } from '../../tools/BaseTool';
 import {
     ListFilesTool, ReadBlobTool, ReadFileTool, RunBashTool, WriteFileTool
-} from '../../agent/tool/WorkspaceTools';
+} from '../../tools/WorkspaceTools';
 import { Config } from '../../config/Config';
 import { ILifecycle } from '../../lifecycle/ILifecycle';
-import { IStorageDriver } from './IStorageDriver';
-import { IWorkspaceManager, WorkspaceType } from './IWorkspaceManager';
-import { GitLocalStorageDriver } from './storagedriver/GitLocalStorageDriver';
-import { MemoryVfsStorageDriver } from './storagedriver/MemoryVfsStorageDriver';
+import { IStorageDriver } from '../../domain/IStorageDriver';
+import { IWorkspaceManager, WorkspaceType } from '../../domain/IWorkspaceManager';
+import { GitLocalStorageDriver } from '../storage/GitLocalStorageDriver';
+import { MemoryVfsStorageDriver } from '../storage/MemoryVfsStorageDriver';
 
 /**
  * 工作空間管理器 (WorkspaceManager) - 純邏輯控制面

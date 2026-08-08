@@ -1,8 +1,8 @@
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { ChatOpenAI, OpenAIEmbeddings } from '@langchain/openai';
-import { Config } from '../config/Config';
-import { ILifecycle } from '../lifecycle/ILifecycle';
-import { LogManager } from '../infra/LogManager';
+import { Config } from '../../config/Config';
+import { ILifecycle } from '../../lifecycle/ILifecycle';
+import { LogManager } from '../LogManager';
 
 /**
  * 集中管理與快取 LangChain LLM 實例的提供者

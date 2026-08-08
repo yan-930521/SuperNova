@@ -2,8 +2,8 @@ import { mkdir, readFile, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { LocalIndex } from 'vectra';
 
-import { Config } from '../../../config/Config';
-import { GraphEdge, GraphNode, IGraphRepository } from '../IGraphRepository';
+import { Config } from '../../config/Config';
+import { GraphEdge, GraphNode, IGraphRepository } from '../../domain/IGraphRepository';
 
 export class JsonGraphRepository implements IGraphRepository {
     private config: Config;

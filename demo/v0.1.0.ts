@@ -8,7 +8,8 @@ import { ConfigLoader } from '../src/core/config/ConfigLoader';
 import { RuntimeKernel } from '../src/core/lifecycle/RuntimeKernel';
 import { DataBlock } from '../src/core/messaging/DataBlock';
 import { EventBus } from '../src/core/messaging/EventBus';
-import { AgentEvent, IEvent, SystemEvent } from '../src/core/messaging/IBus';
+import { IEventBus } from '../src/core/domain/IBus';
+import { AgentEvent, IEvent, SystemEvent } from '../src/core/domain/IBus';
 import { SessionManager } from '../src/core/session/SessionManager';
 
 dotenvConfig();

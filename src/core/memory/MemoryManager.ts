@@ -1,17 +1,17 @@
 import { PromptTemplate } from '@langchain/core/prompts';
 
-import { LLMProvider } from '../agent/LLMProvider';
+import { LLMProvider } from '../infra/llm/LLMProvider';
 import { Config } from '../config/Config';
 import { LogManager } from '../infra/LogManager';
-import { GraphEdge, GraphNode, IGraphRepository } from '../infra/persistence/IGraphRepository';
-import { IDataBlockRepository } from '../infra/persistence/IRepository';
+import { GraphEdge, GraphNode, IGraphRepository } from '../domain/IGraphRepository';
+import { IDataBlockRepository } from '../domain/IRepository';
 import { ILifecycle } from '../lifecycle/ILifecycle';
 import { DataBlock } from '../messaging/DataBlock';
 import {
     AgentEvent, HookEvent, IEvent, IEventBus, PromptSectionIndex, SystemEvent
-} from '../messaging/IBus';
+} from '../domain/IBus';
 import { IdGenerator } from '../utils/IdGenerator';
-import { GRAPH_EXTRACTOR_PROMPT, GRAPH_EXTRACTOR_TYPE, SESSION_SUMMARY_PROMPT } from './prompt';
+import { GRAPH_EXTRACTOR_PROMPT, GRAPH_EXTRACTOR_TYPE, SESSION_SUMMARY_PROMPT } from '../prompts/memory.prompt';
 
 /**
  * 記憶萃取引擎 (Memory Manager)
@@ -75,7 +75,7 @@ export class MemoryManager implements ILifecycle {
             const agentIds = await this.dataBlockRepo.listAgentsForSession(sessionId);
             for (const agentId of agentIds) {
                 this.extractAndSaveSessionMemory(sessionId, agentId)
-                    .catch(err => {
+                    .catch((err: any) => {
                         this.logger.error(`[MemoryManager] Failed to extract memory for session ${sessionId}, agent ${agentId}: ${err.message}`);
                     });
             }
@@ -119,7 +119,7 @@ export class MemoryManager implements ILifecycle {
 
                     this.extractingSessions.add(sessionId);
                     this.extractAndSaveSessionMemory(sessionId, agentId)
-                        .catch(err => {
+                        .catch((err: any) => {
                             this.logger.error(`[MemoryManager] Failed to extract memory for session ${sessionId}, agent ${agentId}: ${err.message}`);
                         })
                         .finally(() => {

@@ -2,10 +2,10 @@ import { z } from 'zod';
 
 export const GRAPH_EXTRACTOR_PROMPT = `You are an AI memory extraction expert. Your task is to extract long-term factual knowledge from the conversation and convert it into a structured Knowledge Graph (Entities and Relations).
 
-⚠️ LANGUAGE POLICY:
+LANGUAGE POLICY:
 - Output must match the input language exactly: either Traditional Chinese or English.
 
-⚠️ STRICT EXTRACTION RULES:
+STRICT EXTRACTION RULES:
 1. **Atomic Entities**: Extract core concepts, specific people, places, or technologies as Entities (e.g., "User", "Yan", "SuperNova", "Bun", "OOM"). Each entity must have a concise \`id\`, a \`type\`, and a brief \`description\`.
 2. **Entity Types**: Use standard categories for \`type\` such as PERSON, TECHNOLOGY, CONCEPT, ORGANIZATION, etc.
 3. **Meaningful Relations**: Extract Relations between the defined entities. The \`sourceEntityId\` and \`targetEntityId\` MUST exactly match the \`id\` fields of the entities you extracted.

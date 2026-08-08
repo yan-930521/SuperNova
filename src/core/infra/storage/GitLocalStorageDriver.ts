@@ -4,8 +4,8 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { promisify } from 'util';
 
-import { IStorageDriver } from '../IStorageDriver';
-import { WorkspaceType } from '../IWorkspaceManager';
+import { IStorageDriver } from '../../domain/IStorageDriver';
+import { WorkspaceType } from '../../domain/IWorkspaceManager';
 
 const execAsync = promisify(exec);
 

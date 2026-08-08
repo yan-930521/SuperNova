@@ -5,8 +5,8 @@ import * as path from 'path';
 import { ConfigLoader } from '../src/core/config/ConfigLoader';
 import {
     FileSystemDataBlockRepository
-} from '../src/core/infra/persistence/repository/FileSystemDataBlockRepository';
-import { JsonGraphRepository } from '../src/core/infra/persistence/repository/JsonGraphRepository';
+} from '../src/core/infra/repositories/FileSystemDataBlockRepository';
+import { JsonGraphRepository } from '../src/core/infra/repositories/JsonGraphRepository';
 import { RuntimeKernel } from '../src/core/lifecycle/RuntimeKernel';
 import { MemoryManager } from '../src/core/memory/MemoryManager';
 import { DataBlock, MessagePriority } from '../src/core/messaging/DataBlock';

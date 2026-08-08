@@ -1,5 +1,5 @@
 import { Config } from '../config/Config';
-import { IDataBlockRepository, IRepository } from '../infra/persistence/IRepository';
+import { IDataBlockRepository, IRepository } from '../domain/IRepository';
 import { DataBlock } from '../messaging/DataBlock';
 import { LRUCache } from '../utils/LRUCache';
 import { BaseAgent, ContextOverride } from './BaseAgent';

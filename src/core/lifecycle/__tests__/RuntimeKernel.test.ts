@@ -2,7 +2,7 @@ import { describe, it, expect } from 'bun:test';
 import { RuntimeKernel } from '../RuntimeKernel';
 import { DEFAULT_CONFIG } from '../../config/DefaultConfig';
 import { EventBus } from '../../messaging/EventBus';
-import { WorkspaceManager } from '../../infra/persistence/WorkspaceManager';
+import { WorkspaceManager } from '../../infra/workspace/WorkspaceManager';
 import { SessionManager } from '../../session/SessionManager';
 import { AgentManager } from '../../agent/AgentManager';
 

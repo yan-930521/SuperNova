@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { IWorkspaceManager } from '../../infra/persistence/IWorkspaceManager';
+import { IWorkspaceManager } from '../domain/IWorkspaceManager';
 import { BaseTool, ToolContext } from './BaseTool';
 
 export class ReadFileTool extends BaseTool {

@@ -1,7 +1,8 @@
 import { bench, run } from 'mitata';
 
+import { IEventBus } from '../src/core/domain/IBus';
 import { EventBus } from '../src/core/messaging/EventBus';
-import { AgentEvent } from '../src/core/messaging/IBus';
+import { AgentEvent } from '../src/core/domain/IBus';
 import { LRUCache } from '../src/core/utils/LRUCache';
 
 console.log("🚀 SuperNova Benchmark Runner");

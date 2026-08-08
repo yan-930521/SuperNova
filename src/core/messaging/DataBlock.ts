@@ -2,7 +2,7 @@ import {
     AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 } from '@langchain/core/messages';
 
-import { ToolControlPayload } from '../agent';
+import { ToolControlPayload } from '../tools/BaseTool';
 import { LogManager } from '../infra';
 import { IdGenerator } from '../utils/IdGenerator';
 

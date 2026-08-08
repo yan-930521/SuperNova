@@ -1,12 +1,12 @@
-import { IdGenerator } from '../../utils/IdGenerator';
+import { IdGenerator } from '../utils/IdGenerator';
 import { z } from 'zod';
 
-import { DataBlock, MessagePriority } from '../../messaging/DataBlock';
-import { AgentEvent, IEventBus } from '../../messaging/IBus';
+import { DataBlock, MessagePriority } from '../messaging/DataBlock';
+import { AgentEvent, IEventBus } from '../domain/IBus';
 import { BaseTool, ToolContext } from './BaseTool';
-import type { AgentManager } from '../AgentManager';
-import { AgentType } from '../BaseAgent';
-import { WorkspaceType } from '../../infra/persistence/IWorkspaceManager';
+import type { AgentManager } from '../agent/AgentManager';
+import { AgentType } from '../agent/BaseAgent';
+import { WorkspaceType } from '../domain/IWorkspaceManager';
 
 export class SendMessageTool extends BaseTool {
     public readonly name = 'send_message';

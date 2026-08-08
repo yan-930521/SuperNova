@@ -3,12 +3,11 @@ import { AgentState, AgentType } from '../agent/BaseAgent';
 import { ProjectionHandler } from '../agent/ProjectionHandler';
 import { Config } from '../config/Config';
 import { LogManager } from '../infra/LogManager';
-import { ISessionRepository } from '../infra/persistence';
-import { IAgentStateRepository, IDataBlockRepository } from '../infra/persistence/IRepository';
-import { IWorkspaceManager, WorkspaceType } from '../infra/persistence/IWorkspaceManager';
+import { ISessionRepository, IAgentStateRepository, IDataBlockRepository } from '../domain/IRepository';
+import { IWorkspaceManager, WorkspaceType } from '../domain/IWorkspaceManager';
 import { ILifecycle } from '../lifecycle/ILifecycle';
 import { DataBlock, MessagePriority } from '../messaging/DataBlock';
-import { AgentEvent, IEvent, IEventBus, SystemEvent } from '../messaging/IBus';
+import { AgentEvent, IEvent, IEventBus, SystemEvent } from '../domain/IBus';
 import { IdGenerator } from '../utils/IdGenerator';
 import { Session, SessionState } from './Session';
 
@@ -332,14 +331,14 @@ export class SessionManager implements ILifecycle {
         // 發送批次 I/O 任務
         for (const [senderId, blocks] of senderBlocksMap.entries()) {
             appendTasks.push(
-                this.dataBlockRepo.appendForAgent(sessionId, senderId, blocks).catch(e => {
+                this.dataBlockRepo.appendForAgent(sessionId, senderId, blocks).catch((e: any) => {
                     this.logger.error(`[SessionManager] Failed to batch append sender history for ${senderId}: ${e}`);
                 })
             );
         }
         for (const [targetId, blocks] of targetBlocksMap.entries()) {
             appendTasks.push(
-                this.dataBlockRepo.appendForAgent(sessionId, targetId, blocks).catch(e => {
+                this.dataBlockRepo.appendForAgent(sessionId, targetId, blocks).catch((e: any) => {
                     this.logger.error(`[SessionManager] Failed to batch append target history for ${targetId}: ${e}`);
                 })
             );
@@ -350,7 +349,7 @@ export class SessionManager implements ILifecycle {
 
         // 4. 背景非同步執行舊紀錄壓縮 (每個 Sender 只需要觸發一次)
         for (const senderId of sendersToCompact) {
-            this.compactAgentHistory(sessionId, senderId).catch(e => {
+            this.compactAgentHistory(sessionId, senderId).catch((e: any) => {
                 this.logger.error(`[SessionManager] Failed to compact history for ${senderId}: ${e}`);
             });
         }
@@ -456,11 +455,11 @@ export class SessionManager implements ILifecycle {
             }
 
             // 獨立非同步並行處理 (不 await，讓它在背景跑)
-            const resumePromise = workerAgent.resume(messages).catch(e => {
+            const resumePromise = workerAgent.resume(messages).catch((e: any) => {
                 this.logger.error(`[SessionManager] Agent ${workerAgent.id} failed to resume: ${e}`);
             }).finally(async () => {
                 // 確保對話結束後，將本尊的最新狀態 (如 Token 消耗量、歷史指針) 存檔
-                await this.agentManager.saveAgent(mainAgent.id).catch(e => {
+                await this.agentManager.saveAgent(mainAgent.id).catch((e: any) => {
                     this.logger.error(`[SessionManager] Failed to save main agent ${mainAgent.id} state: ${e}`);
                 });
 
@@ -469,7 +468,7 @@ export class SessionManager implements ILifecycle {
             this.activeTaskPromises.add(resumePromise);
 
             // 保存會話狀態 (更新 Inbox 狀態)
-            await this.sessionRepo.save(session).catch(e => {
+            await this.sessionRepo.save(session).catch((e: any) => {
                 this.logger.error(`[SessionManager] Failed to save session state: ${e}`);
             });
 

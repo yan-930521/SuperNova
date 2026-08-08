@@ -1,4 +1,4 @@
-import { IWorkspaceManager } from '../../infra/persistence';
+import { IWorkspaceManager } from '../domain/IWorkspaceManager';
 import {
     SendMessageTool, SpawnAgentTool, TerminateSelfTool, ToggleProjectionTool
 } from './AgentTools';
@@ -7,7 +7,7 @@ import {
     ListFilesTool, ReadBlobTool, ReadFileTool, RunBashTool, WriteFileTool
 } from './WorkspaceTools';
 
-import type { AgentManager } from '../AgentManager';
+import type { AgentManager } from '../agent/AgentManager';
 export class ToolRegistry {
     private readonly tools: Map<string, BaseTool> = new Map();
 

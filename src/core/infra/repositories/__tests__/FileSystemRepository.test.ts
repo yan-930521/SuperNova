@@ -3,9 +3,9 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { FileSystemSessionRepository } from '../FileSystemSessionRepository';
 import { FileSystemDataBlockRepository } from '../FileSystemDataBlockRepository';
-import { Session, SessionState } from '../../../../session/Session';
-import { DataBlock } from '../../../../messaging/DataBlock';
-import { DEFAULT_CONFIG } from '../../../../config/DefaultConfig';
+import { Session, SessionState } from '../../../session/Session';
+import { DataBlock } from '../../../messaging/DataBlock';
+import { DEFAULT_CONFIG } from '../../../config/DefaultConfig';
 
 describe('FileSystem Repositories Test', () => {
   const tempWorkspaceRoot = path.join(process.cwd(), '.dev_temp_repo_test');

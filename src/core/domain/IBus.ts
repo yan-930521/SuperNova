@@ -1,5 +1,5 @@
 import { ContextOverride } from '../agent/BaseAgent';
-import { DataBlock } from './DataBlock';
+import { DataBlock } from '../messaging/DataBlock';
 
 /**
  * 定義注入 Prompt 區塊的標準排序位置 (1-10)

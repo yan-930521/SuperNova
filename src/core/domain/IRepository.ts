@@ -1,8 +1,8 @@
-import { ILifecycle } from '../../../core/lifecycle/ILifecycle';
-import { BaseAgentData } from '../../agent/BaseAgent';
-import { DataBlock } from '../../messaging/DataBlock';
+import { ILifecycle } from '../lifecycle/ILifecycle';
+import { BaseAgentData } from '../agent/BaseAgent';
+import { DataBlock } from '../messaging/DataBlock';
 // --- 專屬儲存庫介面定義 ---
-import { Session } from '../../session/Session';
+import { Session } from '../session/Session';
 
 /**
  * 基礎實體介面，所有需持久化的對象必須具備唯一識別碼

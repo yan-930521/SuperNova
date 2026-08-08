@@ -2,13 +2,13 @@ import { existsSync, mkdirSync } from 'fs';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
-import { Config } from '../../../config/Config';
-import { DEFAULT_CONFIG } from '../../../config/DefaultConfig';
-import { DataBlock } from '../../../messaging/DataBlock';
-import { IdGenerator } from '../../../utils/IdGenerator';
-import { LRUCache } from '../../../utils/LRUCache';
-import { LogManager } from '../../LogManager';
-import { IDataBlockRepository } from '../IRepository';
+import { Config } from '../../config/Config';
+import { DEFAULT_CONFIG } from '../../config/DefaultConfig';
+import { DataBlock } from '../../messaging/DataBlock';
+import { IdGenerator } from '../../utils/IdGenerator';
+import { LRUCache } from '../../utils/LRUCache';
+import { LogManager } from '../LogManager';
+import { IDataBlockRepository } from '../../domain/IRepository';
 
 /**
  * FileSystemDataBlockRepository

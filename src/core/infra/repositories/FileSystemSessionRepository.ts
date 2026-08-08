@@ -2,10 +2,10 @@ import { existsSync, mkdirSync } from 'fs';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
-import { Config } from '../../../config/Config';
-import { Session } from '../../../session/Session';
-import { LogManager } from '../../LogManager';
-import { ISessionRepository } from '../IRepository';
+import { Config } from '../../config/Config';
+import { Session } from '../../session/Session';
+import { LogManager } from '../LogManager';
+import { ISessionRepository } from '../../domain/IRepository';
 
 /**
  * FileSystemSessionRepository

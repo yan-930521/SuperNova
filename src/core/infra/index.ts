@@ -1,3 +1,4 @@
 export * from './LogManager';
-export * as persistence from './persistence';
+export * as repositories from './repositories';
+export * as storage from './storage';
 export * as transports from './transports';

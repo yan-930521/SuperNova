@@ -2,8 +2,8 @@ import { z } from 'zod';
 
 import { DynamicStructuredTool } from '@langchain/core/tools';
 
-import { DataBlock } from '../../messaging/DataBlock';
-import { AgentEvent, IEventBus } from '../../messaging/IBus';
+import { DataBlock } from '../messaging/DataBlock';
+import { AgentEvent, IEventBus } from '../domain/IBus';
 
 /**
  * 工具執行上下文

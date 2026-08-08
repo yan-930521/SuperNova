@@ -1,4 +1,4 @@
-import { BaseTool } from '../../agent/tool/BaseTool';
+import { BaseTool } from '../tools/BaseTool';
 
 export type WorkspaceType = 'VOLATILE' | 'PERSISTENT';
 

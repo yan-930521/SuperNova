@@ -8,17 +8,17 @@ import { ChatPromptTemplate } from '@langchain/core/prompts';
 import { DEFAULT_CONFIG } from '../config';
 import { Config } from '../config/Config';
 import { LogManager } from '../infra/LogManager';
-import { IDataBlockRepository, IEntity } from '../infra/persistence/IRepository';
-import { WorkspaceType } from '../infra/persistence/IWorkspaceManager';
+import { IDataBlockRepository, IEntity } from '../domain/IRepository';
+import { WorkspaceType } from '../domain/IWorkspaceManager';
 import { ConsoleTransport } from '../infra/transports/ConsoleTransport';
 import { FileTransport } from '../infra/transports/FileTransport';
 import { DataBlock, MessagePriority } from '../messaging/DataBlock';
 import {
     AgentEvent, GlobalEventMap, HookEvent, IEvent, IEventBus, IPromptSection, PromptSectionIndex
-} from '../messaging/IBus';
-import { LLMProvider } from './LLMProvider';
-import { SYSTEM_PROMPTS } from './prompts';
-import { BaseTool } from './tool/BaseTool';
+} from '../domain/IBus';
+import { LLMProvider } from '../infra/llm/LLMProvider';
+import { SYSTEM_PROMPTS } from '../prompts/agent.prompt';
+import { BaseTool } from '../tools/BaseTool';
 
 /** 代理人內部狀態與情緒載體 */
 export interface EmotionalState {

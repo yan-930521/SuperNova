@@ -2,10 +2,10 @@ import { existsSync, mkdirSync } from 'fs';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
-import { BaseAgentData } from '../../../agent/BaseAgent';
-import { Config } from '../../../config/Config';
-import { LogManager } from '../../LogManager';
-import { IAgentStateRepository } from '../IRepository';
+import { BaseAgentData } from '../../agent/BaseAgent';
+import { Config } from '../../config/Config';
+import { LogManager } from '../LogManager';
+import { IAgentStateRepository } from '../../domain/IRepository';
 
 /**
  * FileSystemAgentStateRepository

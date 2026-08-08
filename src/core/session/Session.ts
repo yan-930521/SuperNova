@@ -1,4 +1,4 @@
-import { IEntity } from '../infra/persistence/IRepository';
+import { IEntity } from '../domain/IRepository';
 import { DataBlock, DataBlockData, MessagePriority } from '../messaging/DataBlock';
 
 /**

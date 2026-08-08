@@ -1,5 +1,5 @@
 import { LogManager } from '../infra/LogManager';
-import { GlobalEventMap, IEvent, IEventBus } from './IBus';
+import { GlobalEventMap, IEvent, IEventBus } from '../domain/IBus';
 import { LRUCache } from '../utils/LRUCache';
 import { DEFAULT_CONFIG } from '../config/DefaultConfig';
 
