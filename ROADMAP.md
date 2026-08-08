@@ -45,3 +45,9 @@
   - **技術亮點 (Technical Highlights)**：
     - 將 ToolRegistry 改由 AgentManager 直轄的無狀態物件，不再依賴全域單例，達成完全的生命週期反轉控制。
     - 支援 SpawnAgentTool 生成免洗代理人 (`isTemp: true`)，並自動強迫配置 `TerminateSelfTool`，同時結合 WorkspaceManager 以 agentId 映射工作區驅動機制，實現了安全的隔離與任務完結後的記憶體釋放。
+- **底層領域架構升級 (Domain-Driven Refactoring) (已完成)**
+  - 針對多代理人帶來的程式碼複雜度，預防性地完成了 Clean Architecture 的目錄重構。
+  - **技術亮點 (Technical Highlights)**：
+    - 萃取出純粹的 `domain` 層，將所有 IRepository, IEventBus 等核心介面獨立解耦。
+    - 扁平化底層 `infra` 資料夾為 `llm`, `repositories`, `storage`, `workspace`，解決原先高達 5 層的巢狀依賴地獄。
+    - 集中管理大腦設定檔於 `prompts/`，為不同職責的子代理人提供更整潔的注入管線。

@@ -13,6 +13,11 @@
   - **SpawnAgentTool 與 TerminateSelfTool**：`MainAgent` 現在擁有直接產出任務型子代理人 (TaskAgent) 的能力，可動態指派目標 (Objective)、工作區隔離級別 (WorkspaceType) 與工具權限 (AllowedTools)；而子代理人在設定為 `isTemp: true` 的情況下，可於任務結束後使用 `TerminateSelfTool` 自行銷毀，釋放資源。
   - **細粒度工具權限分配 (Configurable Tool Delegation)**：透過新的 ToolRegistry 架構，系統在喚醒或生成 Agent 時能動態篩選出該代理人被允許使用的特定工具，達成權限邊界的嚴格劃分。
 
+### Changed (效能與架構優化)
+- **領域驅動與乾淨架構重構 (Clean Architecture & DDD Refactoring)**：
+  - 徹底分離 `domain`, `infra`, `tools`, `prompts` 四大核心目錄。將抽象介面層提取至 `domain`，將對外部依賴較深的具體實作扁平化至 `infra/repositories` 與 `infra/storage`。
+  - 將工具系統抽離 Agent 模組至專屬的 `tools/` 目錄，為未來的 Agent-Evolvable CodeSkill 動態掛載與沙盒系統打下堅實基礎。
+
 ### Fixed (穩定性與併發修復)
 - **多代理人工作區驅動器衝突 (Workspace Driver Resolution Conflict)**：
   - 修復了同一個 Session 下若存在多個代理人，在存取 `WorkspaceManager` 時無法分別綁定不同驅動型態 (例如 `GitLocalStorageDriver` vs `MemoryVfsStorageDriver`) 的重大缺陷，將底層的快取對應鍵 (Cache Key) 由 `sessionId` 修正為 `agentId`，完整實踐了代理人級別的工作區實體隔離。

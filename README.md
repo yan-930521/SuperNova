@@ -97,6 +97,7 @@ SuperNova/
 - **歷史壓縮 (History Compaction)**：為了解決長文本延遲，系統採用滑動視窗機制。掉出視窗的老舊對話紀錄會被執行高強度的 Offloading 壓縮並落盤，搭配 O(1) 檢查標記，極速略過已壓縮區塊。
 
 ### 3. 工程基礎建設 (Infrastructure)
+- **領域驅動與乾淨架構 (Clean Architecture & DDD)**：將抽象介面完全提取至 `domain` 層進行解耦，底層實作細分為 `infra/repositories`, `infra/storage`, `infra/llm` 等獨立模組，搭配集中式的 `prompts/` 管線，為系統的長遠演化與多代理人擴展打下強固的地基。
 - **動態配置引擎 (Zod-based Config Engine)**：全系統採用 Zod Schema 進行強型別組態定義，並支援即時動態覆寫與生成 YAML 格式設定檔（附帶註解），確保各模組 (Storage, Memory, LLM) 啟動時的防呆機制。
 - **Git Worktree 工作區隔離 (Workspace Isolation)**：為每一個 Session 開闢獨立的 Git Worktree，Agent 的任何檔案讀寫與工具操作皆被限制在專屬的分支目錄中。這不僅確保操作可追溯與可 `git checkout` 回滾，未來更能完美支援多代理人 (Multi-Agent) 並發協作時的 Git Merge 衝突處理與狀態合併。
 - **全非同步併發架構 (Full Async Concurrency)**：整份專案大量運用併發操作處理高 I/O 任務 (例如：平行寫入多個 Session 日誌、批次離線壓縮記憶體、並行呼叫外部 LLM API)，充分利用 Event Loop 的並行能力，確保 AI 代理在處理龐大上下文時絕不被 I/O 阻塞拖慢。
