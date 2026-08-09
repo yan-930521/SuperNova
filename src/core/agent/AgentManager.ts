@@ -309,11 +309,15 @@ export class AgentManager implements ILifecycle {
 
     public getDefaultTools(type: AgentType): string[] {
         if (type === AgentType.MAIN) {
-            return ['toggle_projection', 'read_file', 'write_file', 'list_files', 'run_bash', 'read_blob', 'send_message', 'spawn_agent', 'assign_task', 'plan_tasks', 'strategize_and_plan'];
+            return ['toggle_projection', 'read_file', 'write_file', 'list_files', 'run_bash', 'read_blob', 'send_message', 'spawn_agent', 'assign_task', 'plan_tasks', 'strategize_and_plan', 'tavily_search', 'tavily_extract'];
         }
         if (type === AgentType.TASK) {
             return ['read_file', 'write_file', 'list_files', 'run_bash', 'read_blob', 'send_message'];
         }
         return ['send_message'];
+    }
+
+    public getAllAvailableToolNames(): string[] {
+        return this.toolRegistry.getTools().map(t => t.name);
     }
 }

@@ -116,12 +116,15 @@ export class ToggleProjectionTool extends BaseTool {
 export class SpawnAgentTool extends BaseTool {
     public readonly name = 'spawn_agent';
     public readonly description = 'Spawn a new sub-agent to delegate tasks to.';
-    public readonly schema = z.object({
-        objective: z.string().describe('The initial objective for this agent.'),
-        allowedTools: z.array(z.string()).describe('The list of tools this agent is allowed to use (e.g., ["read_file", "write_file", "send_message"])'),
-        workspaceType: z.enum(['PERSISTENT', 'VOLATILE']).describe('Workspace isolation level. PERSISTENT shares the main workspace, VOLATILE uses a temporary one.'),
-        isTemp: z.boolean().describe('If true, this agent will be terminated by the system when all its assigned tasks are completed. If false, it stays alive.')
-    });
+    public get schema() {
+        const availableTools = this.agentManager.getAllAvailableToolNames().join(', ');
+        return z.object({
+            objective: z.string().describe('The initial objective for this agent.'),
+            allowedTools: z.array(z.string()).describe(`The list of tools this agent is allowed to use. Available tools: ${availableTools}`),
+            workspaceType: z.enum(['PERSISTENT', 'VOLATILE']).describe('Workspace isolation level. PERSISTENT shares the main workspace, VOLATILE uses a temporary one.'),
+            isTemp: z.boolean().describe('If true, this agent will be terminated by the system when all its assigned tasks are completed. If false, it stays alive.')
+        });
+    }
 
     constructor(
         private readonly agentManager: AgentManager

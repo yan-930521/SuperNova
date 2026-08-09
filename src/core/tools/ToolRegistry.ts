@@ -6,6 +6,7 @@ import {
     AssignTaskTool, SendMessageTool, SpawnAgentTool, ToggleProjectionTool, UpdateTaskStatusTool
 } from './AgentTools';
 import { BaseTool } from './BaseTool';
+import { ReadUrlContentTool, SearchWebTool } from './ResearchTools';
 import { PlanTasksTool, StrategizeAndPlanTool } from './TaskTools';
 import {
     ListFilesTool, ReadBlobTool, ReadFileTool, RunBashTool, WriteFileTool
@@ -38,6 +39,10 @@ export class ToolRegistry {
         // Task Tools
         this.register(new PlanTasksTool(taskManager));
         this.register(new StrategizeAndPlanTool(taskManager, llmProvider));
+
+        // Research Tools
+        this.register(new SearchWebTool());
+        this.register(new ReadUrlContentTool());
     }
 
     private register(tool: BaseTool) {
