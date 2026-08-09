@@ -8,12 +8,14 @@ import { IWorkspaceManager } from '../domain/IWorkspaceManager';
 /**
  * 工具：撰寫 CodeSkill
  * 讓 Agent 能自定義行為腳本，並寫入其專屬 Workspace 中。
+ * 同時會將技能的 Metadata 寫入 skills_index.json 以供管理。
  */
 export class CreateCodeSkillTool extends BaseTool {
     public readonly name = 'create_code_skill';
     public readonly description = 'Create a new TypeScript CodeSkill and save it to your local workspace. Ensure your code extends ActionSkill or ObservationSkill and implements the required methods.';
     public readonly schema = z.object({
         skillName: z.string().describe('The name of the skill, e.g., GatherWoodSkill. Will be used as the filename without .ts'),
+        description: z.string().describe('A brief description of what this skill does, helping the agent to know when to use it.'),
         code: z.string().describe('The complete TypeScript code for the skill. Must default export the class.'),
     });
 
@@ -21,7 +23,7 @@ export class CreateCodeSkillTool extends BaseTool {
         super();
     }
 
-    public async execute(args: { skillName: string, code: string }, context: ToolContext): Promise<string> {
+    public async execute(args: { skillName: string, description: string, code: string }, context: ToolContext): Promise<string> {
         try {
             // Get the agent's private workspace
             const workspacePath = await this.workspaceManager.getWorkspacePath(context.sessionId, context.agentId);
@@ -29,10 +31,28 @@ export class CreateCodeSkillTool extends BaseTool {
             
             await fs.mkdir(skillsDir, { recursive: true });
             
+            // 寫入 TS 執行檔
             const filePath = path.join(skillsDir, `${args.skillName}.ts`);
             await fs.writeFile(filePath, args.code, 'utf-8');
             
-            return `Successfully created CodeSkill ${args.skillName} at ${filePath}. You can now execute it using execute_code_skill.`;
+            // 寫入/更新 JSON 資源索引
+            const indexPath = path.join(skillsDir, 'skills_index.json');
+            let indexData: Record<string, { description: string, updatedAt: number }> = {};
+            try {
+                const rawIndex = await fs.readFile(indexPath, 'utf-8');
+                indexData = JSON.parse(rawIndex);
+            } catch (e) {
+                // Ignore if not exists
+            }
+            
+            indexData[args.skillName] = {
+                description: args.description,
+                updatedAt: Date.now()
+            };
+            
+            await fs.writeFile(indexPath, JSON.stringify(indexData, null, 2), 'utf-8');
+            
+            return `Successfully created CodeSkill ${args.skillName} at ${filePath}. It has been registered in the skills index.`;
         } catch (error: any) {
             return `Failed to create CodeSkill: ${error.message}`;
         }
