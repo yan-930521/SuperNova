@@ -61,7 +61,7 @@ related_docs:
 *   **實例與依賴**：注入 `IAgentStateRepository` 與 `IEventBus`。內部維護 `activeAgents: Map<string, BaseAgent>` 作為活躍池，並實例化內部的 `ToolRegistry` 提供工具註冊與索取。
 *   **靜態實例化 (Static Instantiation)**：不再依賴手動註冊工廠，而是直接於頂層引入 `MainAgent`, `TaskAgent`, `EmbodiedAgent`，根據 `AgentType` 透過 `switch` 判斷並直接 `new` 初始化。架構單純且具備強型別檢查優勢。
 *   **動態工具分配 (Dynamic Tool Delegation)**：`spawnAgent` 與 `rehydrate` 時支援傳入或載入 `allowedTools: string[]`。Agent 會依據此清單向內部的 `ToolRegistry` 索取對應的無狀態工具單例。
-*   **控制權反轉 (Tool Control)**：特定工具 (如 `SpawnAgentTool`, `TerminateSelfTool`) 可直接由 `ToolRegistry` 注入 `AgentManager` 控制權，不再侷限於 EventBus 事件驅動。
+*   **控制權反轉 (Tool Control)**：特定工具 (如 `SpawnAgentTool`) 可直接由 `ToolRegistry` 注入 `AgentManager` 控制權，不再侷限於 EventBus 事件驅動。
 *   **脫水與喚醒 (Dehydrate & Rehydrate)**：
     *   `dehydrate(agentId)`：從活躍池取出 Agent，呼叫 `serialize()` 取得狀態快照（包含 `allowedTools`）並交由 Repository 存檔，隨後銷毀實體並釋放記憶體。
     *   `rehydrate(agentId)`：從 Repository 載入狀態，經由 Factory 實例化，並呼叫 `hydrate(data)` 恢復狀態，透過 `ToolRegistry` 重建工具綁定，最後加回活躍池。

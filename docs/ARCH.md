@@ -24,7 +24,8 @@ related_docs:
 
 ## 2. 調度與事件層 (Scheduling & Event Layer)
 *   [EventBus (`docs/architecture/core/event_bus.md`)](./architecture/core/event_bus.md)：包含 `EventBus` (會話安全隔離、publishAsync 異步等待與宣告式訂閱)、**事件分類規範** (SystemEvent、HookEvent、AgentEvent)、`GlobalEventMap` 泛型推導與 `DataPointer` 資料指標機制。
-*   [任務排程系統 (`docs/architecture/task/task_dag.md`)](./architecture/task/task_dag.md)：基於**有向無環圖 (TaskDAG)** 的工作流引擎。由 `TaskManager` 在幕後維護，支援依賴解鎖、防呆防死鎖與父節點失敗時的級聯取消 (Cascading Cancellation)。結合 **LATS (Language Agent Tree Search)** 作為前置規劃引擎，先在自然語言層面搜尋最佳策略 (Strategy Search & Reflection, 透過 UCB1 演算法)，再收斂生成精確的任務圖。透過 `StrategizeAndPlanTool` 實作 **非同步事件驅動 (Async + Event-driven)**：工具呼叫後立即回傳，背景運算完成後透過 EventBus 發送 `BACKGROUND_TASK_COMPLETED` 的系統訊息，徹底解放 Agent 多工能力。
+*   [任務排程系統 (`docs/architecture/task/task_dag.md`)](./architecture/task/task_dag.md)：基於**有向無環圖 (TaskDAG)** 的工作流引擎。由 `TaskManager` 在幕後維護，支援依賴解鎖、防呆防死鎖與父節點失敗時的級聯取消 (Cascading Cancellation)。結合 **LATS (Language Agent Tree Search)** 作為前置規劃引擎。
+*   [任務指派與調度 (`docs/architecture/task/task_dispatch.md`)](./architecture/task/task_dispatch.md)：定義基於事件驅動的 Task 指派閉環。包含 `SpawnAgentTool`、`AssignTaskTool` 與 `UpdateTaskStatusTool` 的權責分離，透過 `BeforeAgentStep` 動態注入任務儀表板 (Task Dashboard) 來解耦 Agent 與單一任務綁定。
 
 ## 3. 狀態與記憶層 (State & Memory Layer)
 *   [記憶與狀態管理 (docs/architecture/core/memory.md)](./architecture/core/memory.md)：包含 `DataBlock` (資料載體、雙軸語意編碼、Claim Check Pattern)、透過 `SessionManager` 實現的收件箱機制、透過 `IDataBlockRepository` 實現的歷史紀錄管理，以及系統安全熔斷機制 (Circuit Breaker)。支援 `DataPointer` 大資料卸載與延遲加載機制，並已整合泛型 `LRUCache` 以確保效能與記憶體安全。具備時間感知插針 (Temporal Injection)、換日總結 (Daily Summary) 與防打斷延遲 (Debounce) 機制。
