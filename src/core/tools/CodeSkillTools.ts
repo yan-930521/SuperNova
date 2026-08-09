@@ -1,9 +1,9 @@
 import { z } from 'zod';
 import * as path from 'path';
-import * as fs from 'fs/promises';
 
 import { BaseTool, ToolContext } from './BaseTool';
 import { IWorkspaceManager } from '../domain/IWorkspaceManager';
+import { CodeSkillEntity, ICodeSkillRepository } from '../domain/ICodeSkillRepository';
 
 /**
  * 工具：撰寫 CodeSkill
@@ -19,40 +19,32 @@ export class CreateCodeSkillTool extends BaseTool {
         code: z.string().describe('The complete TypeScript code for the skill. Must default export the class.'),
     });
 
-    constructor(private workspaceManager: IWorkspaceManager) {
+    constructor(private codeSkillRepo: ICodeSkillRepository) {
         super();
     }
 
     public async execute(args: { skillName: string, description: string, code: string }, context: ToolContext): Promise<string> {
         try {
-            // Get the agent's private workspace
-            const workspacePath = await this.workspaceManager.getWorkspacePath(context.sessionId, context.agentId);
-            const skillsDir = path.join(workspacePath, 'skills');
+            // 嘗試取得現有技能以保留歷史數據
+            const existingSkill = await this.codeSkillRepo.getSkill(context.sessionId, context.agentId, args.skillName);
             
-            await fs.mkdir(skillsDir, { recursive: true });
-            
-            // 寫入 TS 執行檔
-            const filePath = path.join(skillsDir, `${args.skillName}.ts`);
-            await fs.writeFile(filePath, args.code, 'utf-8');
-            
-            // 寫入/更新 JSON 資源索引
-            const indexPath = path.join(skillsDir, 'skills_index.json');
-            let indexData: Record<string, { description: string, updatedAt: number }> = {};
-            try {
-                const rawIndex = await fs.readFile(indexPath, 'utf-8');
-                indexData = JSON.parse(rawIndex);
-            } catch (e) {
-                // Ignore if not exists
-            }
-            
-            indexData[args.skillName] = {
+            const skillEntity: CodeSkillEntity = {
+                id: args.skillName,
                 description: args.description,
-                updatedAt: Date.now()
+                timestamp: Date.now(),
+                usageStats: existingSkill?.usageStats || {
+                    executionCount: 0,
+                    successCount: 0,
+                    failureCount: 0,
+                    successRate: 0,
+                    lossRate: 0,
+                    averageDurationMs: 0
+                }
             };
             
-            await fs.writeFile(indexPath, JSON.stringify(indexData, null, 2), 'utf-8');
+            await this.codeSkillRepo.saveSkill(context.sessionId, context.agentId, skillEntity, args.code);
             
-            return `Successfully created CodeSkill ${args.skillName} at ${filePath}. It has been registered in the skills index.`;
+            return `Successfully created CodeSkill ${args.skillName}. It has been registered in the skills index.`;
         } catch (error: any) {
             return `Failed to create CodeSkill: ${error.message}`;
         }
@@ -61,7 +53,7 @@ export class CreateCodeSkillTool extends BaseTool {
 
 /**
  * 工具：執行 CodeSkill
- * 動態載入 Workspace 中的 .ts 技能檔案並執行。
+ * 動態載入 Workspace 中的 .ts 技能檔案並執行，並記錄執行數據。
  */
 export class ExecuteCodeSkillTool extends BaseTool {
     public readonly name = 'execute_code_skill';
@@ -73,36 +65,50 @@ export class ExecuteCodeSkillTool extends BaseTool {
 
     constructor(
         private workspaceManager: IWorkspaceManager,
-        private getCodeSkillContext: (agentId: string) => any // 依賴注入，避免直接耦合 EmbodiedAgent
+        private codeSkillRepo: ICodeSkillRepository,
+        private getCodeSkillContext: (agentId: string) => any
     ) {
         super();
     }
 
     public async execute(args: { skillName: string, args?: any }, context: ToolContext): Promise<string> {
+        const startTime = Date.now();
+        let isSuccess = false;
+        let errorMessage = '';
+
         try {
             const workspacePath = await this.workspaceManager.getWorkspacePath(context.sessionId, context.agentId);
             const filePath = path.join(workspacePath, 'skills', `${args.skillName}.ts`);
             
-            // Note: Since we are running in Bun, we can dynamically import .ts files natively.
-            // Using a timestamp query prevents module caching if the file was updated.
             const module = await import(`${filePath}?t=${Date.now()}`);
             
-            // We expect the skill class to be the default export
             const SkillClass = module.default;
             if (!SkillClass) {
-                return `Error: The skill file must use "export default class ${args.skillName} extends ActionSkill"`;
+                throw new Error(`The skill file must use "export default class ${args.skillName} extends ActionSkill"`);
             }
 
             const skillContext = this.getCodeSkillContext(context.agentId);
             const skillInstance = new SkillClass(skillContext);
             
-            // Execute the skill
             const result = await skillInstance.execute(args.args);
+            isSuccess = true;
+            
+            // 記錄統計資訊
+            await this.codeSkillRepo.recordExecution(context.sessionId, context.agentId, args.skillName, isSuccess, Date.now() - startTime);
+            
             return `Execution successful. Result: ${JSON.stringify(result)}`;
             
         } catch (error: any) {
-            // Provide stack trace so the agent can learn and reflect
-            return `CodeSkill Execution Error:\n${error.message}\n${error.stack}`;
+            isSuccess = false;
+            errorMessage = error.message;
+            // 記錄統計資訊
+            try {
+                await this.codeSkillRepo.recordExecution(context.sessionId, context.agentId, args.skillName, isSuccess, Date.now() - startTime);
+            } catch (e) {
+                // Ignore analytics update failure
+            }
+            
+            return `CodeSkill Execution Error:\n${errorMessage}\n${error.stack}`;
         }
     }
 }

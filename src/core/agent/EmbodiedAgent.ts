@@ -1,7 +1,8 @@
 import { Config } from '../config/Config';
-import { ContextOverride, HookEvent, IEventBus, PromptSectionIndex } from '../domain/IBus';
+import { HookEvent, IEventBus, PromptSectionIndex } from '../domain/IBus';
 import { IDataBlockRepository } from '../domain/IRepository';
 import { EMBODIED_SDK_DECLARATION } from '../skill/EmbodiedSDK';
+import { FileSystemCodeSkillRepository } from '../infra/repositories/FileSystemCodeSkillRepository';
 import { PromptLoader } from '../utils/PromptLoader';
 import { AgentOptions, AgentType, BaseAgent, BaseAgentData } from './BaseAgent';
 import { StateEntry, StateRegistry } from './StateRegistry';
@@ -43,7 +44,7 @@ export class EmbodiedAgent extends BaseAgent {
     // 訂閱 BeforeAgentStep Hook 以動態注入 SDK、技能庫與狀態樹
     protected setupHooks(): void {
         this.eventBus.subscribe(HookEvent.BeforeAgentStep, async (event) => {
-            const payload = event.payload as ContextOverride;
+            const payload = event.payload;
             // 若沒指定 agentId 或指定的不是自己，則不介入
             if (payload.agentId && payload.agentId !== this.id) return;
 
@@ -65,9 +66,15 @@ export class EmbodiedAgent extends BaseAgent {
 
             // 3. 注入已有的技能清單 (讀取 JSON 管理檔)
             try {
-                const rawIndex = await this.options.workspaceManager.readFile(this.sessionId, this.id, 'skills/skills_index.json');
-                const indexData = JSON.parse(rawIndex) as Record<string, { description: string, updatedAt: number }>;
-                const availableSkills = Object.entries(indexData).map(([name, meta]) => `- ${name}: ${meta.description}`);
+                // 第三個參數傳入預設的 'skills' 作為目錄 (也可從 Config 讀取)
+                const skillRepo = new FileSystemCodeSkillRepository(this.options.workspaceManager, 'skills');
+                const skills = await skillRepo.listSkills(this.sessionId, this.id);
+                
+                const availableSkills = skills.map(skill => {
+                    const stats = skill.usageStats;
+                    const statsStr = stats ? ` (Runs: ${stats.executionCount}, Success Rate: ${(stats.successRate * 100).toFixed(1)}%, AvgTime: ${Math.round(stats.averageDurationMs)}ms)` : '';
+                    return `- ${skill.id}${statsStr}: ${skill.description}`;
+                });
                 
                 if (availableSkills.length > 0) {
                     payload.injectedPrompts.push({
