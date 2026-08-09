@@ -2,7 +2,12 @@ import { Config } from '../config/Config';
 import { IDataBlockRepository } from '../domain/IRepository';
 import { IEventBus } from '../domain/IBus';
 import { PromptLoader } from '../utils/PromptLoader';
-import { AgentOptions, AgentType, BaseAgent } from './BaseAgent';
+import { AgentOptions, AgentType, BaseAgent, BaseAgentData } from './BaseAgent';
+import { StateEntry, StateRegistry } from './StateRegistry';
+
+export interface EmbodiedAgentData extends BaseAgentData {
+    dynamicState?: Record<string, StateEntry>;
+}
 
 /**
  * EmbodiedAgent
@@ -11,6 +16,9 @@ import { AgentOptions, AgentType, BaseAgent } from './BaseAgent';
  */
 export class EmbodiedAgent extends BaseAgent {
   public readonly type = AgentType.EMBODIED;
+  
+  // 動態狀態樹，用於儲存感知與執行期記憶
+  public readonly stateRegistry = new StateRegistry();
 
   constructor(
     id: string,
@@ -29,5 +37,20 @@ export class EmbodiedAgent extends BaseAgent {
         this.logger.error(`Failed to load embodied_agent.json: ${error}`);
       }
     }
+  }
+
+  public serialize(): EmbodiedAgentData {
+      const baseData = super.serialize();
+      return {
+          ...baseData,
+          dynamicState: this.stateRegistry.serialize()
+      };
+  }
+
+  public hydrate(data: EmbodiedAgentData): void {
+      super.hydrate(data);
+      if (data.dynamicState) {
+          this.stateRegistry.hydrate(data.dynamicState);
+      }
   }
 }
