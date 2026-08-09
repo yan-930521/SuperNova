@@ -25,12 +25,15 @@ storage:
  daily_dir: daily
  # Blob目錄
  blob_dir: blob
+ # CodeSkill目錄
+ code_skill_dir: codeskills
  session_file: session.json
  history_file: history.jsonl
  agent_state_file: state.json
  oplog_file: oplog.jsonl
  graph_nodes_file: graph_nodes.json
  graph_edges_file: graph_edges.json
+ code_skill_file: skill_index.json
 # 任務與 DAG 規劃配置
 task:
  # 是否強制對複雜任務啟用 LATS/MCTS 策略搜尋
@@ -138,5 +141,7 @@ cache:
  projection_lru_size: 10
  # 意識投影歷史快取有效時間 (毫秒)
  projection_ttl_ms: 5000
- # EventBus 監聽者快取最大數量
+ # EventBus 監聽者 LRU 快取最大數量
  event_bus_lru_size: 500
+ # CodeSkill LRU 快取最大數量
+ code_skill_lru_size: 50

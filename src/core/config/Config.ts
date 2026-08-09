@@ -8,7 +8,8 @@ export const CacheConfigSchema = z.object({
     prompt_ttl_ms: z.number().describe('系統提示詞快取有效時間 (毫秒)'),
     projection_lru_size: z.number().describe('意識投影歷史 LRU 快取最大數量'),
     projection_ttl_ms: z.number().describe('意識投影歷史快取有效時間 (毫秒)'),
-    event_bus_lru_size: z.number().describe('EventBus 監聽者快取最大數量'),
+    event_bus_lru_size: z.number().describe('EventBus 監聽者 LRU 快取最大數量'),
+    code_skill_lru_size: z.number().describe('CodeSkill LRU 快取最大數量'),
 });
 
 export const AgentConfigSchema = z.object({
@@ -49,8 +50,10 @@ export const StorageConfigSchema = z.object({
     graph_dir: z.string().describe('圖譜資料庫子目錄'),
     daily_dir: z.string().describe('每日總結存放目錄'),
     blob_dir: z.string().describe('Blob目錄'),
+    code_skill_dir: z.string().describe('CodeSkill目錄'),
     session_file: z.string(),
     agent_state_file: z.string(),
+    code_skill_file: z.string(),
     history_file: z.string(),
     oplog_file: z.string(),
     graph_nodes_file: z.string(),

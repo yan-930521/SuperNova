@@ -1,43 +1,37 @@
-import { IEventBus } from '../domain/IBus';
 import { StateRegistry } from '../agent/StateRegistry';
-// BotManager is from underworld, but since we are in core, we use any or generic. 
-// We will use an interface so we don't have to couple core with underworld.
-export interface IBotContext {
-    executeCommand(command: string): Promise<string>;
-    [key: string]: any;
-}
+import { IEventBus } from '../domain/IBus';
 
-export interface CodeSkillContext {
+export interface CodeSkillContext<TEnv = any> {
     state: StateRegistry;
     eventBus: IEventBus;
-    bot: IBotContext;
+    env: TEnv;
 }
 
-export abstract class BaseSkill {
+export abstract class BaseSkill<TEnv = any> {
     public abstract readonly name: string;
     public abstract readonly description: string;
     
     protected readonly state: StateRegistry;
     protected readonly eventBus: IEventBus;
-    protected readonly bot: IBotContext;
+    protected readonly env: TEnv;
 
-    constructor(context: CodeSkillContext) {
+    constructor(context: CodeSkillContext<TEnv>) {
         this.state = context.state;
         this.eventBus = context.eventBus;
-        this.bot = context.bot;
+        this.env = context.env;
     }
 
     public abstract execute(args?: any): Promise<any>;
 }
 
-export abstract class ActionSkill extends BaseSkill {
+export abstract class ActionSkill<TEnv = any> extends BaseSkill<TEnv> {
     /**
      * 行動技能改變環境狀態，執行完畢後必須回傳明確的成功/失敗描述
      */
     public abstract execute(args?: any): Promise<string>;
 }
 
-export abstract class ObservationSkill extends BaseSkill {
+export abstract class ObservationSkill<TEnv = any> extends BaseSkill<TEnv> {
     private sensoryLoopTimer?: ReturnType<typeof setInterval>;
 
     /**

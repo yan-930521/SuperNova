@@ -76,4 +76,11 @@ export class IdGenerator {
   static graphEdge(): string {
     return this.generate('edge_');
   }
+
+  /**
+   * 生成 CodeSkill 程式碼版號 ID
+   */
+  static codeSkillVersion(): string {
+    return this.generate('skillver_');
+  }
 }

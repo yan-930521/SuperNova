@@ -5,7 +5,7 @@
 [![TypeScript](https://img.shields.io/badge/Language-TypeScript-blue.svg)](https://www.typescriptlang.org/)
 [![Runtime](https://img.shields.io/badge/Runtime-Bun-black.svg)](https://bun.sh/)
 [![Architecture](https://img.shields.io/badge/Architecture-Event--Driven-orange.svg)](#technical-highlights-系統技術實作)
-[![Stage](https://img.shields.io/badge/Stage-v0.2.0--dev-green.svg)](#development-roadmap)
+[![Stage](https://img.shields.io/badge/Stage-v0.2.0-green.svg)](#development-roadmap)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
 SuperNova 是一個專注於效能與狀態管理的 **Agent Runtime (代理人執行引擎)**。它運行於 Bun 高性能環境之上，透過事件驅動架構，有效解決長效型 AI 系統常見的上下文爆炸與目標飄移 (Goal Drift) 問題，使 Agent 能在複雜、跨領域的長期任務中保持穩定的認知與執行力。
@@ -137,6 +137,13 @@ SuperNova/
 
 - **Agent級工作區驅動實例**：底層 I/O 在處理工作區讀寫時，使用 `agentId` 映射獨立儲存驅動（如純記憶體 VOLATILE 或 Git PERSISTENT），即使在同一 Session 底下，不同的子代理也能擁有各自的隔離空間。
 
+### 5. 具身智能與可進化編碼 (Virtual Embodied AI & Evolvable Code)
+- **泛型化外部環境 SDK (Generic Env SDK)**：徹底解耦特定環境 (如 Minecraft) 上下文，系統採用 TS 泛型與動態宣告注入，使 Agent 能無縫適配 Line Bot、爬蟲等任意外部領域。
+
+- **自我進化技能生態 (Self-Evolving CodeSkill)**：允許 Agent 在執行期動態寫入「實體 TypeScript 程式碼」作為技能，具備自我狀態 (Self State) 與自我優化能力。
+  - **版本與指標控制**：系統底層自動產生版本號 (`skillver_xxx`) 並計算每版工具的勝率、損耗率。
+  - **自動退版 (Auto-Rollback)**：當 Agent 發覺新碼報錯，可主動呼叫退版工具，無縫回復至歷史勝率最高的穩定版本，達成「創造-測試-除錯-修復」的全自動閉環 (Self-Healing Loop)。
+
 ---
 
 ## Development Roadmap
@@ -144,7 +151,7 @@ SuperNova/
 | 版本 | 階段 | 概述 |
 |:---|:---|:---|
 | **v0.1.0** | 已完成 | 奠定非同步 EventBus、動態圖譜記憶與滑動視窗隔離的穩健基礎設施 |
-| **v0.2.0** | 開發中 | 引入虛擬具身智能 (Virtual Embodied AI) 與可進化 CodeSkill 系統 |
+| **v0.2.0** | 已完成 | 引入虛擬具身智能 (Virtual Embodied AI)、任務排程與可進化 CodeSkill 系統 |
 
 > 詳細規劃請參閱 [ROADMAP.md](ROADMAP.md)。
 

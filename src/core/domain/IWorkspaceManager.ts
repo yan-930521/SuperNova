@@ -17,6 +17,13 @@ export interface IWorkspaceManager {
   initWorkspace(sessionId: string, agentId: string, type: WorkspaceType): Promise<string>;
 
   /**
+   * 取得工作區的絕對路徑
+   * @param sessionId 會話 ID
+   * @param agentId 代理/任務 ID
+   */
+  getWorkspacePath(sessionId: string, agentId: string): Promise<string>;
+
+  /**
    * 檢查該 Session 的工作空間是否存在且完整
    * @param sessionId 會話 ID
    * @param type 工作區類型

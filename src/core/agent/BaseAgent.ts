@@ -10,8 +10,9 @@ import { Config } from '../config/Config';
 import {
     AgentEvent, GlobalEventMap, HookEvent, IEvent, IEventBus, IPromptSection, PromptSectionIndex
 } from '../domain/IBus';
+import { ICodeSkillRepository } from '../domain/ICodeSkillRepository';
 import { IDataBlockRepository, IEntity } from '../domain/IRepository';
-import { WorkspaceType } from '../domain/IWorkspaceManager';
+import { IWorkspaceManager, WorkspaceType } from '../domain/IWorkspaceManager';
 import { LLMProvider } from '../infra/llm/LLMProvider';
 import { LogManager } from '../infra/LogManager';
 import { ConsoleTransport } from '../infra/transports/ConsoleTransport';
@@ -156,10 +157,14 @@ export interface AgentOptions {
     eventBus: IEventBus;
     config: Config;
     dataBlockRepo: IDataBlockRepository;
+    workspaceManager: IWorkspaceManager;
+    codeSkillRepo: ICodeSkillRepository;
     allowedTools?: string[];
     isTemp?: boolean;
     /** 綁定的 DAG 任務 ID，SpawnAgentTool 傳入 */
     assignedTaskId?: string;
+    /** 外部環境專屬的 SDK 宣告字串 (如 Minecraft BotContext 等) */
+    envSdkDeclaration?: string;
 }
 
 /**
@@ -227,7 +232,7 @@ export abstract class BaseAgent {
     constructor(
         public readonly id: string,
         public readonly sessionId: string, // 強制綁定會話 ID，所有衍生 Agent/Worker 均依附於此會話
-        options: AgentOptions
+        public readonly options: AgentOptions
     ) {
         this.eventBus = options.eventBus;
         this.config = options.config;

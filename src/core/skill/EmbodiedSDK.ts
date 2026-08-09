@@ -13,42 +13,31 @@ declare module "supernova-embodied-sdk" {
         exportSummary(): string;
     }
 
-    /**
-     * Minecraft 環境控制器
-     */
-    interface IBotContext {
-        /**
-         * 執行任何 underworld CLI 指令。
-         * 例如: executeCommand('nav to 100 64 200') 或 executeCommand('mine start here')
-         */
-        executeCommand(command: string): Promise<string>;
-    }
-
-    interface CodeSkillContext {
+    interface CodeSkillContext<TEnv = any> {
         state: StateRegistry;
-        bot: IBotContext;
+        env: TEnv;
     }
 
-    abstract class BaseSkill {
+    abstract class BaseSkill<TEnv = any> {
         public abstract readonly name: string;
         public abstract readonly description: string;
         protected readonly state: StateRegistry;
-        protected readonly bot: IBotContext;
-        constructor(context: CodeSkillContext);
+        protected readonly env: TEnv;
+        constructor(context: CodeSkillContext<TEnv>);
         public abstract execute(args?: any): Promise<any>;
     }
 
-    export abstract class ActionSkill extends BaseSkill {
+    export abstract class ActionSkill<TEnv = any> extends BaseSkill<TEnv> {
         /**
          * 改變環境，回傳成功與否及詳細文字。
          */
         public abstract execute(args?: any): Promise<string>;
     }
 
-    export abstract class ObservationSkill extends BaseSkill {
+    export abstract class ObservationSkill<TEnv = any> extends BaseSkill<TEnv> {
         /**
          * 啟動定時背景感知迴圈，每隔指定毫秒數執行一次 execute()。
-         * 適合用於追蹤附近的敵人或監控狀態。
+         * 適合用於追蹤或是背景監控。
          */
         public startSensoryLoop(intervalMs: number): void;
         public stopSensoryLoop(): void;

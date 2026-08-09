@@ -1,21 +1,24 @@
 import * as path from 'path';
 
 import { AgentManager } from '../agent/AgentManager';
-import { LLMProvider } from '../infra/llm/LLMProvider';
 import { Config } from '../config/Config';
 import { ComponentContainer } from '../container/ComponentContainer';
+import { SystemEvent } from '../domain/IBus';
+import { LLMProvider } from '../infra/llm/LLMProvider';
 import { LogManager } from '../infra/LogManager';
-import { FileSystemAgentStateRepository } from '../infra/repositories/FileSystemAgentStateRepository';
+import {
+    FileSystemAgentStateRepository
+} from '../infra/repositories/FileSystemAgentStateRepository';
+import { FileSystemCodeSkillRepository } from '../infra/repositories/FileSystemCodeSkillRepository';
 import { FileSystemDataBlockRepository } from '../infra/repositories/FileSystemDataBlockRepository';
 import { FileSystemSessionRepository } from '../infra/repositories/FileSystemSessionRepository';
 import { JsonGraphRepository } from '../infra/repositories/JsonGraphRepository';
 import { WorkspaceManager } from '../infra/workspace/WorkspaceManager';
 import { MemoryManager } from '../memory/MemoryManager';
 import { EventBus } from '../messaging/EventBus';
-import { SystemEvent } from '../domain/IBus';
 import { SessionManager } from '../session/SessionManager';
-import { PromptLoader } from '../utils/PromptLoader';
 import { TaskManager } from '../task/TaskManager';
+import { PromptLoader } from '../utils/PromptLoader';
 import { ILifecycle } from './ILifecycle';
 
 /**
@@ -59,6 +62,7 @@ export class RuntimeKernel implements ILifecycle {
       const dataBlockRepo = new FileSystemDataBlockRepository(this.config, sessionBaseDir);
       const agentStateRepo = new FileSystemAgentStateRepository(this.config, sessionBaseDir);
       const graphRepo = new JsonGraphRepository(this.config, sessionBaseDir);
+      const codeSkillRepo = new FileSystemCodeSkillRepository(this.config,sessionBaseDir);
 
       // 3. 實例化底層儲存組件 - WorkspaceManager
       // WorkspaceManager 內部會依據工作區類型動態分配 StorageDriver (VFS/Git)
@@ -70,7 +74,7 @@ export class RuntimeKernel implements ILifecycle {
       const taskManager = new TaskManager(eventBus);
 
       // AgentManager 負責所有 Agent 狀態管理與生命週期，注入 agentStateRepo 與 eventBus 等
-      const agentManager = new AgentManager(this.config, agentStateRepo, eventBus, dataBlockRepo, workspaceManager, llmProvider, taskManager);
+      const agentManager = new AgentManager(this.config, agentStateRepo, eventBus, dataBlockRepo, workspaceManager, llmProvider, taskManager, codeSkillRepo);
 
       // SessionManager 負責管理會話，統一攔截與派發 AgentMessage
       const sessionManager = new SessionManager(this.config, sessionRepo, workspaceManager, agentManager, dataBlockRepo, eventBus);

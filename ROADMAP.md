@@ -24,18 +24,23 @@
    - **透明化 ReAct 迴圈 (Transparent ReAct Loop)**：完整捕獲 LLM 思考過程 (Thoughts) 與工具執行狀態，建立高可觀測性的互動基礎 (`demo/v0.1.0.ts`)。
 ---
 
-## v0.2.0 - 虛擬具身智能與自主進化 (Virtual Embodied AI & Autonomous Evolution)
+## v0.2.0 - 虛擬具身智能與自主進化 (Virtual Embodied AI & Autonomous Evolution) (已完成)
 
-在確保 v0.1.0 的基礎設施穩定後，我們將朝向「基於編碼的自主進化」與「精細操作」方向邁進：
+在確保 v0.1.0 的基礎設施穩定後，我們朝向「基於編碼的自主進化」與「精細操作」方向邁進，並已完成核心建置：
 
-- **虛擬具身智能 (Virtual Embodied AI)**
+- **虛擬具身智能 (Virtual Embodied AI) (已完成)**
   - 專注於虛擬環境中的精細操作與感知，達成基於編碼 (Code-based) 的自我修正與自主進化能力。
-- **全新 CodeSkill 系統 (Agent-Evolvable Code)**
-  - 有別於市面上的傳統 Prompt Skill，CodeSkill 本質上是一段**真實的程式碼**，並且設計成允許 Agent 在執行過程中對其進行**自我優化、重構甚至無中生有新增**，完美契合「基於編碼的自主進化」。
-  - 基礎嚴格分為 `Obversal` (觀察)、`Action` (行動) 等多種類別，確保 Agent 撰寫出的每一種 Skill 其權限與職責受到嚴格邊界限制。
-  - **Self State 維護**：Skill 具備獨立的自我狀態管理能力，可於執行期間自行新增與維護內部變數。
-  - **自動化 Metrics 統計**：系統將底層自動統計每項工具與 Skill 的呼叫成功率/錯誤率、平均時間花費，以及 1% loss 等效能/穩健性指標。
-  - **底層安全隔離 (Hardened Sandbox & WASM)**：為解決 Agent 自主編寫不可控程式碼的資安風險，動態生成的 CodeSkill 將被強制限制在嚴格的虛擬沙盒或 WebAssembly (WASM) 容器中執行，徹底防堵越權操作與系統崩潰。
+  - **泛型化外部環境 SDK (Generic Env SDK)**：徹底解耦 Minecraft 專用上下文 (`IBotContext`)，改以 `AgentOptions.envSdkDeclaration` 動態注入 TS 宣告，並利用泛型 (`<TEnv>`) 串接環境，使系統能無縫適配 Line Bot、爬蟲等任何領域。
+
+- **全新 CodeSkill 自我進化生態系 (Agent-Evolvable Code) (已完成)**
+  - 有別於市面上的傳統 Prompt Skill，CodeSkill 本質上是一段**真實的程式碼**，並且設計成允許 Agent 在執行過程中對其進行**自我優化、重構甚至無中生有新增**。
+  - 基礎嚴格分為 `Observation` (觀察)、`Action` (行動) 等類別，確保 Agent 撰寫出的每一種 Skill 受到邊界限制。
+  - **技術亮點 (Technical Highlights)**：
+    - **動態版號與指標儲存 (CodeSkill Versioning)**：採用指標儲存 (Indirection)，由底層的 `IdGenerator` 自動產生 `skillver_xxx` 作為實體檔案後綴，杜絕新版程式碼直接覆蓋破壞舊版。
+    - **容錯與自動退版 (Self-Healing & Auto-Rollback)**：當 Agent 發覺新版技能執行失敗時，不僅會紀錄損耗率，更能透過 `rollback_code_skill` 退回至歷史上勝率最高的穩定版本，具備完整的自我除錯與修復閉環。
+    - **統計指標與唯讀維護**：內建 `read_code_skill`、`list_skill_versions` 與 `delete_code_skill`，讓 Agent 能主動查閱舊碼、檢視歷代勝率並清除冗餘技能以節省 Token。
+    - **底層安全隔離 (Hardened Sandbox & WASM)**：為解決資安風險，計畫未來將動態生成的 CodeSkill 強制限制在 WebAssembly (WASM) 容器中執行。
+
 - **具象化 Task 系統 (已完成)**
   - 新增 Task 系統，讓主腦與開發者能清楚看見每一步驟的執行進度。
   - **技術亮點 (Technical Highlights)**：

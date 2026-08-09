@@ -21,6 +21,13 @@ export interface IStorageDriver {
   init(sessionId: string, agentId: string, type: WorkspaceType): Promise<string>;
 
   /**
+   * 取得已初始化工作區的絕對路徑
+   * @param sessionId 會話 ID
+   * @param agentId 代理/任務 ID
+   */
+  getWorkspacePath(sessionId: string, agentId: string): Promise<string>;
+
+  /**
    * 寫入檔案
    * @param sessionId 會話 ID
    * @param agentId 代理/任務 ID

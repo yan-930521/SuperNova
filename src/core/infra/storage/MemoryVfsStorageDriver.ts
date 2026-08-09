@@ -123,6 +123,10 @@ export class MemoryVfsStorageDriver implements IStorageDriver {
   /**
    * 獲取已註冊的虛擬路徑
    */
+  public async getWorkspacePath(sessionId: string, agentId: string): Promise<string> {
+      return this.getRequiredPath(sessionId, agentId);
+  }
+
   private getRequiredPath(sessionId: string, agentId: string): string {
     const key = this.getKey(sessionId, agentId);
     const wsPath = this.activePaths.get(key);

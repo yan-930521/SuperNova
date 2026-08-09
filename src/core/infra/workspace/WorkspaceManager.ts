@@ -86,6 +86,14 @@ export class WorkspaceManager implements IWorkspaceManager, ILifecycle {
     }
 
     /**
+     * 取得工作區的絕對路徑
+     */
+    public async getWorkspacePath(sessionId: string, agentId: string): Promise<string> {
+        const driver = this.getRequiredDriver(agentId);
+        return driver.getWorkspacePath(sessionId, agentId);
+    }
+
+    /**
      * 提交工作區變更 (委託給特定驅動)
      */
     public async commitChanges(sessionId: string, agentId: string, message: string): Promise<void> {

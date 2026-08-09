@@ -6,8 +6,13 @@
 
 ---
 
-## [Unreleased]
+## [0.2.0] - 2026-08-09
 ### Added (新增功能與基礎設施)
+- **具身智能自我進化生態系 (Embodied Agent Self-Evolving CodeSkill Ecosystem)**：
+  - **技能指標與版本控制 (CodeSkill Versioning & Rollback)**：引進指標儲存機制 (Indirection)，技能腳本以 `skillver_xxx` 的動態版號儲存於實體檔案，不再直接覆寫。當新版程式碼在 `execute_code_skill` 中執行失敗，系統會記錄該版本的損耗率，並提供 `rollback_code_skill` 讓 Agent 能夠退回勝率最高的歷史穩定版。
+  - **技能唯讀與維護工具 (Read & Manage CodeSkills)**：新增 `read_code_skill`、`list_skill_versions` 與 `delete_code_skill` 工具，讓 Agent 得以自由讀取舊版原始碼、列出歷史成績清單，或是刪除無用技能以節省 System Prompt Token。這完整了感知、創造、除錯與退版的自動化閉環 (Self-Healing Loop)。
+  - **泛型化外部環境 SDK (Generic Env SDK)**：將 Minecraft 特定的 `IBotContext` 從核心模組抽離。`EmbodiedAgent` 現改為透過 `AgentOptions.envSdkDeclaration` 接收外部的 TS 介面宣告，並利用泛型 `<TEnv = any>` 串接環境，實現真正的領域驅動解耦 (DDD)，使 Agent 能夠輕鬆適配任何外部環境 (如 Line Bot、網頁爬蟲等)。
+  - **EmbodiedAgent 預設工具註冊 (Default Tool Registration)**：擴充 `AgentManager` 的 `getDefaultTools`，在生成 Embodied 類型代理人時，自動掛載上述全套 CodeSkill 管理工具。
 - **多代理人任務排程系統 (Task & TaskDAG System)**：
   - **任務儀表板動態注入 (Task Dashboard Injection)**：透過 `BeforeAgentStep` Hook 攔截器，系統會在每次 Agent 思考前，自動且動態地向 System Prompt 注入任務儀表板。對任務創建者顯示全局 DAG 樹狀圖，對受指派者則只顯示專屬目標，徹底解耦 Agent 與單一任務的綁定關係。
   - **任務指派與回報閉環 (Dispatch & Report Loop)**：重構 `SpawnAgentTool`，剝離指派邏輯至全新的 `AssignTaskTool`，並實作 `UpdateTaskStatusTool` 讓 Agent 完工後自動依據身上綁定的 ID 進行回報。配合 `TaskManager` 的自動事件推播，完成從指派、執行到解鎖下游任務的全自動化閉環。

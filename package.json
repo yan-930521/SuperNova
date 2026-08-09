@@ -1,6 +1,6 @@
 {
     "name": "supernova",
-    "version": "0.2.0-dev",
+    "version": "0.2.0",
     "description": "SuperNova AI Runtime",
     "main": "./demo/v0.1.0.ts",
     "scripts": {

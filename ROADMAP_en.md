@@ -25,18 +25,22 @@ The core infrastructure and the "Graph-Vector Hybrid Memory System" of SuperNova
 
 ---
 
-## v0.2.0 - Virtual Embodied AI & Autonomous Evolution (In Progress)
+## v0.2.0 - Virtual Embodied AI & Autonomous Evolution (Completed)
 
-After ensuring the stability of the v0.1.0 infrastructure, we will move towards "Code-based Autonomous Evolution" and "Fine-grained Manipulation":
+After ensuring the stability of the v0.1.0 infrastructure, we have moved towards "Code-based Autonomous Evolution" and "Fine-grained Manipulation", completing the core implementation:
 
-- **Virtual Embodied AI**
+- **Virtual Embodied AI (Completed)**
   - Focus on fine-grained manipulation and perception in virtual environments, achieving Code-based self-correction and autonomous evolution capabilities.
-- **New CodeSkill System (Agent-Evolvable Code)**
-  - Unlike traditional Prompt Skills on the market, CodeSkill is essentially **real code** and is designed to allow Agents to **self-optimize, refactor, or even create new ones from scratch** during execution, perfectly matching "Code-based autonomous evolution."
-  - The foundation is strictly categorized into `Obversal` (Observation), `Action`, etc., ensuring that every Skill written by the Agent has its permissions and responsibilities strictly bounded.
-  - **Self State Maintenance**: Skills have independent self-state management capabilities, allowing them to add and maintain internal variables during execution.
-  - **Automated Metrics**: The system automatically compiles success/error rates, average time spent, and 1% loss equivalence for each tool and Skill at the base layer to monitor performance and robustness.
-  - **Hardened Sandbox & WASM**: To address the security risks of Agents autonomously writing uncontrollable code, dynamically generated CodeSkills will be strictly restricted to execute within a virtual sandbox or WebAssembly (WASM) container, completely preventing unauthorized operations and system crashes.
+  - **Generic Env SDK**: Completely decoupled the Minecraft-specific context (`IBotContext`). The system now uses `AgentOptions.envSdkDeclaration` to dynamically inject TS declarations and uses generics (`<TEnv>`) to connect with the environment, enabling the system to seamlessly adapt to Line Bot, web crawlers, or any domain.
+
+- **New CodeSkill Self-Evolving Ecosystem (Agent-Evolvable Code) (Completed)**
+  - Unlike traditional Prompt Skills on the market, CodeSkill is essentially **real code** and is designed to allow Agents to **self-optimize, refactor, or even create new ones from scratch** during execution.
+  - The foundation is strictly categorized into `Observation`, `Action`, etc., ensuring that every Skill written by the Agent has bounded responsibilities.
+  - **Technical Highlights**:
+    - **Dynamic Versioning & Indirection Storage**: Implemented an indirection storage mechanism where the underlying `IdGenerator` automatically generates a `skillver_xxx` suffix for physical files, preventing new code from directly overwriting and destroying older versions.
+    - **Self-Healing & Auto-Rollback**: When the Agent detects that a new skill version has failed during execution, it not only records the loss rate but can also use `rollback_code_skill` to revert to the most stable historical version with the highest success rate, creating a complete self-debugging and fixing loop.
+    - **Metrics & Read-only Maintenance**: Built-in tools like `read_code_skill`, `list_skill_versions`, and `delete_code_skill` allow the Agent to proactively read old source code, view historical success rates, and clean up redundant skills to save Tokens.
+    - **Hardened Sandbox & WASM**: To address security risks, future plans include enforcing dynamically generated CodeSkills to execute within a WebAssembly (WASM) container.
 
 - **Materialized Task System (Completed)**
   - Added the Task system, allowing the main brain and developers to clearly see the execution progress of each step.

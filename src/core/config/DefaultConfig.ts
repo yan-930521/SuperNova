@@ -6,7 +6,7 @@ import { Config } from './Config';
  * 提供合理的預設值確保系統即便在沒有設定檔的情況下也能正常啟動。
  */
 export const DEFAULT_CONFIG: Config = {
-    version: "v0.2.0-dev",
+    version: "v0.2.0",
     security: {
         /** 工具執行超時預設為 30 秒 (30000ms) */
         default_tool_timeout_ms: 30000,
@@ -23,12 +23,14 @@ export const DEFAULT_CONFIG: Config = {
         graph_dir: 'graph',
         daily_dir: 'daily',
         blob_dir: 'blob',
+        code_skill_dir: 'codeskills',
         session_file: 'session.json',
         history_file: 'history.jsonl',
         agent_state_file: 'state.json',
         oplog_file: 'oplog.jsonl',
         graph_nodes_file: 'graph_nodes.json',
-        graph_edges_file: 'graph_edges.json'
+        graph_edges_file: 'graph_edges.json',
+        code_skill_file: 'skill_index.json'
     },
     task: {
         force_mcts: false,
@@ -114,6 +116,7 @@ export const DEFAULT_CONFIG: Config = {
         prompt_ttl_ms: 60000,
         projection_lru_size: 10,
         projection_ttl_ms: 5000,
-        event_bus_lru_size: 500
+        event_bus_lru_size: 500,
+        code_skill_lru_size: 50
     }
 };

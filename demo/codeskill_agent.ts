@@ -1,4 +1,4 @@
-import { Config } from '../src/core/config/Config';
+import { DEFAULT_CONFIG } from '../src/core/config/DefaultConfig';
 import { EventBus } from '../src/core/messaging/EventBus';
 import { AgentManager } from '../src/core/agent/AgentManager';
 import { EmbodiedAgent } from '../src/core/agent/EmbodiedAgent';
@@ -10,8 +10,8 @@ import { AgentType } from '../src/core/agent/BaseAgent';
 async function runDemo() {
     console.log('[Demo] Initializing CodeSkill Agent...');
     
-    const config = new Config();
-    const eventBus = new EventBus(config);
+    const config = DEFAULT_CONFIG;
+    const eventBus = new EventBus();
     // 假設我們有其他基礎依賴...
     
     // 初始化 EmbodiedAgent
@@ -20,7 +20,8 @@ async function runDemo() {
         eventBus,
         llmProvider: {} as any, 
         workspaceManager: {} as any,
-        logManager: {} as any
+        dataBlockRepo: {} as any,
+        codeSkillRepo: {} as any
     });
 
     // 1. 初始化狀態

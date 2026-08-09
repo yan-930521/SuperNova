@@ -1,8 +1,9 @@
+import * as path from 'path';
+
 import { Config } from '../config/Config';
 import { HookEvent, IEventBus, PromptSectionIndex } from '../domain/IBus';
 import { IDataBlockRepository } from '../domain/IRepository';
 import { EMBODIED_SDK_DECLARATION } from '../skill/EmbodiedSDK';
-import { FileSystemCodeSkillRepository } from '../infra/repositories/FileSystemCodeSkillRepository';
 import { PromptLoader } from '../utils/PromptLoader';
 import { AgentOptions, AgentType, BaseAgent, BaseAgentData } from './BaseAgent';
 import { StateEntry, StateRegistry } from './StateRegistry';
@@ -53,9 +54,14 @@ export class EmbodiedAgent extends BaseAgent {
             }
 
             // 1. 注入 SDK 宣告
+            let sdkDeclaration = EMBODIED_SDK_DECLARATION;
+            if (this.options.envSdkDeclaration) {
+                sdkDeclaration += '\n' + this.options.envSdkDeclaration;
+            }
+
             payload.injectedPrompts.push({
                 index: PromptSectionIndex.TACTICAL_GUIDELINE,
-                content: `## Embodied CodeSkill SDK\nYou have the ability to write and execute typescript skills. Use the following SDK interfaces:\n\n\`\`\`typescript\n${EMBODIED_SDK_DECLARATION}\n\`\`\``
+                content: `## Embodied CodeSkill SDK\nYou have the ability to write and execute typescript skills. Use the following SDK interfaces:\n\n\`\`\`typescript\n${sdkDeclaration}\n\`\`\``
             });
 
             // 2. 注入狀態樹
@@ -66,13 +72,12 @@ export class EmbodiedAgent extends BaseAgent {
 
             // 3. 注入已有的技能清單 (讀取 JSON 管理檔)
             try {
-                // 第三個參數傳入預設的 'skills' 作為目錄 (也可從 Config 讀取)
-                const skillRepo = new FileSystemCodeSkillRepository(this.options.workspaceManager, 'skills');
-                const skills = await skillRepo.listSkills(this.sessionId, this.id);
+                const skills = await this.options.codeSkillRepo.listSkills(this.sessionId, this.id);
                 
                 const availableSkills = skills.map(skill => {
-                    const stats = skill.usageStats;
-                    const statsStr = stats ? ` (Runs: ${stats.executionCount}, Success Rate: ${(stats.successRate * 100).toFixed(1)}%, AvgTime: ${Math.round(stats.averageDurationMs)}ms)` : '';
+                    const currentVersion = skill.versions[skill.currentVersionId];
+                    const stats = currentVersion?.usageStats;
+                    const statsStr = stats ? ` (Version: ${skill.currentVersionId}, Runs: ${stats.executionCount}, Success Rate: ${(stats.successRate * 100).toFixed(1)}%, AvgTime: ${Math.round(stats.averageDurationMs)}ms)` : '';
                     return `- ${skill.id}${statsStr}: ${skill.description}`;
                 });
                 

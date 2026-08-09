@@ -1,5 +1,6 @@
 import { Config } from '../config/Config';
 import { HookEvent, IEvent, IEventBus, PromptSectionIndex } from '../domain/IBus';
+import { ICodeSkillRepository } from '../domain/ICodeSkillRepository';
 import { IAgentStateRepository, IDataBlockRepository } from '../domain/IRepository';
 import { ITaskManager } from '../domain/ITask';
 import { IWorkspaceManager } from '../domain/IWorkspaceManager';
@@ -54,9 +55,10 @@ export class AgentManager implements ILifecycle {
         private readonly dataBlockRepo: IDataBlockRepository,
         private readonly workspaceManager: IWorkspaceManager,
         private readonly llmProvider: LLMProvider,
-        private readonly taskManager: ITaskManager
+        private readonly taskManager: ITaskManager,
+        private readonly codeSkillRepo: ICodeSkillRepository
     ) {
-        this.toolRegistry = new ToolRegistry(this.workspaceManager, this, this.taskManager, this.llmProvider);
+        this.toolRegistry = new ToolRegistry(this.workspaceManager, this, this.taskManager, this.llmProvider, this.codeSkillRepo);
     }
 
     // ==========================================
@@ -129,7 +131,9 @@ export class AgentManager implements ILifecycle {
             llmProvider: this.llmProvider,
             eventBus: this.eventBus,
             config: this.config,
-            dataBlockRepo: this.dataBlockRepo
+            dataBlockRepo: this.dataBlockRepo,
+            workspaceManager: this.workspaceManager,
+            codeSkillRepo: this.codeSkillRepo
         };
         switch (type) {
             case AgentType.MAIN:
@@ -313,6 +317,9 @@ export class AgentManager implements ILifecycle {
         }
         if (type === AgentType.TASK) {
             return ['read_file', 'write_file', 'list_files', 'run_bash', 'read_blob', 'send_message'];
+        }
+        if (type === AgentType.EMBODIED) {
+            return ['send_message', 'create_code_skill', 'execute_code_skill', 'read_code_skill', 'rollback_code_skill', 'list_skill_versions', 'delete_code_skill'];
         }
         return ['send_message'];
     }

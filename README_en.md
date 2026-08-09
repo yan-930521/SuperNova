@@ -5,7 +5,7 @@
 [![TypeScript](https://img.shields.io/badge/Language-TypeScript-blue.svg)](https://www.typescriptlang.org/)
 [![Runtime](https://img.shields.io/badge/Runtime-Bun-black.svg)](https://bun.sh/)
 [![Architecture](https://img.shields.io/badge/Architecture-Event--Driven-orange.svg)](#technical-highlights)
-[![Stage](https://img.shields.io/badge/Stage-v0.2.0--dev-green.svg)](#development-roadmap)
+[![Stage](https://img.shields.io/badge/Stage-v0.2.0-green.svg)](#development-roadmap)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
 SuperNova is an **Agent Runtime** focusing on performance and state management. Running on the high-performance Bun environment, it leverages an event-driven architecture to effectively solve common issues in long-running AI systems, such as context explosion and goal drift. This enables Agents to maintain stable cognition and execution capabilities during complex, cross-domain long-term tasks.
@@ -137,6 +137,13 @@ This project focuses on solving memory exhaustion, token explosion, and state ma
 
 - **Agent-level Workspace Driver Instances**: When handling workspace I/O, the underlying layer uses the `agentId` to map to independent storage drivers (like purely memory VOLATILE or Git PERSISTENT), meaning even under the same Session, different sub-agents can possess their own isolated spaces.
 
+### 5. Virtual Embodied AI & Evolvable Code
+- **Generic Env SDK**: Completely decouple the specific environment (e.g., Minecraft) context. The system uses TS generics and dynamic declaration injection, enabling the Agent to seamlessly adapt to Line Bot, web crawlers, or any external domains.
+
+- **Self-Evolving CodeSkill Ecosystem**: Allows the Agent to dynamically write "physical TypeScript code" as skills during runtime, possessing self-state and self-optimization capabilities.
+  - **Versioning and Metrics Control**: The underlying system automatically generates version IDs (`skillver_xxx`) and calculates the success rate and loss rate for each version of a tool.
+  - **Auto-Rollback**: When the Agent detects an error in the new code, it can proactively call the rollback tool to seamlessly revert to the most stable historical version with the highest success rate, achieving a fully automated "create-test-debug-fix" self-healing loop.
+
 ---
 
 ## Development Roadmap
@@ -144,7 +151,7 @@ This project focuses on solving memory exhaustion, token explosion, and state ma
 | Version | Stage | Overview |
 |:---|:---|:---|
 | **v0.1.0** | Completed | Laid a robust foundation for asynchronous EventBus, dynamic graph memory, and sliding window isolation |
-| **v0.2.0** | In Progress | Introduce Virtual Embodied AI and Evolvable CodeSkill System |
+| **v0.2.0** | Completed | Introduce Virtual Embodied AI, task scheduling, and Evolvable CodeSkill System |
 
 > For detailed plans, please refer to [ROADMAP_en.md](ROADMAP_en.md).
 

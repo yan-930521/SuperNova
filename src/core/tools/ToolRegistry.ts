@@ -13,6 +13,9 @@ import {
 } from './WorkspaceTools';
 
 import type { AgentManager } from '../agent/AgentManager';
+import { CreateCodeSkillTool, ExecuteCodeSkillTool, ReadCodeSkillTool, RollbackCodeSkillTool, ListSkillVersionsTool, DeleteCodeSkillTool } from './CodeSkillTools';
+import { ICodeSkillRepository } from '../domain/ICodeSkillRepository';
+
 export class ToolRegistry {
     private readonly tools: Map<string, BaseTool> = new Map();
 
@@ -20,7 +23,8 @@ export class ToolRegistry {
         workspaceManager: IWorkspaceManager,
         agentManager: AgentManager,
         taskManager: ITaskManager,
-        llmProvider: LLMProvider
+        llmProvider: LLMProvider,
+        codeSkillRepo: ICodeSkillRepository
     ) {
         // Workspace Tools
         this.register(new ReadFileTool(workspaceManager));
@@ -28,6 +32,15 @@ export class ToolRegistry {
         this.register(new ListFilesTool(workspaceManager));
         this.register(new RunBashTool(workspaceManager));
         this.register(new ReadBlobTool(workspaceManager));
+
+        // CodeSkill Tools
+        this.register(new CreateCodeSkillTool(codeSkillRepo));
+        this.register(new ReadCodeSkillTool(codeSkillRepo));
+        this.register(new RollbackCodeSkillTool(codeSkillRepo));
+        this.register(new ListSkillVersionsTool(codeSkillRepo));
+        this.register(new DeleteCodeSkillTool(codeSkillRepo));
+        // 注意：ExecuteCodeSkillTool 依賴第三個參數 callback，需使用 closure 來避免循環依賴
+        this.register(new ExecuteCodeSkillTool(workspaceManager, codeSkillRepo, (agentId: string) => (agentManager.getAgent(agentId) as any)?.stateRegistry));
 
         // Agent Tools
         this.register(new SendMessageTool());

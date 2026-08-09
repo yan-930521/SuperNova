@@ -6,8 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
-## [Unreleased]
+## [0.2.0] - 2026-08-09
 ### Added
+- **Embodied Agent Self-Evolving CodeSkill Ecosystem**:
+  - **CodeSkill Versioning & Rollback**: Introduced an indirection storage mechanism. Skill scripts are saved with dynamic version tags like `skillver_xxx` instead of direct overwriting. When a new code version fails during `execute_code_skill`, the system records its loss rate and provides a `rollback_code_skill` tool, enabling the Agent to revert to the most stable historical version with the highest success rate.
+  - **Read & Manage CodeSkills**: Added `read_code_skill`, `list_skill_versions`, and `delete_code_skill` tools, allowing the Agent to freely read old source codes, list historical performance metrics, or delete unused skills to save System Prompt Tokens. This completes the automated "perceive-create-debug-rollback" self-healing loop.
+  - **Generic Env SDK**: Extracted the Minecraft-specific `IBotContext` from the core module. `EmbodiedAgent` now receives external TS interface declarations via `AgentOptions.envSdkDeclaration` and uses the `<TEnv>` generic to connect to environments. This realizes true Domain-Driven Design (DDD) decoupling, making it easy for the Agent to adapt to any external environment (e.g., Line Bot, web crawlers, etc.).
+  - **Default Tool Registration**: Expanded `AgentManager`'s `getDefaultTools` to automatically mount the full suite of CodeSkill management tools when generating an Embodied type agent.
 - **Multi-Agent Task & TaskDAG System**:
   - **Task Dashboard Injection**: Through the `BeforeAgentStep` Hook interceptor, the system automatically and dynamically injects a task dashboard into the System Prompt before every Agent thinks. It shows the global DAG tree to task creators and only the exclusive target to assignees, completely decoupling the binding relationship between the Agent and a single task.
   - **Dispatch & Report Loop**: Refactored `SpawnAgentTool`, separating the assignment logic into a brand new `AssignTaskTool`, and implemented `UpdateTaskStatusTool` to allow Agents to automatically report upon completion based on the ID bound to them. Coupled with `TaskManager`'s automatic event broadcasting, this completes a fully automated loop from assignment, execution to downstream task unlocking.
