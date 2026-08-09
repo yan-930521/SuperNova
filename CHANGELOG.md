@@ -9,12 +9,15 @@
 ## [Unreleased]
 ### Added (新增功能與基礎設施)
 - **多代理人任務排程系統 (Task & TaskDAG System)**：
+  - **任務儀表板動態注入 (Task Dashboard Injection)**：透過 `BeforeAgentStep` Hook 攔截器，系統會在每次 Agent 思考前，自動且動態地向 System Prompt 注入任務儀表板。對任務創建者顯示全局 DAG 樹狀圖，對受指派者則只顯示專屬目標，徹底解耦 Agent 與單一任務的綁定關係。
+  - **任務指派與回報閉環 (Dispatch & Report Loop)**：重構 `SpawnAgentTool`，剝離指派邏輯至全新的 `AssignTaskTool`，並實作 `UpdateTaskStatusTool` 讓 Agent 完工後自動依據身上綁定的 ID 進行回報。配合 `TaskManager` 的自動事件推播，完成從指派、執行到解鎖下游任務的全自動化閉環。
   - **LATS 策略規劃引擎 (Language Agent Tree Search)**：實作基於 MCTS (蒙地卡羅樹狀搜尋) 與 UCB1 演算法的前置規劃引擎，Agent 在面對複雜任務時，會先在自然語言層面自我推演、打分與反思，搜尋出最佳解題軌跡，杜絕陷入局部最佳解。
   - **TaskDAG 依賴圖翻譯**：將 LATS 產生的文字策略無縫交由 LLM 翻譯為精確的 Task JSON，並交由背景 `TaskManager` 維護，支援依賴解鎖與防呆。
   - **非同步事件驅動工具 (Async + Event-driven Tools)**：`StrategizeAndPlanTool` 正式改寫為非同步背景任務。工具呼叫後立即釋放 Agent 狀態，任務完成後再透過 EventBus 強行插針 (Inject) 發送 `BACKGROUND_TASK_COMPLETED` 訊息，徹底解放 Agent 運算效能與多工能力。
 - **多代理人動態委派系統 (Multi-Agent Dynamic Delegation)**：
+  - **防呆與提醒機制 (Anti-Air-Talking)**：強化 `SendMessageTool`，在發送跨 Agent 訊息時，系統會自動在尾部加上強力提示，教導接收方正確使用工具回覆，徹底解決 LLM 「對空氣說話 (Air-Talking)」的痛點。
   - **ToolRegistry 解耦與反轉控制**：將 `ToolRegistry` 由全域 DI 容器抽離，改為受 `AgentManager` 內部直轄的無狀態管理員，徹底解決模組間的循環依賴。
-  - **SpawnAgentTool 與 TerminateSelfTool**：`MainAgent` 現在擁有直接產出任務型子代理人 (TaskAgent) 的能力，可動態指派目標 (Objective)、工作區隔離級別 (WorkspaceType) 與工具權限 (AllowedTools)；而子代理人在設定為 `isTemp: true` 的情況下，可於任務結束後使用 `TerminateSelfTool` 自行銷毀，釋放資源。
+  - **SpawnAgentTool 與自動生命週期管理**：`MainAgent` 現在擁有直接產出任務型子代理人 (TaskAgent) 的能力，可動態指派目標 (Objective)、工作區隔離級別 (WorkspaceType) 與工具權限 (AllowedTools)；而子代理人在設定為 `isTemp: true` 的情況下，會在完成所有任務並呼叫 `UpdateTaskStatusTool` 後自動由系統銷毀，釋放資源。
   - **細粒度工具權限分配 (Configurable Tool Delegation)**：透過新的 ToolRegistry 架構，系統在喚醒或生成 Agent 時能動態篩選出該代理人被允許使用的特定工具，達成權限邊界的嚴格劃分。
 
 ### Changed (效能與架構優化)

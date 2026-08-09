@@ -36,18 +36,22 @@
   - **Self State 維護**：Skill 具備獨立的自我狀態管理能力，可於執行期間自行新增與維護內部變數。
   - **自動化 Metrics 統計**：系統將底層自動統計每項工具與 Skill 的呼叫成功率/錯誤率、平均時間花費，以及 1% loss 等效能/穩健性指標。
   - **底層安全隔離 (Hardened Sandbox & WASM)**：為解決 Agent 自主編寫不可控程式碼的資安風險，動態生成的 CodeSkill 將被強制限制在嚴格的虛擬沙盒或 WebAssembly (WASM) 容器中執行，徹底防堵越權操作與系統崩潰。
-- **具象化 Task 系統與 Worktree 工作區 (已完成)**
+- **具象化 Task 系統 (已完成)**
   - 新增 Task 系統，讓主腦與開發者能清楚看見每一步驟的執行進度。
   - **技術亮點 (Technical Highlights)**：
     - **LATS 策略搜尋引擎**：結合 MCTS (蒙地卡羅樹狀搜尋) 與 UCB1 演算法，在生成 DAG 之前先進行深度與廣度的策略搜尋與反思，找出最佳解題路徑。
     - **非同步事件排程**：`TaskManager` 與 `StrategizeAndPlanTool` 全面整合 EventBus，以背景執行與事件插針 (Event Injection) 完全解放 Agent 的多工並發能力。
+    - **任務儀表板動態注入 (Task Dashboard Injection)**：透過 `BeforeAgentStep` 生命週期 Hook，根據 Agent 角色（創建者 vs 執行者）動態注入專屬的任務儀表板（全局樹狀圖或專屬任務列表），實現高度情境感知。
+    - **自動化調度閉環 (Orchestration Loop)**：將 `SpawnAgentTool` 與 `AssignTaskTool` 職責分離，搭配 `UpdateTaskStatusTool` 與 `TaskManager` 的背景事件廣播，實現指派、執行、回報到依賴解鎖的全自動閉環。
+
+- **進階工作區協同 (Advanced Workspace Collaboration)**
   - **步驟級暫存 (Step-level Caching)**：任務的每一次關鍵步驟，都強制與目前的 Git Workspace 系統連動進行暫存隔離，確保隨時可乾淨地回溯與檢查。
   - **多代理人衝突處理 (Multi-Agent Conflict Resolution)**：為未來的多任務並行打下基礎，利用 Git 樹狀分支優勢，自動處理多位 Sub-Agent 同時操作檔案時的 Merge 衝突與狀態合併。
 - **動態工具分配 (Configurable Tool Delegation) (已完成)**
   - 工具資源不再無腦全域掛載。除了高風險工具需嚴格控管外，`MainAgent` 在建立或喚醒子代理人 (Sub-Agent) 時，可根據任務需求，靈活且精準地「分配 (Delegate)」特定的工具集合給子代理人。
   - **技術亮點 (Technical Highlights)**：
     - 將 ToolRegistry 改由 AgentManager 直轄的無狀態物件，不再依賴全域單例，達成完全的生命週期反轉控制。
-    - 支援 SpawnAgentTool 生成免洗代理人 (`isTemp: true`)，並自動強迫配置 `TerminateSelfTool`，同時結合 WorkspaceManager 以 agentId 映射工作區驅動機制，實現了安全的隔離與任務完結後的記憶體釋放。
+    - 支援 SpawnAgentTool 生成免洗代理人 (`isTemp: true`)，此類代理人會在任務完結後自動由系統進行安全隔離與記憶體釋放。
 - **底層領域架構升級 (Domain-Driven Refactoring) (已完成)**
   - 針對多代理人帶來的程式碼複雜度，預防性地完成了 Clean Architecture 的目錄重構。
   - **技術亮點 (Technical Highlights)**：

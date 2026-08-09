@@ -1,5 +1,7 @@
 # SuperNova
 
+[English](README_en.md) | [繁體中文](README.md)
+
 [![TypeScript](https://img.shields.io/badge/Language-TypeScript-blue.svg)](https://www.typescriptlang.org/)
 [![Runtime](https://img.shields.io/badge/Runtime-Bun-black.svg)](https://bun.sh/)
 [![Architecture](https://img.shields.io/badge/Architecture-Event--Driven-orange.svg)](#technical-highlights-系統技術實作)
@@ -51,14 +53,19 @@ bun run demo
 bun run lint
 bun test
 
+# 執行任務系統測試與展示 (Task & DAG)
+bun run test:task_lats  # 觀看 LATS 策略規劃與 TaskDAG 生成
+bun run test:task       # 觀看多代理人任務指派與自動回報閉環
+
+# 執行記憶系統測試
+bun run test:memory     # 觀看圖譜記憶與情節記憶運作
+
 # 執行效能壓測 (Performance Benchmarks)
-bun run bench:core  # 測試 LRUCache 與 EventBus 吞吐量
-bun run bench:oom   # 測試 10 萬筆歷史對話寫入與 OOM 防禦
+bun run bench:core      # 測試 LRUCache 與 EventBus 吞吐量
+bun run bench:oom       # 測試 10 萬筆歷史對話寫入與 OOM 防禦
 ```
 
-> **更多 Scripts**：
-> - 執行 `bun run demo:task_lats` 可觀看 **LATS 策略規劃與 TaskDAG 生成** 的完整終端機輸出範例。
-> - 執行 `bun run demo:minecraft` 可啟動 Minecraft 具身智能整合範例。
+> **更多設定**：
 > - 系統配置請參閱根目錄的 `config.yaml`。
 
 ---
@@ -116,13 +123,17 @@ SuperNova/
 - **泛型 LRU 快取與 Memoization**：底層實作獨立且可重用的泛型 `LRUCache` (如維護上限 50 Key)，搭配增量快取機制，杜絕記憶體無限膨脹並大幅消除重複的序列化開銷。
 
 ### 4. 多代理人協作與委派 (Multi-Agent Delegation)
+- **任務儀表板動態注入 (Task Dashboard Injection)**：透過 `BeforeAgentStep` Hook，系統會在每次 Agent 思考前，動態向 System Prompt 注入任務儀表板。對任務創建者顯示全局 DAG 樹狀圖，對受指派的子代理人只顯示專屬目標，徹底解耦 Agent 與單一任務的綁定關係，支援多任務委派。
+
+- **自動化調度閉環 (Orchestration Loop)**：將 `SpawnAgentTool` 與 `AssignTaskTool` 職責分離，搭配 `UpdateTaskStatusTool` 讓 Agent 完工後自動回報。配合 `TaskManager` 的自動事件推播，完成從指派、執行到解鎖下游任務的全自動化閉環。
+
 - **非同步事件任務引擎 (Async Task & TaskDAG)**：實作 `StrategizeAndPlanTool` 作為非同步背景任務。<br/>MainAgent 在呼叫工具後能立即釋放資源處理其他訊息，待背景生成完畢後再由 `EventBus` 強行插針回報任務進度，達成全非同步並發。
 
 - **LATS 策略規劃引擎 (Language Agent Tree Search)**：在將任務分解為 TaskDAG 之前，引擎會自動透過 MCTS (蒙地卡羅樹狀搜尋) 與 UCB1 演算法，對目標進行深度的自我推演、打分與反思，搜尋出最佳解題軌跡，杜絕 Agent 陷入局部最佳解。
 
 - **細粒度工具權限分配**：系統在喚醒或生成 Agent 時能動態篩選出該代理人被允許使用的特定工具，達成權限邊界的嚴格劃分。
 
-- **自主子代理生命週期**：`MainAgent` 能夠隨時建立臨時的 `TaskAgent`，指派目標、工作區與特定工具，而這些臨時子代理在完成任務後能夠自主使用 `TerminateSelfTool` 清除自身狀態，釋放系統資源。
+- **自主子代理生命週期**：`MainAgent` 能夠隨時建立臨時的 `TaskAgent`，指派目標、工作區與特定工具，而這些臨時子代理在完成任務後，會透過 `UpdateTaskStatusTool` 自動由系統回收狀態，釋放系統資源。
 
 - **Agent級工作區驅動實例**：底層 I/O 在處理工作區讀寫時，使用 `agentId` 映射獨立儲存驅動（如純記憶體 VOLATILE 或 Git PERSISTENT），即使在同一 Session 底下，不同的子代理也能擁有各自的隔離空間。
 
