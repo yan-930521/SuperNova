@@ -26,6 +26,10 @@ SuperNova is an **Agent Runtime** focusing on performance and state management. 
 > 1. Run this system **ONLY within isolated Virtual Machines (VMs) or Docker containers**.
 > 2. Absolutely DO NOT deploy this system directly on production servers containing sensitive data or important environment variables.
 
+> [!NOTE]
+> **About Code Comments & Language**
+> As this project originally started as an experimental build in Taiwan, the inline code comments are written in Traditional Chinese. However, the system architecture, variables, function names, and typings are strictly maintained in English. We've provided comprehensive English documentations (`README_en.md`, `ROADMAP_en.md`) to help you grasp the core concepts easily without language barriers.
+
 ---
 
 ## Prerequisites
