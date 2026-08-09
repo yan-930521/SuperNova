@@ -14,7 +14,7 @@ SuperNova is an **Agent Runtime** focusing on performance and state management. 
 > - **Architecture Blueprint**: [docs/ARCH.md](docs/ARCH.md)
 > - **Future Roadmap**: [ROADMAP_en.md](ROADMAP_en.md) (Deep dive into the v0.2.0 autonomous evolution roadmap)
 > - **Changelog**: [CHANGELOG_en.md](CHANGELOG_en.md)
-> - **Contributing**: [CONTRIBUTING_en.md](CONTRIBUTING_en.md)
+> - **Contributing**: [CONTRIBUTING.md](CONTRIBUTING.md)
 >
 > **Project Predecessor**: [Proj.Nova](https://github.com/yan-930521/Proj.Nova/)
 
@@ -78,15 +78,15 @@ bun run bench:oom       # Test writing 100k history records and OOM defense
 
 ```text
 SuperNova/
-├── src/
-│   ├── core/        # Core Engine: EventBus, Agent, Memory, Session, etc.
-│   └── package/     # Domain Extensions: Minecraft integration and other applications
-├── demo/            # Demo programs and performance benchmark scripts
-├── docs/            # Architecture design documents (ARCH.md as the entry point)
-├── web/             # Web frontend interface
-├── scripts/         # Helper scripts
-├── config.yaml      # System configuration file
-└── .env.template    # Environment variables template
+?��??� src/
+??  ?��??� core/        # Core Engine: EventBus, Agent, Memory, Session, etc.
+??  ?��??� package/     # Domain Extensions: Minecraft integration and other applications
+?��??� demo/            # Demo programs and performance benchmark scripts
+?��??� docs/            # Architecture design documents (ARCH.md as the entry point)
+?��??� web/             # Web frontend interface
+?��??� scripts/         # Helper scripts
+?��??� config.yaml      # System configuration file
+?��??� .env.template    # Environment variables template
 ```
 
 > **Architecture Boundary**: Modules in `src/core/` are uniformly exported via `src/core/index.ts`. `src/package/` must reference core modules through this entry point; deep coupling is strictly prohibited.
@@ -202,7 +202,7 @@ EventBus: High-frequency Publish                  784.82 ns/iter 782.74 ns  █
 
 ## Contributing
 
-Contributions are welcome! Please read [CONTRIBUTING_en.md](CONTRIBUTING_en.md) first to understand the development guidelines and submission process.
+Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) first to understand the development guidelines and submission process.
 
 ## License
 

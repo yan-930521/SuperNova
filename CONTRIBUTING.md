@@ -1,31 +1,30 @@
-# 貢獻指南 (Contributing to SuperNova)
+# Contributing to SuperNova
 
-歡迎來到 SuperNova！我們非常高興您有興趣為本專案做出貢獻。在您開始撰寫程式碼之前，請務必仔細閱讀以下規範，這將有助於我們保持專案的高品質與一致性。
+Welcome to SuperNova! We are thrilled that you are interested in contributing to this project. Before you start writing code, please be sure to read the following guidelines carefully. This will help us maintain the high quality and consistency of the project.
 
-## 1. 認知先行 (Architecture First)
-在進行任何代碼實作前，請務必：
-- 仔細閱讀並理解 `docs/ARCH.md`。
-- 查閱 `docs/architecture/` 目錄下的相關文件。
-- 確保您清楚了解全局架構圖與目前系統設計。
+## 1. Architecture First (Cognition First)
+Before implementing any code, you MUST:
+- Carefully read and understand `docs/ARCH.md`.
+- Review the relevant documents under the `docs/architecture/` directory.
+- Ensure you clearly understand the global architecture diagram and the current system design.
 
-## 2. 嚴格型別 (Strict Typing)
-我們極度重視型別安全：
-- 請盡可能避免使用 `optional()`。
-- 強制使用嚴格的 Zod Schemas（Strict Zod schemas）來進行資料驗證與型別定義。
+## 2. Strict Typing
+We highly value type safety:
+- Avoid using `optional()` as much as possible.
+- Force the use of strict Zod schemas for data validation and type definitions.
 
-## 3. 系統通訊 (Event-Driven Communication)
-SuperNova 採用事件驅動架構：
-- **必須**使用 `EventBus` 進行所有代理（Agent）之間的通訊。
-- **絕對禁止**使用直接的阻塞式方法呼叫（direct blocking method calls）來進行代理間的溝通。
+## 3. Event-Driven Communication
+SuperNova adopts an event-driven architecture:
+- You **MUST** use the `EventBus` for all communication between Agents.
+- You are **ABSOLUTELY PROHIBITED** from using direct blocking method calls for inter-agent communication.
 
-## 4. 程式碼與註解規範 (Coding & Commenting Style)
-為了讓全球開發者與本地團隊都能順暢協作，我們採取雙語混合規範：
-- **命名規範：** 所有的變數、函數、資料結構與類別名稱**必須**使用英文，並遵循專案既有的 CamelCase 或 snake_case 風格。
-- **註解規範：** 所有的程式碼註解（Comments）**必須**使用繁體中文 (zh-TW)。註解需詳細說明邏輯意圖、邊界情況及潛在風險，自成一體。
+## 4. Coding Style
+- **Naming Conventions:** All variables, functions, data structures, and class names **MUST** be in English, following the project's existing `CamelCase` or `snake_case` style.
+- **Commenting Conventions:** Comments should detail the logical intent, edge cases, and potential risks, and should be self-contained.
 
-## 5. 測試與程式碼審查 (Testing & Linting)
-在提交 (Commit) 您的程式碼之前，請確保通過所有檢查：
-- 執行 `bun test` 來進行測試，並確保所有測試皆通過。
-- 執行 `bun run lint` 來進行程式碼風格檢查。
+## 5. Testing & Linting
+Before submitting (Commit) your code, please ensure it passes all checks:
+- Run `bun test` to perform tests and ensure all tests pass.
+- Run `bun run lint` to perform code style checking.
 
-再次感謝您對 SuperNova 的貢獻！如果您有任何問題，請隨時提出。
+Thank you again for your contribution to SuperNova! If you have any questions, please feel free to ask.
