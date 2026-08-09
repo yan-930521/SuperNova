@@ -103,7 +103,7 @@ export class StrategizeAndPlanTool extends BaseTool {
                 const generator = new TaskDAGGenerator(this.llmProvider);
                 
                 const taskConfig = context.config.task;
-                const useMcts = args.use_mcts !== undefined ? args.use_mcts : taskConfig.force_mcts;
+                const useMcts = taskConfig.force_mcts === true ? true : args.use_mcts ?? false;
                 const iterations = taskConfig.mcts_max_iterations;
                 
                 let strategy: string;

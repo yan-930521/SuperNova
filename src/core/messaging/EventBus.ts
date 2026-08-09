@@ -1,7 +1,8 @@
-import { LogManager } from '../infra/LogManager';
-import { GlobalEventMap, IEvent, IEventBus } from '../domain/IBus';
-import { LRUCache } from '../utils/LRUCache';
 import { DEFAULT_CONFIG } from '../config/DefaultConfig';
+import { GlobalEventMap, IEvent, IEventBus } from '../domain/IBus';
+import { LogManager } from '../infra/LogManager';
+import { ConsoleTransport } from '../infra/transports';
+import { LRUCache } from '../utils/LRUCache';
 
 interface ICallbackRegistration {
     handler: (event: IEvent<any>) => void | Promise<void>;
@@ -17,12 +18,14 @@ interface ICallbackRegistration {
  * 3. 基於 sessionId 的租戶安全隔離路由。
  */
 export class EventBus implements IEventBus {
-    private readonly logger = LogManager.recorder;
+    private readonly logger = new LogManager({ type: 'SYSTEM', agent_id: 'ComponentContainer' });
     private readonly callbackSubscribers = new Map<string, Set<ICallbackRegistration>>();
     private readonly handlerIndex = new Map<Function, { type: string; reg: ICallbackRegistration }>();
     private readonly targetCache: LRUCache<string, ICallbackRegistration[]>;
 
     constructor(config?: any) {
+        this.logger.addTransport(new ConsoleTransport("ERROR"));
+        
         const lruSize = config?.cache?.event_bus_lru_size ?? DEFAULT_CONFIG.cache.event_bus_lru_size ?? 500;
         this.targetCache = new LRUCache<string, ICallbackRegistration[]>(lruSize);
     }

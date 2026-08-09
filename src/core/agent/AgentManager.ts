@@ -309,7 +309,7 @@ export class AgentManager implements ILifecycle {
 
     public getDefaultTools(type: AgentType): string[] {
         if (type === AgentType.MAIN) {
-            return ['toggle_projection', 'read_file', 'write_file', 'list_files', 'run_bash', 'read_blob', 'send_message', 'spawn_agent', 'plan_tasks', 'check_task_dashboard'];
+            return ['toggle_projection', 'read_file', 'write_file', 'list_files', 'run_bash', 'read_blob', 'send_message', 'spawn_agent', 'plan_tasks', 'check_task_dashboard', 'strategize_and_plan'];
         }
         if (type === AgentType.TASK) {
             return ['read_file', 'write_file', 'list_files', 'run_bash', 'read_blob', 'send_message'];
