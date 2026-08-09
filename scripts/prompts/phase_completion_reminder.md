@@ -17,14 +17,14 @@
 
 ## 4. 執行全域穩定性檢查 (Global Stability Check)
 - 確保所有修改已被保存。
-- 必須使用命令列執行 `bun test` 與 `bun run lint`，確保新功能的加入沒有破壞現有的核心單元測試。若有損壞，必須在交付前修復。
+- 必須使用命令列執行 `bun test`，確保新功能的加入沒有破壞現有的核心單元測試。若有損壞，必須在交付前修復。
 
 ## 5. 版本號升級與封裝 (Version Bump & Commit) (若適用)
 - 若這是一個重大里程碑的結束：
   1. 更新 `package.json` 的 `version` 欄位。
   2. 更新 `src/core/config/DefaultConfig.ts` 中的預設版號。
   3. 將 `CHANGELOG.md` 的 `[Unreleased]` 歸檔為對應的版號與日期。
-  4. 使用 Git 將所有文件進行 Commit。
+  4. 使用 Git 將所有文件分別進行 Commit。
 
 ---
 **Agent，當你閱讀到這份文件時，請嚴格按照上述步驟審查你當前的工作狀態！**

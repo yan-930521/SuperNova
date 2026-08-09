@@ -1,62 +1,65 @@
 {
-  "name": "supernova",
-  "version": "0.2.0-dev",
-  "description": "SuperNova AI Runtime",
-  "main": "./demo/v0.1.0.ts",
-  "scripts": {
-    "test": "bun test",
-    "build": "bun x tsc --noEmit",
-    "lint": "bun x tsc --noEmit",
-    "demo": "bun ./demo/v0.1.0.ts",
-    "demo:minecraft": "bun ./src/package/underworld/index.ts",
-    "demo:task_lats": "bun ./demo/task_lats_demo.ts",
-    "demo:integration": "bun ./demo/integration_test.ts",
-    "test:memory": "bun ./demo/test_memory.ts",
-    "test:reasoning": "bun ./demo/test_reasoning.ts",
-    "bench:core": "bun ./demo/benchmark.ts",
-    "bench:oom": "bun ./demo/benchmark_oom.ts"
-  },
-  "devDependencies": {
-    "@types/bun": "^1.3.14",
-    "@types/uuid": "^9.0.8",
-    "bun-types": "^1.3.14",
-    "mitata": "^1.0.34",
-    "typescript": "^5.9.3"
-  },
-  "dependencies": {
-    "@langchain/community": "^1.1.28",
-    "@langchain/core": "1.1.46",
-    "@langchain/langgraph": "^1.3.7",
-    "@langchain/openai": "^1.4.5",
-    "@langchain/tavily": "^1.2.0",
-    "@types/yargs": "^17.0.35",
-    "axios": "^1.16.0",
-    "canvas": "^3.2.3",
-    "handlebars": "^4.7.9",
-    "langchain": "^1.4.4",
-    "memfs": "^4.64.0",
-    "minecrafthawkeye": "^1.3.9",
-    "mineflayer": "^4.37.1",
-    "mineflayer-armor-manager": "^2.0.1",
-    "mineflayer-auto-eat": "^5.0.3",
-    "mineflayer-pathfinder": "^2.4.5",
-    "mineflayer-pvp": "^1.3.2",
-    "mineflayer-tool": "^1.2.0",
-    "prismarine-viewer": "^1.33.0",
-    "uuid": "^9.0.1",
-    "vectra": "^0.15.0",
-    "yargs": "^18.0.0",
-    "zod": "^4.4.3"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/yan-930521/SuperNova.git"
-  },
-  "keywords": ["agent", "runtime", "event-driven", "bun", "typescript", "agentic-ai"],
-  "author": "tw.sakura",
-  "license": "Apache-2.0",
-  "bugs": {
-    "url": "https://github.com/yan-930521/SuperNova/issues"
-  },
-  "homepage": "https://github.com/yan-930521/SuperNova#readme"
+    "name": "supernova",
+    "version": "0.2.0-dev",
+    "description": "SuperNova AI Runtime",
+    "main": "./demo/v0.1.0.ts",
+    "scripts": {
+        "test": "bun test",
+        "build": "bun x tsc --noEmit",
+        "lint": "bun x tsc --noEmit",
+        "demo": "bun ./demo/v0.1.0.ts",
+        "test:memory": "bun ./demo/test_memory.ts",
+        "test:task_lats": "bun ./demo/task_lats_demo.ts",
+        "test:task": "bun ./demo/task_assignment.ts",
+        "bench:core": "bun ./demo/benchmark.ts",
+        "bench:oom": "bun ./demo/benchmark_oom.ts"
+    },
+    "devDependencies": {
+        "@types/bun": "^1.3.14",
+        "@types/uuid": "^9.0.8",
+        "bun-types": "^1.3.14",
+        "mitata": "^1.0.34",
+        "typescript": "^5.9.3",
+        "minecrafthawkeye": "^1.3.9",
+        "mineflayer": "^4.37.1",
+        "mineflayer-armor-manager": "^2.0.1",
+        "mineflayer-auto-eat": "^5.0.3",
+        "mineflayer-pathfinder": "^2.4.5",
+        "mineflayer-pvp": "^1.3.2",
+        "mineflayer-tool": "^1.2.0",
+        "prismarine-viewer": "^1.33.0"
+    },
+    "dependencies": {
+        "@langchain/community": "^1.1.28",
+        "@langchain/core": "1.1.46",
+        "@langchain/langgraph": "^1.3.7",
+        "@langchain/openai": "^1.4.5",
+        "@langchain/tavily": "^1.2.0",
+        "axios": "^1.16.0",
+        "canvas": "^3.2.3",
+        "handlebars": "^4.7.9",
+        "langchain": "^1.4.4",
+        "memfs": "^4.64.0",
+        "uuid": "^9.0.1",
+        "vectra": "^0.15.0",
+        "zod": "^4.4.3"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/yan-930521/SuperNova.git"
+    },
+    "keywords": [
+        "agent",
+        "runtime",
+        "event-driven",
+        "bun",
+        "typescript",
+        "agentic-ai"
+    ],
+    "author": "tw.sakura",
+    "license": "Apache-2.0",
+    "bugs": {
+        "url": "https://github.com/yan-930521/SuperNova/issues"
+    },
+    "homepage": "https://github.com/yan-930521/SuperNova#readme"
 }
