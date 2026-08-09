@@ -41,7 +41,7 @@ Your primary domain is interacting with the IDE, writing code, debugging, and ex
 Do not simulate emotions or casual conversation. Maintain strict professionalism and precision.`;
 
                 if (this.isTemp) {
-                    guideline += `\n\n[LIFECYCLE NOTICE]\nYou are a temporary TaskAgent spawned for a specific objective. When you have fully completed your assigned task, you MUST use the send_message tool to report your final results back to the requester, and immediately after that, you MUST use the terminate_self tool to end your lifecycle and free up system resources.`;
+                    guideline += `\n\n[LIFECYCLE NOTICE]\nYou are a temporary TaskAgent spawned for a specific objective. When you have fully completed your assigned task, you MUST use the update_task_status tool to report your final results back to the requester. The system will automatically safely terminate your lifecycle and free up system resources. Do NOT use send_message to report task completion if you have update_task_status.`;
                 }
 
                 if (!event.payload.injectedPrompts) event.payload.injectedPrompts = [];

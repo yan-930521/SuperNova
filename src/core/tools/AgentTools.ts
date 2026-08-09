@@ -1,13 +1,14 @@
-import { IdGenerator } from '../utils/IdGenerator';
 import { z } from 'zod';
 
-import { DataBlock, MessagePriority } from '../messaging/DataBlock';
-import { AgentEvent, IEventBus } from '../domain/IBus';
-import { BaseTool, ToolContext } from './BaseTool';
-import type { AgentManager } from '../agent/AgentManager';
 import { AgentType } from '../agent/BaseAgent';
+import { AgentEvent, SystemEvent } from '../domain/IBus';
+import { ITaskManager } from '../domain/ITask';
 import { WorkspaceType } from '../domain/IWorkspaceManager';
+import { DataBlock, MessagePriority } from '../messaging/DataBlock';
+import { IdGenerator } from '../utils/IdGenerator';
+import { BaseTool, ToolContext } from './BaseTool';
 
+import type { AgentManager } from '../agent/AgentManager';
 export class SendMessageTool extends BaseTool {
     public readonly name = 'send_message';
     public readonly description = 'Send a message to another Agent in the system. Can be used for chatting, giving orders, or delegating tasks.';
@@ -17,7 +18,7 @@ export class SendMessageTool extends BaseTool {
     });
 
     public async execute(args: { targetId: string; message: string }, context: ToolContext): Promise<string> {
-        const block = new DataBlock({
+        const messageBlock = new DataBlock({
             sessionId: context.sessionId,
             senderId: context.agentId,
             targetId: args.targetId,
@@ -26,11 +27,20 @@ export class SendMessageTool extends BaseTool {
             controlPayload: args.message
         });
 
+        const reminderBlock = new DataBlock({
+            sessionId: context.sessionId,
+            senderId: 'SYSTEM',
+            targetId: args.targetId,
+            type: 'system',
+            intent: 'SYSTEM_REMINDER',
+            controlPayload: `Please use the \`send_message\` tool to reply to ${context.agentId}. Do NOT output your reply as plain text.`
+        });
+
         await context.eventBus.publishAsync({
             type: AgentEvent.AgentMessage,
             timestamp: Date.now(),
             sessionId: context.sessionId,
-            payload: block
+            payload: [messageBlock, reminderBlock]
         });
 
         return `Message successfully dispatched to ${args.targetId}. Waiting for their response...`;
@@ -86,7 +96,7 @@ export class ToggleProjectionTool extends BaseTool {
                 targetId: args.targetId,
                 type: 'system',
                 intent: 'URGENT_ALERT',
-                priority: 100,
+                priority: MessagePriority.URGENT,
                 controlPayload: `[系統通知] 意識投影連結已中斷！靈魂已拔除，你已恢復自主軀殼狀態。`,
                 metadata: {
                     senderName: 'System'
@@ -107,13 +117,15 @@ export class SpawnAgentTool extends BaseTool {
     public readonly name = 'spawn_agent';
     public readonly description = 'Spawn a new sub-agent to delegate tasks to.';
     public readonly schema = z.object({
-        objective: z.string().describe('The initial objective or mission for this agent. This will be injected into its system prompt.'),
+        objective: z.string().describe('The initial objective for this agent.'),
         allowedTools: z.array(z.string()).describe('The list of tools this agent is allowed to use (e.g., ["read_file", "write_file", "send_message"])'),
         workspaceType: z.enum(['PERSISTENT', 'VOLATILE']).describe('Workspace isolation level. PERSISTENT shares the main workspace, VOLATILE uses a temporary one.'),
-        isTemp: z.boolean().describe('If true, this agent will terminate itself after completing the task.')
+        isTemp: z.boolean().describe('If true, this agent will be terminated by the system when all its assigned tasks are completed. If false, it stays alive.')
     });
 
-    constructor(private readonly agentManager: AgentManager) {
+    constructor(
+        private readonly agentManager: AgentManager
+    ) {
         super();
     }
 
@@ -123,7 +135,7 @@ export class SpawnAgentTool extends BaseTool {
         workspaceType: WorkspaceType;
         isTemp: boolean;
     }, context: ToolContext): Promise<string> {
-        
+
         const agentId = IdGenerator.agent('sub');
 
         await this.agentManager.spawnAgent(
@@ -136,7 +148,7 @@ export class SpawnAgentTool extends BaseTool {
                 isTemp: args.isTemp
             }
         );
-        
+
         const block = new DataBlock({
             sessionId: context.sessionId,
             senderId: context.agentId,
@@ -144,9 +156,9 @@ export class SpawnAgentTool extends BaseTool {
             type: 'system',
             intent: 'TASK_ASSIGNMENT',
             priority: MessagePriority.HIGH,
-            controlPayload: `[任務指派] 你的目標是：\n${args.objective}\n請開始執行。當任務完成後請回報結果。`,
+            controlPayload: `[TASK ASSIGNMENT] Your objective is:\n${args.objective}\n\nPlease start execution. When you finish, report back.`,
             metadata: {
-                senderName: 'Manager'
+                senderName: 'System'
             }
         });
         await context.eventBus.publishAsync({
@@ -156,21 +168,126 @@ export class SpawnAgentTool extends BaseTool {
             payload: block
         });
 
-        return `Agent ${agentId} spawned successfully and task assigned. Use send_message to communicate further.`;
+        return `Agent ${agentId} spawned successfully and objective assigned. Use send_message to communicate further, or assign_task to bind it to a DAG task.`;
     }
 }
 
-export class TerminateSelfTool extends BaseTool {
-    public readonly name = 'terminate_self';
-    public readonly description = 'Terminate your own lifecycle. Use this ONLY when you are a temporary TaskAgent and have fully completed your assigned objective and reported back the final results.';
-    public readonly schema = z.object({});
+export class AssignTaskTool extends BaseTool {
+    public readonly name = 'assign_task';
+    public readonly description = 'Assign a specific task from the DAG to an existing agent. The system will automatically notify the agent and track its progress.';
+    public readonly schema = z.object({
+        taskId: z.string().describe('The ID of the task to assign.'),
+        agentId: z.string().describe('The ID of the agent to assign the task to.')
+    });
 
-    constructor(private readonly agentManager: AgentManager) {
+    constructor(
+        private readonly taskManager: ITaskManager,
+        private readonly agentManager: AgentManager
+    ) {
         super();
     }
 
-    public async execute(args: any, context: ToolContext): Promise<string> {
-        await this.agentManager.terminateAgent(context.agentId);
-        return 'Termination sequence initiated. Goodbye.';
+    public async execute(args: { taskId: string, agentId: string }, context: ToolContext): Promise<string> {
+        try {
+            const agent = this.agentManager.getAgent(args.agentId);
+            if (!agent) {
+                return `Error: Agent ${args.agentId} not found.`;
+            }
+
+            if (agent.assignedTaskId) {
+                return `Error: Agent ${args.agentId} is already assigned to task ${agent.assignedTaskId}.`;
+            }
+
+            this.taskManager.assignTask(context.sessionId, args.taskId, args.agentId);
+            agent.assignedTaskId = args.taskId;
+            
+            return `Task ${args.taskId} successfully assigned to agent ${args.agentId}.`;
+        } catch (e: any) {
+            return `Failed to assign task: ${e.message}`;
+        }
+    }
+}
+
+export class UpdateTaskStatusTool extends BaseTool {
+    public readonly name = 'update_task_status';
+    public readonly description = 'Report the result of your currently assigned task and update its status. Use this when you have completed a task or encountered an unrecoverable error.';
+    public readonly schema = z.object({
+        status: z.enum(['COMPLETED', 'FAILED']).describe('The final status of the task.'),
+        result_or_reason: z.string().describe('A summary of what you accomplished (if completed) or a detailed explanation of why it failed (if failed).')
+    });
+
+    constructor(
+        private readonly agentManager: AgentManager,
+        private readonly taskManager: ITaskManager
+    ) {
+        super();
+    }
+
+    public async execute(args: { status: 'COMPLETED' | 'FAILED', result_or_reason: string }, context: ToolContext): Promise<string> {
+        const agent = this.agentManager.getAgent(context.agentId);
+        if (!agent?.assignedTaskId) {
+            return 'Error: You do not have an assigned task to update.';
+        }
+
+        const taskId = agent.assignedTaskId;
+        const task = this.taskManager.getTask(context.sessionId, taskId);
+        const targetId = task?.creatorId || null;
+
+        if (args.status === 'COMPLETED') {
+            context.eventBus.publish({
+                type: SystemEvent.TaskFinished,
+                timestamp: Date.now(),
+                sessionId: context.sessionId,
+                payload: { taskId, result: args.result_or_reason }
+            });
+
+            const block = new DataBlock({
+                sessionId: context.sessionId,
+                senderId: context.agentId,
+                targetId: targetId,
+                type: 'system',
+                intent: 'TASK_COMPLETION_REPORT',
+                priority: MessagePriority.NORMAL,
+                controlPayload: `[Task Completion Report] Task ${taskId} completed.\nResult: ${args.result_or_reason}`,
+                metadata: {
+                    senderName: 'System'
+                }
+            });
+            context.eventBus.publish({ type: AgentEvent.AgentMessage, timestamp: Date.now(), sessionId: context.sessionId, payload: block });
+        } else {
+            context.eventBus.publish({
+                type: SystemEvent.TaskFailed,
+                timestamp: Date.now(),
+                sessionId: context.sessionId,
+                payload: { taskId, error: args.result_or_reason }
+            });
+
+            const block = new DataBlock({
+                sessionId: context.sessionId,
+                senderId: context.agentId,
+                targetId: targetId,
+                type: 'system',
+                intent: 'TASK_FAILED_REPORT',
+                priority: MessagePriority.URGENT,
+                controlPayload: `[Task Failed Report] Task ${taskId} failed.\nReason: ${args.result_or_reason}\nNote: Downstream dependent tasks have been canceled.`,
+                metadata: {
+                    senderName: 'System'
+                }
+            });
+            context.eventBus.publish({ type: AgentEvent.AgentMessage, timestamp: Date.now(), sessionId: context.sessionId, payload: block });
+        }
+
+        agent.assignedTaskId = undefined;
+
+        // Auto-termination logic: check if there are any downstream tasks assigned to this agent that are still PENDING or READY
+        const allTasks = this.taskManager.getAllTasks(context.sessionId);
+        const hasMoreTasks = allTasks.some(t => t.assignedAgentId === context.agentId && (t.status === 'PENDING' || t.status === 'READY'));
+
+        if (!hasMoreTasks && agent.isTemporary) {
+            await this.agentManager.terminateAgent(context.agentId);
+            return `Task ${taskId} marked as ${args.status}. No further tasks assigned. Termination sequence initiated. Goodbye.`;
+        }
+
+        return `Task ${taskId} marked as ${args.status}. Notification sent. Please wait for your manager or the system to assign your next task.`;
     }
 }

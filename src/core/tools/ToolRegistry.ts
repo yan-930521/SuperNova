@@ -1,11 +1,12 @@
 import { ITaskManager } from '../domain/ITask';
 import { IWorkspaceManager } from '../domain/IWorkspaceManager';
+import { LogManager } from '../infra';
 import { LLMProvider } from '../infra/llm/LLMProvider';
 import {
-    SendMessageTool, SpawnAgentTool, TerminateSelfTool, ToggleProjectionTool
+    AssignTaskTool, SendMessageTool, SpawnAgentTool, ToggleProjectionTool, UpdateTaskStatusTool
 } from './AgentTools';
 import { BaseTool } from './BaseTool';
-import { CheckTaskDashboardTool, PlanTasksTool, StrategizeAndPlanTool } from './TaskTools';
+import { PlanTasksTool, StrategizeAndPlanTool } from './TaskTools';
 import {
     ListFilesTool, ReadBlobTool, ReadFileTool, RunBashTool, WriteFileTool
 } from './WorkspaceTools';
@@ -31,11 +32,11 @@ export class ToolRegistry {
         this.register(new SendMessageTool());
         this.register(new ToggleProjectionTool());
         this.register(new SpawnAgentTool(agentManager));
-        this.register(new TerminateSelfTool(agentManager));
+        this.register(new AssignTaskTool(taskManager, agentManager));
+        this.register(new UpdateTaskStatusTool(agentManager, taskManager));
 
         // Task Tools
         this.register(new PlanTasksTool(taskManager));
-        this.register(new CheckTaskDashboardTool(taskManager));
         this.register(new StrategizeAndPlanTool(taskManager, llmProvider));
     }
 
@@ -54,7 +55,7 @@ export class ToolRegistry {
             if (tool) {
                 result.push(tool);
             } else {
-                console.warn(`[ToolRegistry] Tool '${name}' not found.`);
+                LogManager.recorder.warn(`[ToolRegistry] Tool '${name}' not found.`);
             }
         }
         return result;

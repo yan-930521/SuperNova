@@ -157,8 +157,8 @@ export class AgentManager implements ILifecycle {
         }
 
         const toolNamesToLoad = options?.allowedTools ?? this.getDefaultTools(type);
-        if (options?.isTemp && !toolNamesToLoad.includes('terminate_self')) {
-            toolNamesToLoad.push('terminate_self');
+        if ((type === AgentType.TASK || options?.isTemp || options?.assignedTaskId) && !toolNamesToLoad.includes('update_task_status')) {
+            toolNamesToLoad.push('update_task_status');
         }
 
         const agent = this.createAgentInstance(type, id, sessionId, {
@@ -282,8 +282,8 @@ export class AgentManager implements ILifecycle {
 
         const tools: BaseTool[] = [];
         const toolNamesToLoad = (data as any).allowedTools ?? this.getDefaultTools(data.type);
-        if (data.isTemp && !toolNamesToLoad.includes('terminate_self')) {
-            toolNamesToLoad.push('terminate_self');
+        if ((data.type === AgentType.TASK || data.isTemp || data.assignedTaskId) && !toolNamesToLoad.includes('update_task_status')) {
+            toolNamesToLoad.push('update_task_status');
         }
         tools.push(...this.toolRegistry.getTools(toolNamesToLoad));
 
@@ -309,7 +309,7 @@ export class AgentManager implements ILifecycle {
 
     public getDefaultTools(type: AgentType): string[] {
         if (type === AgentType.MAIN) {
-            return ['toggle_projection', 'read_file', 'write_file', 'list_files', 'run_bash', 'read_blob', 'send_message', 'spawn_agent', 'plan_tasks', 'check_task_dashboard', 'strategize_and_plan'];
+            return ['toggle_projection', 'read_file', 'write_file', 'list_files', 'run_bash', 'read_blob', 'send_message', 'spawn_agent', 'assign_task', 'plan_tasks', 'strategize_and_plan'];
         }
         if (type === AgentType.TASK) {
             return ['read_file', 'write_file', 'list_files', 'run_bash', 'read_blob', 'send_message'];

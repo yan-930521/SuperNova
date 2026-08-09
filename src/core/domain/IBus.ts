@@ -13,7 +13,7 @@ export enum PromptSectionIndex {
     EMOTIONAL_STATE = 5,      // 內部情緒與動機模型 (OCC)
     TOOL_USAGE = 6,           // 工具使用規範與限制
     MEMORY_CONTEXT = 7,       // 短期記憶與歷史上下文摘要
-    CURRENT_TASK = 8,         // 當前執行的任務目標 (Task)
+    TASK_DASHBOARD = 8,       // 全局任務看板 (DAG狀態)
 }
 
 /**
@@ -93,7 +93,7 @@ export interface GlobalEventMap {
     [SystemEvent.SessionUpdated]: { sessionId: string };
     [SystemEvent.SessionOptimization]: { sessionId: string; targetDate: string };
     [SystemEvent.TaskCreated]: { taskId: string };
-    [SystemEvent.TaskFinished]: { taskId: string };
+    [SystemEvent.TaskFinished]: { taskId: string; result?: string };
     [SystemEvent.TaskFailed]: { taskId: string; error: string };
     [SystemEvent.Tick]: { currentTime: number };
 

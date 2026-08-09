@@ -1,7 +1,9 @@
+import { HumanMessage, SystemMessage } from '@langchain/core/messages';
+
 import { CreateTaskPayload } from '../../domain/ITask';
+import { LogManager } from '../../infra';
 import { LLMProvider } from '../../infra/llm/LLMProvider';
-import { TASK_PROMPTS, DAGSchema } from '../../prompts/task.prompt';
-import { SystemMessage, HumanMessage } from '@langchain/core/messages';
+import { DAGSchema, TASK_PROMPTS } from '../../prompts/task.prompt';
 
 export class TaskDAGGenerator {
     constructor(private readonly llmProvider: LLMProvider) {}
@@ -22,8 +24,8 @@ export class TaskDAGGenerator {
             ]);
 
             return result.tasks;
-        } catch (e) {
-            console.error('[TaskDAGGenerator] Translation failed:', e);
+        } catch (e: any){
+            LogManager.recorder.error(`[TaskDAGGenerator] Translation failed: ${e.message}`);
             throw new Error('Failed to generate TaskDAG from strategy.');
         }
     }

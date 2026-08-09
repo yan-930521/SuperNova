@@ -115,6 +115,8 @@ export interface BaseAgentData extends IEntity {
     readonly workspaceType?: WorkspaceType;
     readonly allowedTools?: string[];
     readonly isTemp?: boolean;
+    /** 綁定的 DAG 任務 ID，用於任務完成時自動回報 TaskManager */
+    readonly assignedTaskId?: string;
 }
 
 /**
@@ -156,6 +158,8 @@ export interface AgentOptions {
     dataBlockRepo: IDataBlockRepository;
     allowedTools?: string[];
     isTemp?: boolean;
+    /** 綁定的 DAG 任務 ID，SpawnAgentTool 傳入 */
+    assignedTaskId?: string;
 }
 
 /**
@@ -200,6 +204,9 @@ export abstract class BaseAgent {
     protected tools: BaseTool[] = [];
     protected allowedTools?: string[];
     protected isTemp?: boolean;
+    public get isTemporary(): boolean { return this.isTemp ?? false; }
+    /** 綁定的 DAG 任務 ID，銷毀時自動發送 TASK_FINISHED */
+    public assignedTaskId?: string;
     private reactAgentCache = new Map<string, ReactAgent>();
     private cachedToolsSignature: string = '';
     private toolsSignatureCache = new WeakMap<BaseTool[], string>();
@@ -252,6 +259,7 @@ export abstract class BaseAgent {
 
         this.allowedTools = options.allowedTools;
         this.isTemp = options.isTemp;
+        this.assignedTaskId = options.assignedTaskId;
 
         // 統一呼叫 Hook 註冊，確保所有繼承的 Agent 都在基礎建設就緒後掛載監聽器
         this.setupHooks();
@@ -874,7 +882,8 @@ export abstract class BaseAgent {
             emotionalState: this.emotionalState ? structuredClone(this.emotionalState) : undefined,
             workspaceType: this.workspaceType,
             allowedTools: this.allowedTools ? [...this.allowedTools] : undefined,
-            isTemp: this.isTemp
+            isTemp: this.isTemp,
+            assignedTaskId: this.assignedTaskId
         };
     }
 
@@ -898,6 +907,9 @@ export abstract class BaseAgent {
         }
         if (data.isTemp !== undefined) {
             this.isTemp = data.isTemp;
+        }
+        if (data.assignedTaskId !== undefined) {
+            this.assignedTaskId = data.assignedTaskId;
         }
 
         this.logger.debug(`Agent state hydrated from snapshot.`);

@@ -27,55 +27,15 @@ export class PlanTasksTool extends BaseTool {
     public async execute(args: any, context: ToolContext): Promise<string> {
         if (!context.sessionId) return "Failed: No active session.";
         try {
-            this.taskManager.addTasks(context.sessionId, args.tasks);
-            return `Successfully added ${args.tasks.length} tasks to the DAG. Use check_task_dashboard to monitor progress, and spawn_agent to assign READY tasks.`;
+            const tasksWithCreator = args.tasks.map((t: any) => ({ ...t, creatorId: context.agentId }));
+            this.taskManager.addTasks(context.sessionId, tasksWithCreator);
+            return `Successfully added ${args.tasks.length} tasks to the DAG. Use assign_task to assign tasks.`;
         } catch (e: any) {
             return `Failed to plan tasks: ${e.message}`;
         }
     }
 }
 
-export class CheckTaskDashboardTool extends BaseTool {
-    public readonly name = 'check_task_dashboard';
-    public readonly description = 'View the current status of all tasks in the DAG.';
-
-    public readonly schema = z.object({});
-
-    constructor(private readonly taskManager: ITaskManager) {
-        super();
-    }
-
-    public async execute(args: any, context: ToolContext): Promise<string> {
-        if (!context.sessionId) return "Failed: No active session.";
-        const tasks = this.taskManager.getAllTasks(context.sessionId);
-        if (tasks.length === 0) {
-            return "Task Dashboard is empty.";
-        }
-
-        let report = "### Task Dashboard\n\n";
-        for (const t of tasks) {
-            let icon = '⏳';
-            if (t.status === 'READY') icon = '🟢';
-            if (t.status === 'IN_PROGRESS') icon = '🚀';
-            if (t.status === 'COMPLETED') icon = '✅';
-            if (t.status === 'FAILED') icon = '❌';
-            if (t.status === 'CANCELED') icon = '🚫';
-
-            report += `- ${icon} **[${t.id}]** (${t.status}) - ${t.objective}\n`;
-            if (t.dependencies.length > 0) {
-                report += `  - Depends on: ${t.dependencies.join(', ')}\n`;
-            }
-            if (t.assignedAgentId) {
-                report += `  - Assigned to: ${t.assignedAgentId}\n`;
-            }
-            if (t.result) {
-                report += `  - Result: ${t.result}\n`;
-            }
-        }
-
-        return report;
-    }
-}
 
 export class StrategizeAndPlanTool extends BaseTool {
     public readonly name = 'strategize_and_plan';
@@ -117,9 +77,10 @@ export class StrategizeAndPlanTool extends BaseTool {
                 }
 
                 const tasks = await generator.generate(strategy);
-                this.taskManager.addTasks(context.sessionId, tasks);
+                const tasksWithCreator = tasks.map(t => ({ ...t, creatorId: context.agentId }));
+                this.taskManager.addTasks(context.sessionId, tasksWithCreator);
 
-                const report = `[Background Planning Completed (Mode: ${modeLabel})]\nSuccessfully planned ${tasks.length} tasks for objective: "${args.objective}".\n\nStrategy Overview:\n${strategy}\n\nUse check_task_dashboard to monitor the DAG, and spawn_agent to assign READY tasks.`;
+                const report = `[Background Planning Completed (Mode: ${modeLabel})]\nSuccessfully planned ${tasks.length} tasks for objective: "${args.objective}".\n\nStrategy Overview:\n${strategy}\n\nUse assign_task to assign tasks.`;
 
                 const dataBlock = new DataBlock({
                     sessionId: context.sessionId,
@@ -128,7 +89,10 @@ export class StrategizeAndPlanTool extends BaseTool {
                     type: 'system',
                     intent: 'BACKGROUND_TASK_COMPLETED',
                     priority: MessagePriority.HIGH,
-                    controlPayload: report
+                    controlPayload: report,
+                    metadata: {
+                        senderName: 'System'
+                    }
                 });
 
                 context.eventBus.publish({
@@ -146,7 +110,10 @@ export class StrategizeAndPlanTool extends BaseTool {
                     type: 'system',
                     intent: 'BACKGROUND_TASK_FAILED',
                     priority: MessagePriority.URGENT,
-                    controlPayload: errorReport
+                    controlPayload: errorReport,
+                    metadata: {
+                        senderName: 'System'
+                    }
                 });
 
                 context.eventBus.publish({

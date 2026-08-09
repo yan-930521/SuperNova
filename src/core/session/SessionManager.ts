@@ -2,12 +2,14 @@ import { AgentManager } from '../agent/AgentManager';
 import { AgentState, AgentType } from '../agent/BaseAgent';
 import { ProjectionHandler } from '../agent/ProjectionHandler';
 import { Config } from '../config/Config';
-import { LogManager } from '../infra/LogManager';
-import { ISessionRepository, IAgentStateRepository, IDataBlockRepository } from '../domain/IRepository';
+import { AgentEvent, IEvent, IEventBus, SystemEvent } from '../domain/IBus';
+import {
+    IAgentStateRepository, IDataBlockRepository, ISessionRepository
+} from '../domain/IRepository';
 import { IWorkspaceManager, WorkspaceType } from '../domain/IWorkspaceManager';
+import { LogManager } from '../infra/LogManager';
 import { ILifecycle } from '../lifecycle/ILifecycle';
 import { DataBlock, MessagePriority } from '../messaging/DataBlock';
-import { AgentEvent, IEvent, IEventBus, SystemEvent } from '../domain/IBus';
 import { IdGenerator } from '../utils/IdGenerator';
 import { Session, SessionState } from './Session';
 
@@ -371,9 +373,12 @@ export class SessionManager implements ILifecycle {
         const sessionId = event.sessionId;
         if (!sessionId) return;
 
-        if (newState === 'IDLE') {
-            const session = this.getSession(sessionId);
-            if (session && session.hasPendingMessages(agentId)) {
+        const session = this.getSession(sessionId);
+        if (session) {
+            // 自動註冊任何在此 Session 內活動的 Agent
+            session.registerAgentId(agentId);
+
+            if (newState === 'IDLE' && session.hasPendingMessages(agentId)) {
                 this.logger.info(`[SessionManager] Agent ${agentId} is IDLE and has pending messages. Triggering dispatch.`);
                 await this.dispatchInboxForAgent(session, agentId);
             }

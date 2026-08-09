@@ -22,6 +22,8 @@ export interface ITask {
     createdAt: number;
     /** 最後更新時間 (Unix Timestamp) */
     updatedAt: number;
+    /** 建立此任務的 Agent ID (負責接收 READY 通知) */
+    creatorId?: string;
 }
 
 /**

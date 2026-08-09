@@ -77,7 +77,6 @@ describe('System Integration & Inbox Dispatch Test', () => {
             force_mcts: false,
             mcts_max_iterations: 3
         }
-        }
     } as any;
 
     beforeAll(async () => {
