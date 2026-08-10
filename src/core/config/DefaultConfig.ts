@@ -108,7 +108,9 @@ export const DEFAULT_CONFIG: Config = {
         daily_optimization_idle_threshold_ms: 600000,
         memory_episodic_days: 3,
         memory_graph_topk: 5,
-        memory_graph_depth: 2
+        memory_graph_depth: 2,
+        memory_graph_max_nodes: 20,
+        memory_graph_max_edges: 30
     },
     cache: {
         history_lru_size: 500,

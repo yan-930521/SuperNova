@@ -34,6 +34,8 @@ export const AgentConfigSchema = z.object({
     memory_episodic_days: z.number().describe('注入近期每日總結的天數 (預設 3)'),
     memory_graph_topk: z.number().describe('圖譜記憶向量搜尋的 TopK 數量 (預設 5)'),
     memory_graph_depth: z.number().describe('圖譜記憶搜尋的向外擴展深度 (預設 2)'),
+    memory_graph_max_nodes: z.number().describe('圖譜記憶注入 Prompt 時的節點數量硬性上限 (預設 20)'),
+    memory_graph_max_edges: z.number().describe('圖譜記憶注入 Prompt 時的關聯線數量硬性上限 (預設 30)'),
 });
 
 export const LLMConfigSchema = z.object({

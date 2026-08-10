@@ -81,6 +81,14 @@ export class SkillManager {
     }
 
     /**
+     * 清除指定 Skill 的快取，強迫下次重新載入
+     */
+    public invalidateCache(skillId: string): void {
+        this.skillCache.delete(skillId);
+        this.logger.info(`[SkillManager] Invalidated cache for skill: ${skillId}`);
+    }
+
+    /**
      * Stop all running background skills
      */
     public stopAll(): void {
