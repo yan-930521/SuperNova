@@ -38,10 +38,10 @@ After ensuring the stability of the v0.1.0 infrastructure, we have moved towards
   - The foundation is strictly categorized into `Observation`, `Action`, etc., ensuring that every Skill written by the Agent has bounded responsibilities.
   - **Technical Highlights**:
     - **Dynamic Versioning & Indirection Storage**: Implemented an indirection storage mechanism where the underlying `IdGenerator` automatically generates a `skillver_xxx` suffix for physical files, preventing new code from directly overwriting and destroying older versions.
-    - **Self-Healing & Auto-Rollback**: When the Agent detects that a new skill version has failed during execution, it not only records the loss rate but can also use `rollback_code_skill` to revert to the most stable historical version with the highest success rate, creating a complete self-debugging and fixing loop.
+    - **Skill Caching & Lifecycle Management**: Introduced `LRUCache` in the core `SkillManager` to centralize the management of both `ActionSkill` and `ObservationSkill` instances. Added an `onEvict` hook to ensure evicted background skills can gracefully terminate internal loops.
+    - **Self-Healing & Auto-Rollback**: When a new skill fails, the Agent not only records the loss rate but can also use `rollback_code_skill` to revert to a stable version. An automatic cache invalidation mechanism (`invalidateCache`) is integrated into all script-mutating tools, completely resolving the infinite self-healing loop vulnerability.
     - **Metrics & Read-only Maintenance**: Built-in tools like `read_code_skill`, `list_skill_versions`, and `delete_code_skill` allow the Agent to proactively read old source code, view historical success rates, and clean up redundant skills to save Tokens.
     - **Hardened Sandbox & WASM**: To address security risks, future plans include enforcing dynamically generated CodeSkills to execute within a WebAssembly (WASM) container.
-
 - **Materialized Task System (Completed)**
   - Added the Task system, allowing the main brain and developers to clearly see the execution progress of each step.
   - **Technical Highlights**:

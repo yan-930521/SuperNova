@@ -37,7 +37,8 @@
   - 基礎嚴格分為 `Observation` (觀察)、`Action` (行動) 等類別，確保 Agent 撰寫出的每一種 Skill 受到邊界限制。
   - **技術亮點 (Technical Highlights)**：
     - **動態版號與指標儲存 (CodeSkill Versioning)**：採用指標儲存 (Indirection)，由底層的 `IdGenerator` 自動產生 `skillver_xxx` 作為實體檔案後綴，杜絕新版程式碼直接覆蓋破壞舊版。
-    - **容錯與自動退版 (Self-Healing & Auto-Rollback)**：當 Agent 發覺新版技能執行失敗時，不僅會紀錄損耗率，更能透過 `rollback_code_skill` 退回至歷史上勝率最高的穩定版本，具備完整的自我除錯與修復閉環。
+    - **快取與生命週期管理 (Skill Caching & Lifecycle)**：於核心層 `SkillManager` 導入 `LRUCache` 以統一管理 `ActionSkill` 與 `ObservationSkill` 的實例。新增 `onEvict` 鉤子函數 (Hook)，確保被淘汰的背景技能可優雅終止內部迴圈。
+    - **容錯與自我修復閉環 (Self-Healing & Auto-Rollback)**：當新版技能執行失敗，Agent 不僅能紀錄損耗率，更能透過 `rollback_code_skill` 退回穩定版本。並針對所有改動腳本的工具內建了快取自動失效 (`invalidateCache`) 機制，徹底根除更新程式後仍執行舊版的死循環。
     - **統計指標與唯讀維護**：內建 `read_code_skill`、`list_skill_versions` 與 `delete_code_skill`，讓 Agent 能主動查閱舊碼、檢視歷代勝率並清除冗餘技能以節省 Token。
     - **底層安全隔離 (Hardened Sandbox & WASM)**：為解決資安風險，計畫未來將動態生成的 CodeSkill 強制限制在 WebAssembly (WASM) 容器中執行。
 

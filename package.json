@@ -1,13 +1,13 @@
 {
     "name": "supernova",
-    "version": "0.2.0",
+    "version": "0.2.1",
     "description": "SuperNova AI Runtime",
     "main": "./demo/v0.1.0.ts",
     "scripts": {
         "test": "bun test",
         "build": "bun x tsc --noEmit",
         "lint": "bun x tsc --noEmit",
-        "demo": "bun ./demo/v0.1.0.ts",
+        "demo": "bun ./demo/index.ts",
         "test:memory": "bun ./demo/test_memory.ts",
         "test:task_lats": "bun ./demo/task_lats_demo.ts",
         "test:task": "bun ./demo/task_assignment.ts",

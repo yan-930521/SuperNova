@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [0.2.1] - 2026-08-10
+### Added
+- **Skill Caching & Lifecycle Management**:
+  - Introduced `LRUCache` in the core `SkillManager` to centralize the instantiation and caching of both `ActionSkill` and `ObservationSkill`.
+  - Added an `onEvict` hook to gracefully terminate internal sensory loops when background skills (`ObservationSkill`) are evicted from the cache, preventing memory leaks and zombie loops.
+- **Self-Healing Cache Invalidation Mechanism**:
+  - Ensured that all tools capable of mutating skill source code (`create_code_skill`, `delete_code_skill`, `rollback_code_skill`) now synchronously trigger `SkillManager`'s `invalidateCache`. This completely resolves the infinite self-healing loop vulnerability where the system would execute obsolete code after an update.
+- **Underworld Migration (Minecraft)**:
+  - Completely removed the legacy `CommandRouter` and old command tools. The Minecraft environment has fully migrated to the generic `CodeSkill` architecture (e.g., `MoveSkill`, `ObserveSkill`, `ChatSkill`), achieving infrastructure consistency and dynamic extensibility.
+
 ## [0.2.0] - 2026-08-09
 ### Added
 - **Embodied Agent Self-Evolving CodeSkill Ecosystem**:

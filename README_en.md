@@ -5,14 +5,14 @@
 [![TypeScript](https://img.shields.io/badge/Language-TypeScript-blue.svg)](https://www.typescriptlang.org/)
 [![Runtime](https://img.shields.io/badge/Runtime-Bun-black.svg)](https://bun.sh/)
 [![Architecture](https://img.shields.io/badge/Architecture-Event--Driven-orange.svg)](#technical-highlights)
-[![Stage](https://img.shields.io/badge/Stage-v0.2.0-green.svg)](#development-roadmap)
+[![Stage](https://img.shields.io/badge/Stage-v0.2.1-green.svg)](#development-roadmap)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
 SuperNova is an **Agent Runtime** focusing on performance and state management. Running on the high-performance Bun environment, it leverages an event-driven architecture to effectively solve common issues in long-running AI systems, such as context explosion and goal drift. This enables Agents to maintain stable cognition and execution capabilities during complex, cross-domain long-term tasks.
 
 > **Quick Navigation**: 
 > - **Architecture Blueprint**: [docs/ARCH.md](docs/ARCH.md)
-> - **Future Roadmap**: [ROADMAP_en.md](ROADMAP_en.md) (Deep dive into the v0.2.0 autonomous evolution roadmap)
+> - **Future Roadmap**: [ROADMAP_en.md](ROADMAP_en.md) (Deep dive into the v0.2.1 autonomous evolution roadmap)
 > - **Changelog**: [CHANGELOG_en.md](CHANGELOG_en.md)
 > - **Contributing**: [CONTRIBUTING.md](CONTRIBUTING.md)
 >
@@ -78,15 +78,15 @@ bun run bench:oom       # Test writing 100k history records and OOM defense
 
 ```text
 SuperNova/
-?��??� src/
-??  ?��??� core/        # Core Engine: EventBus, Agent, Memory, Session, etc.
-??  ?��??� package/     # Domain Extensions: Minecraft integration and other applications
-?��??� demo/            # Demo programs and performance benchmark scripts
-?��??� docs/            # Architecture design documents (ARCH.md as the entry point)
-?��??� web/             # Web frontend interface
-?��??� scripts/         # Helper scripts
-?��??� config.yaml      # System configuration file
-?��??� .env.template    # Environment variables template
+├── src/
+│   ├── core/        # Core Engine: EventBus, Agent, Memory, Session, etc.
+│   └── package/     # Domain Extensions: Minecraft integration and other applications
+├── demo/            # Demo programs and performance benchmark scripts
+├── docs/            # Architecture design documents (ARCH.md as the entry point)
+├── web/             # Web frontend interface
+├── scripts/         # Helper scripts
+├── config.yaml      # System configuration file
+└── .env.template    # Environment variables template
 ```
 
 > **Architecture Boundary**: Modules in `src/core/` are uniformly exported via `src/core/index.ts`. `src/package/` must reference core modules through this entry point; deep coupling is strictly prohibited.
@@ -155,7 +155,7 @@ This project focuses on solving memory exhaustion, token explosion, and state ma
 | Version | Stage | Overview |
 |:---|:---|:---|
 | **v0.1.0** | Completed | Laid a robust foundation for asynchronous EventBus, dynamic graph memory, and sliding window isolation |
-| **v0.2.0** | Completed | Introduce Virtual Embodied AI, task scheduling, and Evolvable CodeSkill System |
+| **v0.2.1** | Completed | Introduce Virtual Embodied AI, task scheduling, and Evolvable CodeSkill System |
 
 > For detailed plans, please refer to [ROADMAP_en.md](ROADMAP_en.md).
 

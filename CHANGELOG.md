@@ -6,6 +6,16 @@
 
 ---
 
+## [0.2.1] - 2026-08-10
+### Added (新增功能與基礎設施)
+- **技能快取與生命週期管理 (Skill Caching & Lifecycle)**：
+  - 於核心層 `SkillManager` 導入 `LRUCache` 以統一管理 `ActionSkill` 與 `ObservationSkill` 的實例。
+  - 新增 `onEvict` 鉤子函數 (Hook)，當背景技能 (`ObservationSkill`) 遭受快取淘汰時，可優雅終止其內部 Sensory 迴圈，防止記憶體洩漏與殭屍迴圈。
+- **自我修復安全機制 (Self-Healing Cache Invalidation)**：
+  - 確保所有會修改技能原始碼的工具 (`create_code_skill`, `delete_code_skill`, `rollback_code_skill`) 在底層更新後，同步驅動 `SkillManager` 執行快取失效 (`invalidateCache`)，一舉根除了「技能重寫後仍執行舊版」的自我修復無限迴圈漏洞。
+- **具身智能環境重構 (Underworld Migration)**：
+  - 徹底移除過時的 `CommandRouter` 與舊有指令工具，Minecraft 環境現已全面遷移至泛用的 `CodeSkill` 架構 (`MoveSkill`, `ObserveSkill`, `ChatSkill` 等)，達到基礎設施的一致性與動態可擴展性。
+
 ## [0.2.0] - 2026-08-09
 ### Added (新增功能與基礎設施)
 - **具身智能自我進化生態系 (Embodied Agent Self-Evolving CodeSkill Ecosystem)**：

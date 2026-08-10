@@ -5,14 +5,14 @@
 [![TypeScript](https://img.shields.io/badge/Language-TypeScript-blue.svg)](https://www.typescriptlang.org/)
 [![Runtime](https://img.shields.io/badge/Runtime-Bun-black.svg)](https://bun.sh/)
 [![Architecture](https://img.shields.io/badge/Architecture-Event--Driven-orange.svg)](#technical-highlights-系統技術實作)
-[![Stage](https://img.shields.io/badge/Stage-v0.2.0-green.svg)](#development-roadmap)
+[![Stage](https://img.shields.io/badge/Stage-v0.2.1-green.svg)](#development-roadmap)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
 SuperNova 是一個專注於效能與狀態管理的 **Agent Runtime (代理人執行引擎)**。它運行於 Bun 高性能環境之上，透過事件驅動架構，有效解決長效型 AI 系統常見的上下文爆炸與目標飄移 (Goal Drift) 問題，使 Agent 能在複雜、跨領域的長期任務中保持穩定的認知與執行力。
 
 > **快速導覽 (Quick Navigation)**: 
 > - **架構藍圖**: [docs/ARCH.md](docs/ARCH.md)
-> - **未來規劃**: [ROADMAP.md](ROADMAP.md) (深入了解 v0.2.0 自主進化藍圖)
+> - **未來規劃**: [ROADMAP.md](ROADMAP.md) (深入了解 v0.2.1 自主進化藍圖)
 > - **更新日誌**: [CHANGELOG.md](CHANGELOG.md)
 > - **參與貢獻**: [CONTRIBUTING.md](CONTRIBUTING.md)
 >
@@ -151,7 +151,7 @@ SuperNova/
 | 版本 | 階段 | 概述 |
 |:---|:---|:---|
 | **v0.1.0** | 已完成 | 奠定非同步 EventBus、動態圖譜記憶與滑動視窗隔離的穩健基礎設施 |
-| **v0.2.0** | 已完成 | 引入虛擬具身智能 (Virtual Embodied AI)、任務排程與可進化 CodeSkill 系統 |
+| **v0.2.1** | 已完成 | 引入虛擬具身智能 (Virtual Embodied AI)、任務排程與可進化 CodeSkill 系統 |
 
 > 詳細規劃請參閱 [ROADMAP.md](ROADMAP.md)。
 
