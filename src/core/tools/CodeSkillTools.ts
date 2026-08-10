@@ -22,7 +22,10 @@ export class CreateCodeSkillTool extends BaseTool {
         code: z.string().describe('The complete TypeScript code for the skill. Must default export the class.'),
     });
 
-    constructor(private codeSkillRepo: ICodeSkillRepository) {
+    constructor(
+        private codeSkillRepo: ICodeSkillRepository,
+        private skillManager?: SkillManager
+    ) {
         super();
     }
 
@@ -35,6 +38,9 @@ export class CreateCodeSkillTool extends BaseTool {
                 args.description,
                 args.code
             );
+            if (this.skillManager) {
+                this.skillManager.invalidateCache(args.skillName);
+            }
             return `Successfully created CodeSkill ${args.skillName} (Version: ${versionId}). It has been registered in the skills index.`;
         } catch (error: any) {
             return `Failed to create CodeSkill: ${error.message}`;
@@ -101,13 +107,19 @@ export class RollbackCodeSkillTool extends BaseTool {
         versionId: z.string().nullable().describe('Optional. The specific version ID to rollback to. If omitted, it will auto-select the best historical version based on success rate.')
     });
 
-    constructor(private codeSkillRepo: ICodeSkillRepository) {
+    constructor(
+        private codeSkillRepo: ICodeSkillRepository,
+        private skillManager?: SkillManager
+    ) {
         super();
     }
 
     public async execute(args: { skillName: string, versionId?: string }, context: ToolContext): Promise<string> {
         try {
             await this.codeSkillRepo.rollbackSkill(context.sessionId, context.agentId, args.skillName, args.versionId);
+            if (this.skillManager) {
+                this.skillManager.invalidateCache(args.skillName);
+            }
             return `Successfully rolled back CodeSkill ${args.skillName}.`;
         } catch (error: any) {
             return `Failed to rollback code skill: ${error.message}`;
@@ -151,7 +163,10 @@ export class DeleteCodeSkillTool extends BaseTool {
         versionId: z.string().nullable().describe('Optional. The specific version ID to delete. If omitted, the entire skill and all its versions are deleted.')
     });
 
-    constructor(private codeSkillRepo: ICodeSkillRepository) {
+    constructor(
+        private codeSkillRepo: ICodeSkillRepository,
+        private skillManager?: SkillManager
+    ) {
         super();
     }
 
@@ -162,7 +177,10 @@ export class DeleteCodeSkillTool extends BaseTool {
                 return `Successfully deleted version ${args.versionId} of CodeSkill ${args.skillName}.`;
             } else {
                 await this.codeSkillRepo.deleteSkill(context.sessionId, context.agentId, args.skillName);
-                return `Successfully deleted entire CodeSkill ${args.skillName}.`;
+                if (this.skillManager) {
+                    this.skillManager.invalidateCache(args.skillName);
+                }
+                return `Successfully deleted CodeSkill ${args.skillName} entirely.`;
             }
         } catch (error: any) {
             return `Failed to delete code skill: ${error.message}`;

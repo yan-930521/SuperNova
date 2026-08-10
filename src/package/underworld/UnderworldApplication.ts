@@ -6,7 +6,9 @@ import { ICodeSkillRepository } from '@core/domain/ICodeSkillRepository';
 import { LogManager } from '@core/infra';
 import { CodeSkillContext, ObservationSkill } from '@core/skill/BaseSkill';
 import { SkillManager } from '@core/skill/SkillManager';
-import { ExecuteCodeSkillTool, TestCodeSkillTool } from '@core/tools/CodeSkillTools';
+import {
+    CreateCodeSkillTool, DeleteCodeSkillTool, ExecuteCodeSkillTool, ReadCodeSkillTool, RollbackCodeSkillTool, TestCodeSkillTool
+} from '../../core/tools/CodeSkillTools';
 
 import { agent, config, lifecycle, messaging, session } from '../../core';
 import { BotManager } from './BotManager';
@@ -130,8 +132,11 @@ export class UnderworldApplication {
 
         this.skillManager = new SkillManager(this.codeSkillRepo, getCodeSkillContext);
 
-        // 覆寫 Core 層的 ExecuteCodeSkillTool，注入含有 Minecraft Bot 的環境
+        // 覆寫 Core 層的動態技能工具，注入含有 Minecraft Bot 的環境與 SkillManager 快取機制
         toolRegistry.register(new ExecuteCodeSkillTool(workspaceManager, this.skillManager));
+        toolRegistry.register(new CreateCodeSkillTool(this.codeSkillRepo, this.skillManager));
+        toolRegistry.register(new RollbackCodeSkillTool(this.codeSkillRepo, this.skillManager));
+        toolRegistry.register(new DeleteCodeSkillTool(this.codeSkillRepo, this.skillManager));
         
         // 註冊 TestCodeSkillTool
         toolRegistry.register(new TestCodeSkillTool(workspaceManager));
