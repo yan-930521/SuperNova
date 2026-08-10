@@ -164,15 +164,53 @@ export class MemoryManager implements ILifecycle {
                         memoryContext += "Based on your current input, the following related entities and concepts were retrieved from your long-term memory:\n\n";
 
                         memoryContext += "### Entities:\n";
-                        graphContext.nodes.forEach((node) => {
-                            memoryContext += `- [${node.label}] ${node.id}: ${node.memory}\n`;
+                        const maxNodes = this.config.agent.memory_graph_max_nodes ?? 20;
+                        const maxEdges = this.config.agent.memory_graph_max_edges ?? 30;
+                        
+                        const keptNodes = graphContext.nodes.slice(0, maxNodes);
+                        const keptNodeIds = new Set(keptNodes.map(n => n.id));
+                        
+                        const shortenId = (id: string) => id.includes(':') ? id.split(':').slice(1).join(':') : id;
+
+                        keptNodes.forEach((node) => {
+                            const sid = shortenId(node.id);
+                            let mem = node.memory.trim();
+                            // 如果 memory 開頭已經有類似 "User: " 的重複資訊，將其截斷
+                            if (mem.startsWith(sid + ':')) {
+                                mem = mem.substring(sid.length + 1).trim();
+                            }
+                            memoryContext += `- [${node.label}] ${sid}: ${mem}\n`;
                         });
 
                         if (graphContext.edges.length > 0) {
                             memoryContext += "\n### Relations:\n";
-                            graphContext.edges.forEach((edge) => {
-                                memoryContext += `- ${edge.sourceId} --[${edge.relation}]--> ${edge.targetId}\n`;
-                            });
+                            
+                            // 將邊以 sourceId 進行群組化
+                            const groupedEdges = new Map<string, string[]>();
+                            let edgeCount = 0;
+                            
+                            for (const edge of graphContext.edges) {
+                                if (edgeCount >= maxEdges) break;
+                                // 僅保留 source 與 target 都在截斷後節點列表中的邊
+                                if (keptNodeIds.has(edge.sourceId) && keptNodeIds.has(edge.targetId)) {
+                                    const src = shortenId(edge.sourceId);
+                                    const tgt = shortenId(edge.targetId);
+                                    
+                                    if (!groupedEdges.has(src)) {
+                                        groupedEdges.set(src, []);
+                                    }
+                                    groupedEdges.get(src)!.push(`--[${edge.relation}]--> ${tgt}`);
+                                    edgeCount++;
+                                }
+                            }
+                            
+                            // 格式化輸出
+                            for (const [src, relations] of groupedEdges.entries()) {
+                                memoryContext += `- ${src}:\n`;
+                                for (const rel of relations) {
+                                    memoryContext += `  ${rel}\n`;
+                                }
+                            }
                         }
 
                         if (!context.injectedPrompts) context.injectedPrompts = [];
@@ -196,8 +234,7 @@ export class MemoryManager implements ILifecycle {
                 const recentSummaries = await this.dataBlockRepo.getRecentSummaries(event.sessionId || "global", context.agentId || "main", maxDays);
                 
                 if (recentSummaries && recentSummaries.length > 0) {
-                    let episodicContext = "## RECENT EPISODIC MEMORIES (DIARY ENTRIES)\n";
-                    episodicContext += "Here are your most recent diary entries. Use this context to maintain continuity in your interactions:\n\n";
+                    let episodicContext = "Here are your most recent diary entries. Use this context to maintain continuity in your interactions:\n\n";
 
                     recentSummaries.forEach((summary, i) => {
                         episodicContext += `### Session -${recentSummaries.length - i} Days:\n${summary}\n\n`;
@@ -206,7 +243,7 @@ export class MemoryManager implements ILifecycle {
                     if (!context.injectedPrompts) context.injectedPrompts = [];
                     
                     context.injectedPrompts.push({
-                        index: 6, // PromptSectionIndex.EPISODIC_MEMORY
+                        index: PromptSectionIndex.EPISODIC_MEMORY,
                         content: episodicContext
                     });
 

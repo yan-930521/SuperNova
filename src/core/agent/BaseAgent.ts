@@ -202,7 +202,6 @@ export abstract class BaseAgent {
     public readonly workspacePath: string;
     public readonly workspaceType: WorkspaceType;
     protected readonly oplogDir: string;
-    protected readonly stateFilePath: string; // 為了與原先代碼相容保留
     protected readonly llmProvider: LLMProvider;
 
     /** 裝備的工具清單 */
@@ -255,7 +254,6 @@ export abstract class BaseAgent {
             this.config.storage.agent_dir,
             this.id
         );
-        this.stateFilePath = path.join(this.oplogDir, 'state.json');
 
         this.llmProvider = options.llmProvider;
 
@@ -398,16 +396,14 @@ export abstract class BaseAgent {
 
         // --- 1. SYSTEM_CORE ---
         const corePrompts: string[] = [];
-        corePrompts.push(SYSTEM_PROMPTS.COMMUNICATION_PROTOCOL, "");
-        corePrompts.push(SYSTEM_PROMPTS.NETWORK_COMMUNICATION, "");
+        corePrompts.push(SYSTEM_PROMPTS.COMMUNICATION_PROTOCOL);
+        corePrompts.push(SYSTEM_PROMPTS.NETWORK_COMMUNICATION);
 
         if (profile.mission) {
-            corePrompts.push("## MISSION\n" + profile.mission, "");
+            corePrompts.push(profile.mission);
         }
         if (profile.principles && profile.principles.length > 0) {
-            corePrompts.push("## PRINCIPLES (CRITICAL)");
             profile.principles.forEach(p => corePrompts.push(`- ${p}`));
-            corePrompts.push("");
         }
         const corePrompt = corePrompts.join('\n');
         if (corePrompt.trim()) {
@@ -418,26 +414,22 @@ export abstract class BaseAgent {
         if (profile.identity) {
             sections.push({
                 index: PromptSectionIndex.IDENTITY,
-                content: `## IDENTITY\n${profile.identity}`
+                content: profile.identity
             });
         }
 
         // --- 3. TACTICAL_GUIDELINE ---
         const tacticalPrompts: string[] = [];
-        tacticalPrompts.push(SYSTEM_PROMPTS.CONSCIOUSNESS_PROJECTION, "");
+        tacticalPrompts.push(SYSTEM_PROMPTS.CONSCIOUSNESS_PROJECTION);
 
         if (profile.capabilities && profile.capabilities.length > 0) {
-            tacticalPrompts.push("## CAPABILITIES");
             profile.capabilities.forEach(c => tacticalPrompts.push(`- ${c}`));
-            tacticalPrompts.push("");
         }
         if (profile.action_guidelines && profile.action_guidelines.length > 0) {
-            tacticalPrompts.push("## ACTION GUIDELINES");
             profile.action_guidelines.forEach(g => tacticalPrompts.push(`- ${g}`));
-            tacticalPrompts.push("");
         }
         if (profile.outputFormat) {
-            tacticalPrompts.push("## OUTPUT FORMAT REQUIREMENTS\n" + profile.outputFormat, "");
+            tacticalPrompts.push(profile.outputFormat);
         }
         const tacticalPrompt = tacticalPrompts.join('\n');
         if (tacticalPrompt.trim()) {
@@ -455,8 +447,8 @@ export abstract class BaseAgent {
 
         // --- 6. TOOL_USAGE ---
         const toolUsagePrompts: string[] = [];
-        toolUsagePrompts.push(SYSTEM_PROMPTS.TOOL_USAGE_AND_VERIFICATION, "");
-        toolUsagePrompts.push(SYSTEM_PROMPTS.DATA_POINTER_HANDLING, "");
+        toolUsagePrompts.push(SYSTEM_PROMPTS.TOOL_USAGE_AND_VERIFICATION);
+        toolUsagePrompts.push(SYSTEM_PROMPTS.DATA_POINTER_HANDLING);
 
         const toolUsagePrompt = toolUsagePrompts.join('\n');
         if (toolUsagePrompt.trim()) {
@@ -514,14 +506,19 @@ export abstract class BaseAgent {
         const staticSections = this.buildProfilePromptSections(effectiveProfile, effectiveEnvState);
         const allSections = [...staticSections, ...(contextOverride?.injectedPrompts || [])];
         allSections.sort((a, b) => a.index - b.index);
-        const systemPrompt = allSections.map(p => p.content).join('\n\n');
+        
+        const systemPrompt = allSections.map(p => {
+            const sectionName = PromptSectionIndex[p.index] || `SECTION_${p.index}`;
+            return `# [${sectionName}]\n${p.content}`;
+        }).join('\n\n');
+
+        // this.logger.debug("PROMPT: \n" + systemPrompt);
+
         const profileHash = this.generateProfileHash(effectiveProfile, effectiveEnvState);
 
         const historyMessages = this.buildHistoryMessagesIncremental(allHistoryBlocks, shouldCompress, profileHash, systemPrompt);
 
         this.logger.debug(`Aggregated input for LLM: ${historyMessages.length} historical messages`);
-
-
 
         const lcMessages = await this.compileMessages(systemPrompt, undefined, {}, {
             history: historyMessages

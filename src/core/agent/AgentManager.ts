@@ -61,6 +61,10 @@ export class AgentManager implements ILifecycle {
         this.toolRegistry = new ToolRegistry(this.workspaceManager, this, this.taskManager, this.llmProvider, this.codeSkillRepo);
     }
 
+    public getToolRegistry(): ToolRegistry {
+        return this.toolRegistry;
+    }
+
     // ==========================================
     // 生命週期 (ILifecycle)
     // ==========================================
@@ -319,7 +323,7 @@ export class AgentManager implements ILifecycle {
             return ['read_file', 'write_file', 'list_files', 'run_bash', 'read_blob', 'send_message'];
         }
         if (type === AgentType.EMBODIED) {
-            return ['send_message', 'create_code_skill', 'execute_code_skill', 'read_code_skill', 'rollback_code_skill', 'list_skill_versions', 'delete_code_skill'];
+            return ['send_message', 'create_code_skill', 'read_code_skill', 'rollback_code_skill', 'list_skill_versions', 'delete_code_skill', 'test_code_skill'];
         }
         return ['send_message'];
     }
