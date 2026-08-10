@@ -13,8 +13,13 @@ declare module "supernova-embodied-sdk" {
         exportSummary(): string;
     }
 
+    interface IEventBus {
+        publish(eventType: string, payload: any): void;
+    }
+
     interface CodeSkillContext<TEnv = any> {
         state: StateRegistry;
+        eventBus: IEventBus;
         env: TEnv;
     }
 
@@ -22,6 +27,7 @@ declare module "supernova-embodied-sdk" {
         public abstract readonly name: string;
         public abstract readonly description: string;
         protected readonly state: StateRegistry;
+        protected readonly eventBus: IEventBus;
         protected readonly env: TEnv;
         constructor(context: CodeSkillContext<TEnv>);
         public abstract execute(args?: any): Promise<any>;
