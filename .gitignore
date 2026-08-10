@@ -5,7 +5,6 @@ web/*
 .agent/*
 .dev/*
 .worktrees/*
-src/package/*
 workspace/session/*
 workspace/profiles/*
 !workspace/profiles/v1

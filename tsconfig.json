@@ -1,5 +1,9 @@
 {
   "compilerOptions": {
+    "paths": {
+      "@core/*": ["./src/core/*"],
+      "@underworld/*": ["./src/package/underworld/*"]
+    },
     "module": "esnext",
     "moduleResolution": "bundler",
     "target": "es2022",
@@ -9,5 +13,5 @@
     "forceConsistentCasingInFileNames": true,
     "types": ["bun"]
   },
-  "exclude": ["web", "./node_modules", "./src/package/*"]
+  "exclude": ["web", "./node_modules"]
 }

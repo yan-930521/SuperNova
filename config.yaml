@@ -1,6 +1,6 @@
 # 系統全局配置
 # 系統版本號碼
-version: v0.2.0-dev
+version: v0.2.1
 # 安全性相關配置
 security:
  # 工具執行的預設超時時間 (ms)
@@ -129,6 +129,10 @@ agent:
  memory_graph_topk: 5
  # 圖譜記憶搜尋的向外擴展深度 (預設 2)
  memory_graph_depth: 2
+ # 圖譜記憶注入 Prompt 時的節點數量硬性上限 (預設 20)
+ memory_graph_max_nodes: 20
+ # 圖譜記憶注入 Prompt 時的關聯線數量硬性上限 (預設 30)
+ memory_graph_max_edges: 30
 # 快取與 TTL 相關配置
 cache:
  # 歷史訊息 LRU 快取最大數量

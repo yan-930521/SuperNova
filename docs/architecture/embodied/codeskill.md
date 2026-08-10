@@ -87,5 +87,9 @@ class GatherWoodSkill extends ActionSkill {
    使用 `ExecuteCodeSkillTool` 執行時，系統利用動態 Import 即時載入該 TS 模組，並透過 `try/catch` 沙盒捕捉執行期錯誤。
 3. **錯誤反思 (Reflection)**:
    若執行失敗，拋出的 Exception 堆疊 (Stack Trace) 會直接回傳給 Agent。Agent 透過 `UpdateCodeSkillTool` 自行修復該腳本，直到成功為止。
-4. **晉升至全局知識庫 (VectorDB Promotion)**:
+4. **快取與生命週期管理 (Skill Caching & Lifecycle)**:
+   由於 Agent 呼叫技能的頻率極高，系統在 `SkillManager` 中實作了 `LRUCache` 以暫存實例化後的 CodeSkill。同時，為了防止背景監控技能 (`ObservationSkill`) 在被快取淘汰時成為殭屍迴圈 (Zombie Loop)，系統提供了 `onEvict` 生命週期鉤子，確保這些技能在被逐出快取時能優雅終止。
+5. **動態快取失效與自我修復閉環 (Dynamic Cache Invalidation)**:
+   當 Agent 透過 `CreateCodeSkillTool`、`DeleteCodeSkillTool` 或 `RollbackCodeSkillTool` 修改了底層腳本時，工具會自動觸發 `SkillManager.invalidateCache()`。這確保了 Agent 的下一次執行必定載入最新的程式碼，徹底解決「技能已重寫，但系統仍執行舊版」的自我修復無限迴圈問題。
+6. **晉升至全局知識庫 (VectorDB Promotion)**:
    當一個 CodeSkill 被 Agent 標記為「高度穩定且常用」時，它將被抽取特徵向量，正式寫入跨 Session 的全局向量技能庫中，供未來所有的 Agent 查詢與重複利用。

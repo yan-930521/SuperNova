@@ -21,7 +21,7 @@ related_docs:
 ## 1. 代理層與執行層 (Agent & Execution Layer)
 *   [Agent 系統設計 (docs/architecture/agent/agent.md)](./architecture/agent/agent.md)：引入**雙腦意識架構 (Dual-Brain Consciousness)**。包含 `MainAgent` 作為具備 OCC 情緒引擎 (Emotion Engine) 的情感感知中樞，以及 `TaskAgent` 作為專注 IDE 邏輯與任務執行的左腦，和 `EmbodiedAgent` 作為專注 3D 空間與 CLI 操作的右腦。包含 `BaseAgent` 基礎設施、**PromptSectionIndex 渲染機制**、意識投影 (Consciousness Projection)、時間感知插針 (Temporal Injection) 與生命週期管理。
 *   [工具系統設計 (`docs/architecture/agent/tool.md`)](./architecture/agent/tool.md)：定義 `BaseTool` 抽象基底、強型別參數驗證 (Zod) 與執行上下文 (ToolContext)。包含全域工具註冊表 (ToolRegistry)、無狀態工具設計與內建工具列表 (`SendMessageTool`, `ToggleProjectionTool`, `ReadBlobTool`, `ReadFileTool`, `WriteFileTool`, `ListFilesTool`, `RunBashTool`)，以及「工具負責做事，大腦負責記憶與廣播」的職責分離機制。
-*   [CodeSkill 與具身狀態管理 (`docs/architecture/embodied/codeskill.md`)](./architecture/embodied/codeskill.md)：定義 `EmbodiedAgent` 的動態自身狀態樹 (Dynamic State Registry) 以及具備嚴格型別繼承 (`ObservationSkill`, `ActionSkill`) 的自進化技能庫架構。支援透過 SDK 暴露與動態載入實現 Agent 編程自迭代。
+*   [CodeSkill 與具身狀態管理 (`docs/architecture/embodied/codeskill.md`)](./architecture/embodied/codeskill.md)：定義 `EmbodiedAgent` 的動態自身狀態樹 (Dynamic State Registry) 以及具備嚴格型別繼承 (`ObservationSkill`, `ActionSkill`) 的自進化技能庫架構。內建基於 `LRUCache` 的快取管理與自動失效 (Cache Invalidation) 機制，確保程式碼修改後能立即生效，並利用 `onEvict` 鉤子優雅關閉背景迴圈，達成完整的自我修復閉環 (Self-Healing Loop)。支援透過 SDK 暴露與動態載入實現 Agent 編程自迭代。
 
 ## 2. 調度與事件層 (Scheduling & Event Layer)
 *   [EventBus (`docs/architecture/core/event_bus.md`)](./architecture/core/event_bus.md)：包含 `EventBus` (會話安全隔離、publishAsync 異步等待與宣告式訂閱)、**事件分類規範** (SystemEvent、HookEvent、AgentEvent)、`GlobalEventMap` 泛型推導與 `DataPointer` 資料指標機制。
@@ -40,7 +40,7 @@ related_docs:
 ---
 
 ## 5. 綜合模擬場景 (Scenarios)
-*   [Minecraft 具身智能沙盒 (`docs/examples/scenario_minecraft_embodied.md`)](./examples/scenario_minecraft_embodied.md)：展示 `EmbodiedAgent` 如何與外部環境 (mineflayer) 透過 `BotManager` 與 EventBus 解耦雙向通訊。遵循 **物理世界優先 (Physical World First)** 原則，包含 `CommandRouter` 指令路由系統與內建指令 (`ObserveCommand`, `MoveCommand`, `ChatCommand`)。
+*   [Minecraft 具身智能沙盒 (`docs/examples/scenario_minecraft_embodied.md`)](./examples/scenario_minecraft_embodied.md)：展示 `EmbodiedAgent` 如何與外部環境 (mineflayer) 透過 `BotManager` 與 EventBus 解耦雙向通訊。遵循 **物理世界優先 (Physical World First)** 原則，包含 `CodeSkill` 系統與內建技能 (`ObserveSkill`, `MoveSkill`, `ChatSkill`)。
 
 ---
 
@@ -64,4 +64,3 @@ related_docs:
 | [會話進階功能](./todo/session_advanced.md) | HITL 閘道、Thread 分支合併、VFS GC、會話重播 |
 | [基礎建設進階](./todo/infra_advanced.md) | HITLGateway、Telemetry、Plugin Registry |
 | [圖譜記憶進階](./todo/graph_memory_advanced.md) | 向量嵌入、進階圖譜查詢、情緒權重動態調整 |
-| [Underworld 社會模擬](./todo/underworld_society.md) | 天職系統、禁忌目錄、多角色生態鏈 |

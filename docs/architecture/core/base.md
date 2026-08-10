@@ -85,6 +85,7 @@ Kernel 將上述生成的 Repositories 透過建構子或 DI 容器，派發並�
 *   **全局 ID 生成器 (`IdGenerator.ts`)**：提供全系統唯一標識符的生成功能。
 *   **Prompt 載入器 (`PromptLoader.ts`)**：提供具備 LRU 快取、錯誤處理與回退機制的 Prompt 模板讀取功能。
 *   **圖形驗證器 (`GraphValidator.ts`)**：提供純函數邏輯，用於偵測任務圖或規劃草案中的物理邏輯錯誤（如循環依賴、孤立節點等）。
+*   **快取基礎設施 (`LRUCache.ts`)**：提供泛用的 Least Recently Used 快取機制。支援自訂 `capacity` 上限，並具備強大的 `onEvict` 生命週期回呼函數 (Callback)，確保在資源被逐出快取時能執行清理與優雅關閉動作（如關閉內部迴圈、釋放記憶體），避免資源洩漏。
 
 ---
 
