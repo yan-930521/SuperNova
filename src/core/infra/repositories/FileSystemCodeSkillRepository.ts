@@ -234,4 +234,22 @@ export class FileSystemCodeSkillRepository implements ICodeSkillRepository {
         await this.saveIndex(sessionId, agentId, indexData);
         // We do not delete the physical files here, they act as historical backups
     }
+
+    public async deleteSkillVersion(sessionId: string, agentId: string, skillName: string, versionId: string): Promise<void> {
+        const indexData = await this.loadIndex(sessionId, agentId);
+        const skill = indexData[skillName];
+        if (!skill) throw new Error(`Skill ${skillName} not found.`);
+
+        if (!skill.versions[versionId]) {
+            throw new Error(`Version ${versionId} not found in skill ${skillName}.`);
+        }
+        
+        if (skill.currentVersionId === versionId) {
+            throw new Error(`Cannot delete the current active version ${versionId}. Rollback first.`);
+        }
+
+        delete skill.versions[versionId];
+        indexData[skillName] = skill;
+        await this.saveIndex(sessionId, agentId, indexData);
+    }
 }

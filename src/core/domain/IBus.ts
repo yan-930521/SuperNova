@@ -8,12 +8,13 @@ import { DataBlock } from '../messaging/DataBlock';
 export enum PromptSectionIndex {
     IDENTITY = 1,             // 角色定位與身分認知
     SYSTEM_CORE = 2,          // 系統層級的絕對核心設定
-    TACTICAL_GUIDELINE = 3,   // 領域戰術與行為準則 (左腦/右腦指南)
-    ENVIRONMENT_STATE = 4,    // 當前環境與實體狀態 (World & Body)
-    EMOTIONAL_STATE = 5,      // 內部情緒與動機模型 (OCC)
-    TOOL_USAGE = 6,           // 工具使用規範與限制
-    MEMORY_CONTEXT = 7,       // 短期記憶與歷史上下文摘要
-    TASK_DASHBOARD = 8,       // 全局任務看板 (DAG狀態)
+    MEMORY_CONTEXT = 3,       // 短期記憶與歷史上下文摘要 (圖譜)
+    EPISODIC_MEMORY = 4,      // 每日總結與情節記憶
+    ENVIRONMENT_STATE = 5,    // 當前環境與實體狀態 (World & Body)
+    EMOTIONAL_STATE = 6,      // 內部情緒與動機模型 (OCC)
+    TASK_DASHBOARD = 7,       // 全局任務看板 (DAG狀態)
+    TACTICAL_GUIDELINE = 8,   // 領域戰術與行為準則 (左腦/右腦指南)
+    TOOL_USAGE = 9,           // 工具使用規範與限制
 }
 
 /**

@@ -1,3 +1,6 @@
+import { EmbodiedAgent } from '@core/agent';
+
+import { ICodeSkillRepository } from '../domain/ICodeSkillRepository';
 import { ITaskManager } from '../domain/ITask';
 import { IWorkspaceManager } from '../domain/IWorkspaceManager';
 import { LogManager } from '../infra';
@@ -6,6 +9,10 @@ import {
     AssignTaskTool, SendMessageTool, SpawnAgentTool, ToggleProjectionTool, UpdateTaskStatusTool
 } from './AgentTools';
 import { BaseTool } from './BaseTool';
+import {
+    CreateCodeSkillTool, DeleteCodeSkillTool, ExecuteCodeSkillTool, ListSkillVersionsTool,
+    ReadCodeSkillTool, RollbackCodeSkillTool
+} from './CodeSkillTools';
 import { ReadUrlContentTool, SearchWebTool } from './ResearchTools';
 import { PlanTasksTool, StrategizeAndPlanTool } from './TaskTools';
 import {
@@ -13,9 +20,6 @@ import {
 } from './WorkspaceTools';
 
 import type { AgentManager } from '../agent/AgentManager';
-import { CreateCodeSkillTool, ExecuteCodeSkillTool, ReadCodeSkillTool, RollbackCodeSkillTool, ListSkillVersionsTool, DeleteCodeSkillTool } from './CodeSkillTools';
-import { ICodeSkillRepository } from '../domain/ICodeSkillRepository';
-
 export class ToolRegistry {
     private readonly tools: Map<string, BaseTool> = new Map();
 
@@ -39,8 +43,6 @@ export class ToolRegistry {
         this.register(new RollbackCodeSkillTool(codeSkillRepo));
         this.register(new ListSkillVersionsTool(codeSkillRepo));
         this.register(new DeleteCodeSkillTool(codeSkillRepo));
-        // 注意：ExecuteCodeSkillTool 依賴第三個參數 callback，需使用 closure 來避免循環依賴
-        this.register(new ExecuteCodeSkillTool(workspaceManager, codeSkillRepo, (agentId: string) => (agentManager.getAgent(agentId) as any)?.stateRegistry));
 
         // Agent Tools
         this.register(new SendMessageTool());
@@ -58,7 +60,7 @@ export class ToolRegistry {
         this.register(new ReadUrlContentTool());
     }
 
-    private register(tool: BaseTool) {
+    public register(tool: BaseTool) {
         this.tools.set(tool.name, tool);
     }
 

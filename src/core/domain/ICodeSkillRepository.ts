@@ -64,4 +64,9 @@ export interface ICodeSkillRepository extends IRepository<CodeSkillEntity> {
      * 刪除指定技能
      */
     deleteSkill(sessionId: string, agentId: string, skillName: string): Promise<void>;
+
+    /**
+     * 刪除指定技能的特定版本
+     */
+    deleteSkillVersion(sessionId: string, agentId: string, skillName: string, versionId: string): Promise<void>;
 }
