@@ -1,9 +1,11 @@
+import * as fs from 'fs/promises';
 import * as path from 'path';
 import { z } from 'zod';
 
 import { CodeSkillEntity, ICodeSkillRepository } from '../domain/ICodeSkillRepository';
 import { IWorkspaceManager } from '../domain/IWorkspaceManager';
 import { CodeSkillContext } from '../skill/BaseSkill';
+import { SkillManager } from '../skill/SkillManager';
 import { BaseTool, ToolContext } from './BaseTool';
 
 /**
@@ -46,57 +48,25 @@ export class CreateCodeSkillTool extends BaseTool {
  */
 export class ExecuteCodeSkillTool extends BaseTool {
     public readonly name = 'execute_code_skill';
-    public readonly description = 'Dynamically load and execute a previously created CodeSkill. If it fails, you will receive the error message and stack trace to help you fix it.';
+    public readonly description = 'Execute an existing CodeSkill from the repository. Arguments must be provided as a JSON string matching the skill schema.';
     public readonly schema = z.object({
-        skillName: z.string().describe('The name of the skill to execute (without .ts extension).'),
-        args: z.any().nullable().describe('Optional arguments to pass to the execute() method.'),
+        skillId: z.string().describe('The ID (filename without .ts) of the skill to execute.'),
+        args: z.any().nullable().describe('Optional arguments to pass to the execute() method.')
     });
 
     constructor(
         private workspaceManager: IWorkspaceManager,
-        private codeSkillRepo: ICodeSkillRepository,
-        private getCodeSkillContext: (agentId: string) => CodeSkillContext
+        private skillManager: SkillManager
     ) {
         super();
     }
 
-    public async execute(args: { skillName: string, args?: any }, context: ToolContext): Promise<string> {
-        const startTime = Date.now();
-        let isSuccess = false;
-        let errorMessage = '';
-
+    public async execute(args: { skillId: string, args?: any }, context: ToolContext): Promise<string> {
         try {
-            const filePath = await this.codeSkillRepo.getSkillFilePath(context.sessionId, context.agentId, args.skillName);
-            
-            const module = await import(`${filePath}?t=${Date.now()}`);
-            
-            const SkillClass = module.default;
-            if (!SkillClass) {
-                return `Error: The skill file must use "export default class ${args.skillName} extends ActionSkill"`;
-            }
-
-            const skillContext = this.getCodeSkillContext(context.agentId);
-            const skillInstance = new SkillClass(skillContext);
-            
-            const result = await skillInstance.execute(args.args);
-            isSuccess = true;
-            
-            // 記錄統計資訊
-            await this.codeSkillRepo.recordExecution(context.sessionId, context.agentId, args.skillName, isSuccess, Date.now() - startTime);
-            
+            const result = await this.skillManager.executeSkill(context.sessionId, context.agentId, args.skillId, args.args);
             return `Execution successful. Result: ${JSON.stringify(result)}`;
-            
         } catch (error: any) {
-            isSuccess = false;
-            errorMessage = error.message;
-            // 記錄統計資訊
-            try {
-                await this.codeSkillRepo.recordExecution(context.sessionId, context.agentId, args.skillName, isSuccess, Date.now() - startTime);
-            } catch (e) {
-                // Ignore analytics update failure
-            }
-            
-            return `CodeSkill Execution Error:\n${errorMessage}\n${error.stack}`;
+            return `Execution Error:\n${error.message}\n${error.stack}`;
         }
     }
 }
@@ -175,21 +145,65 @@ export class ListSkillVersionsTool extends BaseTool {
 
 export class DeleteCodeSkillTool extends BaseTool {
     public readonly name = 'delete_code_skill';
-    public readonly description = 'Delete a obsolete or unused skill from the agent memory completely.';
+    public readonly description = 'Delete an obsolete or unused skill completely, or delete a specific version of a skill.';
     public readonly schema = z.object({
-        skillName: z.string().describe('The name of the skill.')
+        skillName: z.string().describe('The name of the skill.'),
+        versionId: z.string().nullable().describe('Optional. The specific version ID to delete. If omitted, the entire skill and all its versions are deleted.')
     });
 
     constructor(private codeSkillRepo: ICodeSkillRepository) {
         super();
     }
 
-    public async execute(args: { skillName: string }, context: ToolContext): Promise<string> {
+    public async execute(args: { skillName: string, versionId?: string }, context: ToolContext): Promise<string> {
         try {
-            await this.codeSkillRepo.deleteSkill(context.sessionId, context.agentId, args.skillName);
-            return `Successfully deleted CodeSkill ${args.skillName}.`;
+            if (args.versionId) {
+                await this.codeSkillRepo.deleteSkillVersion(context.sessionId, context.agentId, args.skillName, args.versionId);
+                return `Successfully deleted version ${args.versionId} of CodeSkill ${args.skillName}.`;
+            } else {
+                await this.codeSkillRepo.deleteSkill(context.sessionId, context.agentId, args.skillName);
+                return `Successfully deleted entire CodeSkill ${args.skillName}.`;
+            }
         } catch (error: any) {
             return `Failed to delete code skill: ${error.message}`;
+        }
+    }
+}
+
+export class TestCodeSkillTool extends BaseTool {
+    public readonly name = 'test_code_skill';
+    public readonly description = 'Dynamically create a temporary TypeScript script and run type-checking (tsc --noEmit) on it to catch syntax or typing errors before saving it.';
+    public readonly schema = z.object({
+        code: z.string().describe('The complete TypeScript code to type-check.'),
+    });
+
+    constructor(
+        private workspaceManager: IWorkspaceManager
+    ) {
+        super();
+    }
+
+    public async execute(args: { code: string }, context: ToolContext): Promise<string> {
+        try {
+            const tempFileName = `temp_skill_${Date.now()}_${Math.floor(Math.random() * 1000)}.ts`;
+            const workspacePath = await this.workspaceManager.getWorkspacePath(context.sessionId, context.agentId) || process.cwd();
+            const finalPath = path.join(workspacePath, tempFileName);
+            
+            await fs.writeFile(finalPath, args.code, 'utf-8');
+            
+            // 使用 workspaceManager.runBash 執行 tsc --noEmit 來進行靜態型別檢查
+            const runResult = await this.workspaceManager.runBash(context.sessionId, context.agentId, `bun x tsc --noEmit ${tempFileName}`);
+            
+            // 清理暫存檔
+            await fs.unlink(finalPath).catch(() => {});
+            
+            if (runResult.exitCode === 0) {
+                return `Type Check Passed! The code has no syntax or typing errors.\nSTDOUT:\n${runResult.stdout}`;
+            } else {
+                return `Type Check Failed (Exit Code: ${runResult.exitCode}).\nSTDOUT:\n${runResult.stdout}\nSTDERR:\n${runResult.stderr}`;
+            }
+        } catch (error: any) {
+            return `Type Check Error: ${error.message}`;
         }
     }
 }
