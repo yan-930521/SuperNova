@@ -30,7 +30,9 @@
 
 - **虛擬具身智能 (Virtual Embodied AI) (已完成)**
   - 專注於虛擬環境中的精細操作與感知，達成基於編碼 (Code-based) 的自我修正與自主進化能力。
-  - **泛型化外部環境 SDK (Generic Env SDK)**：徹底解耦 Minecraft 專用上下文 (`IBotContext`)，改以 `AgentOptions.envSdkDeclaration` 動態注入 TS 宣告，並利用泛型 (`<TEnv>`) 串接環境，使系統能無縫適配 Line Bot、爬蟲等任何領域。
+  - **多代理人環境抽象層 (Multi-Agent Env Abstraction)**：導入 `BaseEmbodiedEnv` 抽象實作，將虛擬環境 (如 MinecraftEnv) 晉升為系統級單例，統一交由 `RuntimeKernel` 管理生命週期。支援多 Agent 甚至多 Session 同時登入，打造真正的多代理人共存宇宙。
+  - **技能執行會話實體隔離 (Session-level Cache Isolation)**：`SkillManager` 在多代理人共用下實作了 `${sessionId}:${agentId}:${skillId}` 的複合鍵機制，保證物理隔離與快取安全，避免平行宇宙間的腳本污染。
+  - **泛型化外部環境 SDK (Generic Env SDK)**：徹底解耦 Minecraft 專屬依賴。將 SDK 宣告抽離至獨立的 `SuperNovaBot.d.ts` 供動態注入，並利用泛型 (`<TEnv>`) 串接環境，使系統能無縫適配 Line Bot、爬蟲等任何領域。
 
 - **全新 CodeSkill 自我進化生態系 (Agent-Evolvable Code) (已完成)**
   - 有別於市面上的傳統 Prompt Skill，CodeSkill 本質上是一段**真實的程式碼**，並且設計成允許 Agent 在執行過程中對其進行**自我優化、重構甚至無中生有新增**。

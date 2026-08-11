@@ -75,10 +75,11 @@ bun run bench:oom       # 測試 10 萬筆歷史對話寫入與 OOM 防禦
 ```text
 SuperNova (Runtime Kernel)
 ├── 1. 代理層 (Agent Layer) - 負責思考與決策
-│   ├── MainAgent          (大腦：情感、高階規劃、意識投影)
-│   ├── TaskAgent          (左腦：專注 IDE 邏輯與任務流執行)
+│   ├── 1. 代理人與大腦層 (Agent & Brain Layer) - 負責思考與決策
+│   ├── MainAgent          (左腦：任務排程、長線規劃、指揮 Sub-Agents)
 │   ├── EmbodiedAgent      (右腦：與物理環境互動，具備動態 StateRegistry)
-│   └── ProjectionHandler  (無狀態意識投影機制，管理上下文合併)
+│   ├── ProjectionHandler  (無狀態意識投影機制，管理上下文合併)
+│   └── BaseEmbodiedEnv    (多代理人環境抽象層：支援多 Session 掛載與生命週期管理)
 │
 ├── 2. 技能與工具層 (Skill & Tool Layer) - 負責對外互動
 │   ├── ToolRegistry       (工具註冊表，支援動態分配 Delegate)

@@ -78,11 +78,11 @@ bun run bench:oom       # Test writing 100k history records and OOM defense
 
 ```text
 SuperNova (Runtime Kernel)
-├── 1. Agent Layer - Responsible for thinking and decision-making
-│   ├── MainAgent          (Brain: Emotion, High-level Planning, Consciousness Projection)
-│   ├── TaskAgent          (Left Brain: Focuses on IDE logic and task flow execution)
-│   ├── EmbodiedAgent      (Right Brain: Interacts with physical environments, dynamic StateRegistry)
-│   └── ProjectionHandler  (Stateless projection mechanism, manages context merging)
+├── 1. Agent & Brain Layer (Decision Making)
+│   ├── MainAgent          (Left Brain: Scheduling, Planning, Sub-Agent orchestration)
+│   ├── EmbodiedAgent      (Right Brain: Interacts with environments, dynamic StateRegistry)
+│   ├── ProjectionHandler  (Stateless consciousness projection, manages context merging)
+│   └── BaseEmbodiedEnv    (Multi-Agent Environment Abstraction: Supports multi-session mounting)
 │
 ├── 2. Skill & Tool Layer - Responsible for external interactions
 │   ├── ToolRegistry       (Tool registry, supports dynamic Delegation)

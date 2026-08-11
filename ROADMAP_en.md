@@ -31,7 +31,9 @@ After ensuring the stability of the v0.1.0 infrastructure, we have moved towards
 
 - **Virtual Embodied AI (Completed)**
   - Focus on fine-grained manipulation and perception in virtual environments, achieving Code-based self-correction and autonomous evolution capabilities.
-  - **Generic Env SDK**: Completely decoupled the Minecraft-specific context (`IBotContext`). The system now uses `AgentOptions.envSdkDeclaration` to dynamically inject TS declarations and uses generics (`<TEnv>`) to connect with the environment, enabling the system to seamlessly adapt to Line Bot, web crawlers, or any domain.
+  - **Multi-Agent Environment Abstraction**: Introduced the `BaseEmbodiedEnv` abstraction, elevating virtual environments (e.g., MinecraftEnv) to system-level singletons managed by `RuntimeKernel`. Fully supports multi-agent and multi-session concurrent logins, creating a true multi-agent coexisting universe.
+  - **Session-level Execution Isolation**: `SkillManager` implements a compound key mechanism (`${sessionId}:${agentId}:${skillId}`) to guarantee physical cache isolation, preventing script contamination across parallel universes in a shared environment.
+  - **Generic Env SDK**: Completely decoupled Minecraft-specific dependencies. Extracted SDK declarations to a standalone `SuperNovaBot.d.ts` for dynamic injection, and utilized generics (`<TEnv>`) to connect with environments, enabling seamless adaptation to Line Bots, web crawlers, or any domain.
 
 - **New CodeSkill Self-Evolving Ecosystem (Agent-Evolvable Code) (Completed)**
   - Unlike traditional Prompt Skills on the market, CodeSkill is essentially **real code** and is designed to allow Agents to **self-optimize, refactor, or even create new ones from scratch** during execution.

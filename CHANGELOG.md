@@ -6,6 +6,14 @@
 
 ---
 
+## [0.2.2] - 2026-08-11
+### Added (新增功能與基礎設施)
+- **多代理人具身環境隔離 (Multi-Agent EmbodiedEnv Isolation)**：
+  - **環境基礎設施抽象化 (BaseEmbodiedEnv)**：實作 `BaseEmbodiedEnv` 抽象層並繼承 `ILifecycle`，將環境生命週期交由 `RuntimeKernel` 統一管理。環境 (如 `MinecraftEnv`) 現在成為全域單例。
+  - **動態代理人掛載機制 (Agent Binding/Mounting)**：Agent 可以透過 `registerAgent` / `unregisterAgent` 動態登入或登出環境。一個環境可同時容納多個不同會話 (Session) 或是同一會話下的多個 Agent。
+  - **技能引擎會話實體隔離 (Session-level Cache Isolation)**：重構 `SkillManager` 內部的 `LRUCache` 鍵值產生規則，採用 `${sessionId}:${agentId}:${skillId}` 的複合鍵 (Compound Key) 設計，確保在多代理人與多平行宇宙 (Multi-Session) 情境下，技能原始碼與編譯快取達到絕對的物理隔離，避免記憶體污染與相互覆蓋。
+  - **環境 SDK 動態注入解耦 (SDK Declaration Decoupling)**：將原先硬編碼於應用層中的外部環境宣告抽出為獨立的 `SuperNovaBot.d.ts` 檔案，由 `BaseEmbodiedEnv` 負責動態讀取，完美實踐領域驅動設計 (DDD) 的介面隔離原則。
+
 ## [0.2.1] - 2026-08-10
 ### Added (新增功能與基礎設施)
 - **技能快取與生命週期管理 (Skill Caching & Lifecycle)**：

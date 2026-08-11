@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [0.2.2] - 2026-08-11
+### Added
+- **Multi-Agent EmbodiedEnv Isolation**:
+  - **Environment Infrastructure Abstraction (BaseEmbodiedEnv)**: Implemented the `BaseEmbodiedEnv` abstract layer extending `ILifecycle`, shifting environment lifecycle management to the `RuntimeKernel`. Environments (e.g., `MinecraftEnv`) now operate as global singletons.
+  - **Dynamic Agent Binding Mechanism**: Agents can dynamically log in or log out of environments using `registerAgent` / `unregisterAgent`. A single environment can simultaneously host agents from multiple distinct sessions or multiple agents within the same session.
+  - **Session-level Cache Isolation for Skill Engine**: Refactored the `LRUCache` key generation in `SkillManager` to use a compound key (`${sessionId}:${agentId}:${skillId}`). This ensures absolute physical isolation of skill source code and compilation caches across multi-agent and multi-session scenarios, preventing memory contamination and cache overwrites.
+  - **SDK Declaration Decoupling**: Extracted the hardcoded external environment declarations from the application layer into a standalone `SuperNovaBot.d.ts` file dynamically loaded by `BaseEmbodiedEnv`, perfectly adhering to Domain-Driven Design (DDD) Interface Segregation principles.
+
 ## [0.2.1] - 2026-08-10
 ### Added
 - **Skill Caching & Lifecycle Management**:
