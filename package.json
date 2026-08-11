@@ -2,7 +2,7 @@
     "name": "supernova",
     "version": "0.2.1",
     "description": "SuperNova AI Runtime",
-    "main": "./demo/v0.1.0.ts",
+    "main": "./demo/index.ts",
     "scripts": {
         "test": "bun test",
         "build": "bun x tsc --noEmit",

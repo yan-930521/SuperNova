@@ -1,8 +1,10 @@
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { ChatOpenAI, OpenAIEmbeddings } from '@langchain/openai';
+
 import { Config } from '../../config/Config';
 import { ILifecycle } from '../../lifecycle/ILifecycle';
 import { LogManager } from '../LogManager';
+import { ConsoleTransport } from '../transports';
 
 /**
  * 集中管理與快取 LangChain LLM 實例的提供者
@@ -12,12 +14,14 @@ export class LLMProvider implements ILifecycle {
     private embeddingsInstance?: OpenAIEmbeddings;
     private config: Config;
 
+    private readonly logger = new LogManager({ type: 'SYSTEM', name: 'LLMProvider' }).addTransport(new ConsoleTransport('DEBUG'));
+
     constructor(config: Config) {
         this.config = config;
     }
 
     public async initialize(): Promise<void> {
-        LogManager.recorder.info('[LLMProvider] Initializing LLM Provider...');
+        this.logger.info('Initializing LLM Provider...');
         // 可以在這裡預先載入 default preset
         this.getModel(this.config.llm.default_preset);
 
@@ -28,7 +32,7 @@ export class LLMProvider implements ILifecycle {
     }
 
     public async stop(): Promise<void> {
-        LogManager.recorder.info('[LLMProvider] Shutting down LLM Provider, clearing instances...');
+        this.logger.info('Shutting down LLM Provider, clearing instances...');
         this.llmInstances.clear();
         this.embeddingsInstance = undefined;
     }
@@ -58,12 +62,12 @@ export class LLMProvider implements ILifecycle {
      */
     public async generateEmbeddings(text: string): Promise<number[]> {
         if (!this.embeddingsInstance) {
-            throw new Error("[LLMProvider] Embeddings instance not initialized.");
+            throw new Error("Embeddings instance not initialized.");
         }
         try {
             return await this.embeddingsInstance.embedQuery(text);
         } catch (error) {
-            LogManager.recorder.error('[LLMProvider] Failed to generate embeddings', { payload: { text, error } });
+            this.logger.error('Failed to generate embeddings', { payload: { text, error } });
             throw error;
         }
     }

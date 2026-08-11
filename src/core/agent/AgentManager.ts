@@ -1,3 +1,5 @@
+import { ConsoleTransport } from '@core/infra/transports';
+
 import { Config } from '../config/Config';
 import { HookEvent, IEvent, IEventBus, PromptSectionIndex } from '../domain/IBus';
 import { ICodeSkillRepository } from '../domain/ICodeSkillRepository';
@@ -19,7 +21,7 @@ import { TaskAgent } from './TaskAgent';
  * 負責所有 Agent 的生命週期、活躍池管理以及與倉儲層的存取 (Dehydrate / Rehydrate)
  */
 export class AgentManager implements ILifecycle {
-    private readonly logger = LogManager.recorder;
+    private readonly logger = new LogManager({ type: 'SYSTEM', name: 'AgentManager' }).addTransport(new ConsoleTransport('DEBUG'));
 
     // 記憶體中的活躍 Agent 池 (Key: agentId)
     private readonly activeAgents: Map<string, BaseAgent> = new Map();
@@ -70,7 +72,7 @@ export class AgentManager implements ILifecycle {
     // ==========================================
 
     public async initialize(): Promise<void> {
-        this.logger.info('[AgentManager] Initialized.');
+        this.logger.debug('Initialized.');
 
         // 註冊全局 Hook，在每個 Agent 思考前注入隊友狀態
         this.eventBus.subscribe(HookEvent.BeforeAgentStep, async (event: IEvent<HookEvent.BeforeAgentStep>) => {
@@ -103,18 +105,18 @@ export class AgentManager implements ILifecycle {
     }
 
     public async start(): Promise<void> {
-        this.logger.info('[AgentManager] Started.');
+        this.logger.debug('Started.');
     }
 
     public async stop(): Promise<void> {
-        this.logger.info('[AgentManager] Stopping... Dehydrating all active agents.');
+        this.logger.debug('Stopping... Dehydrating all active agents.');
         // 優雅停機時，掛起並存檔所有 Agent
         const promises: Promise<void>[] = [];
         for (const agentId of this.activeAgents.keys()) {
             promises.push(this.dehydrate(agentId));
         }
         await Promise.all(promises);
-        this.logger.info('[AgentManager] All active agents dehydrated successfully.');
+        this.logger.debug('All active agents dehydrated successfully.');
     }
 
     // ==========================================
@@ -147,7 +149,7 @@ export class AgentManager implements ILifecycle {
             case AgentType.EMBODIED:
                 return new EmbodiedAgent(id, sessionId, mergedOptions);
             default:
-                throw new Error(`[AgentManager] Unsupported AgentType: ${type}`);
+                throw new Error(`Unsupported AgentType: ${type}`);
         }
     }
 
@@ -191,7 +193,7 @@ export class AgentManager implements ILifecycle {
             // 初始存檔 (需確保已經在 activeAgents 內)
             await this.saveAgent(id);
 
-            this.logger.info(`[AgentManager] Spawned new agent ${id} of type ${type}`);
+            this.logger.debug(`Spawned new agent ${id} of type ${type}`);
             return agent;
         } catch (err) {
             await agent.destroy();
@@ -206,7 +208,7 @@ export class AgentManager implements ILifecycle {
     public async dehydrate(agentId: string): Promise<void> {
         const agent = this.activeAgents.get(agentId);
         if (!agent) {
-            this.logger.warn(`[AgentManager] Cannot dehydrate agent ${agentId}, not found in active pool.`);
+            this.logger.warn(`Cannot dehydrate agent ${agentId}, not found in active pool.`);
             return;
         }
 
@@ -221,7 +223,7 @@ export class AgentManager implements ILifecycle {
             await agent.destroy();
             this.removeAgentFromPool(agentId);
         }
-        this.logger.debug(`[AgentManager] Agent ${agentId} dehydrated.`);
+        this.logger.debug(`Agent ${agentId} dehydrated.`);
     }
 
     /**
@@ -231,13 +233,13 @@ export class AgentManager implements ILifecycle {
     public async saveAgent(agentId: string): Promise<void> {
         const agent = this.activeAgents.get(agentId);
         if (!agent) {
-            this.logger.warn(`[AgentManager] Cannot save agent ${agentId}, not found in active pool.`);
+            this.logger.warn(`Cannot save agent ${agentId}, not found in active pool.`);
             return;
         }
 
         const data = agent.serialize();
         await this.stateRepo.saveAgentState(agent.sessionId, agentId, data);
-        this.logger.debug(`[AgentManager] Agent ${agentId} state saved.`);
+        this.logger.debug(`Agent ${agentId} state saved.`);
     }
 
     /**
@@ -247,7 +249,7 @@ export class AgentManager implements ILifecycle {
     public async terminateAgent(agentId: string): Promise<void> {
         const agent = this.activeAgents.get(agentId);
         if (!agent) {
-            this.logger.warn(`[AgentManager] Cannot terminate agent ${agentId}, not found in active pool.`);
+            this.logger.warn(`Cannot terminate agent ${agentId}, not found in active pool.`);
             return;
         }
 
@@ -256,7 +258,7 @@ export class AgentManager implements ILifecycle {
 
         // 從活躍池中移除
         this.removeAgentFromPool(agentId);
-        this.logger.info(`[AgentManager] Agent ${agentId} terminated (GC).`);
+        this.logger.debug(`Agent ${agentId} terminated (GC).`);
     }
 
     public getAgent(agentId: string): BaseAgent | undefined {
@@ -268,7 +270,7 @@ export class AgentManager implements ILifecycle {
      */
     public async rehydrate(agentId: string, sessionId: string, options?: any): Promise<BaseAgent> {
         if (this.activeAgents.has(agentId)) {
-            this.logger.warn(`[AgentManager] Agent ${agentId} is already active.`);
+            this.logger.warn(`Agent ${agentId} is already active.`);
             return this.activeAgents.get(agentId)!;
         }
 
@@ -276,7 +278,7 @@ export class AgentManager implements ILifecycle {
         const data = await this.stateRepo.loadAgentState(sessionId, agentId);
 
         if (!data) {
-            throw new Error(`[AgentManager] Failed to rehydrate agent ${agentId}: State data not found.`);
+            throw new Error(`Failed to rehydrate agent ${agentId}: State data not found.`);
         }
 
         // 透過靜態載入建立實例
@@ -301,7 +303,7 @@ export class AgentManager implements ILifecycle {
         // 完全就緒後才放入活躍池
         this.addAgentToPool(agent);
 
-        this.logger.debug(`[AgentManager] Agent ${agentId} rehydrated successfully.`);
+        this.logger.debug(`Agent ${agentId} rehydrated successfully.`);
         return agent;
     }
 
@@ -312,7 +314,7 @@ export class AgentManager implements ILifecycle {
         // 拷貝一份避免迭代中修改 Set
         const promises = Array.from(agentIds).map(id => this.dehydrate(id));
         await Promise.all(promises);
-        this.logger.info(`[AgentManager] All agents in session ${sessionId} have been dehydrated.`);
+        this.logger.info(`All agents in session ${sessionId} have been dehydrated.`);
     }
 
     public getDefaultTools(type: AgentType): string[] {

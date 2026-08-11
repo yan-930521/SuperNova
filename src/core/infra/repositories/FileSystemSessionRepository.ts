@@ -3,16 +3,17 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 
 import { Config } from '../../config/Config';
+import { ISessionRepository } from '../../domain/IRepository';
 import { Session } from '../../session/Session';
 import { LogManager } from '../LogManager';
-import { ISessionRepository } from '../../domain/IRepository';
+import { ConsoleTransport } from '../transports';
 
 /**
  * FileSystemSessionRepository
  * 基於本地檔案系統的會話儲存庫實現，所有資料存放在 `workspace/session/{sessionId}/session.json`
  */
 export class FileSystemSessionRepository implements ISessionRepository {
-    private readonly logger = LogManager.recorder;
+    private readonly logger = new LogManager({ type: 'SYSTEM', name: 'FileSystemSessionRepository' }).addTransport(new ConsoleTransport('DEBUG'));
 
     constructor(
         private readonly config: Config,
@@ -36,9 +37,9 @@ export class FileSystemSessionRepository implements ISessionRepository {
 
             const data = JSON.stringify(session.toJSON(), null, 2);
             await fs.writeFile(sessionFilePath, data, 'utf-8');
-            this.logger.debug(`[SessionRepository] Session ${session.id} saved successfully`);
+            this.logger.debug(`Session ${session.id} saved successfully`);
         } catch (err: any) {
-            this.logger.error(`[SessionRepository] Failed to save session ${session.id}: ${err.message}`);
+            this.logger.error(`Failed to save session ${session.id}: ${err.message}`);
             throw err;
         }
     }
@@ -47,7 +48,7 @@ export class FileSystemSessionRepository implements ISessionRepository {
         const sessionFilePath = this.getFileName(sessionId);
 
         if (!existsSync(sessionFilePath)) {
-            this.logger.debug(`[SessionRepository] Session file not found: ${sessionFilePath}`);
+            this.logger.debug(`Session file not found: ${sessionFilePath}`);
             return null;
         }
 
@@ -56,7 +57,7 @@ export class FileSystemSessionRepository implements ISessionRepository {
             const data = JSON.parse(content);
             return Session.fromJSON(data);
         } catch (err: any) {
-            this.logger.error(`[SessionRepository] Failed to load session ${sessionId}: ${err.message}`);
+            this.logger.error(`Failed to load session ${sessionId}: ${err.message}`);
             throw err;
         }
     }
@@ -66,9 +67,9 @@ export class FileSystemSessionRepository implements ISessionRepository {
         if (existsSync(sessionDir)) {
             try {
                 await fs.rm(sessionDir, { recursive: true, force: true });
-                this.logger.info(`[SessionRepository] Deleted session directory: ${sessionDir}`);
+                this.logger.info(`Deleted session directory: ${sessionDir}`);
             } catch (err: any) {
-                this.logger.error(`[SessionRepository] Failed to delete session ${sessionId}: ${err.message}`);
+                this.logger.error(`Failed to delete session ${sessionId}: ${err.message}`);
                 throw err;
             }
         }
@@ -89,7 +90,7 @@ export class FileSystemSessionRepository implements ISessionRepository {
 
             return sessionIds;
         } catch (err: any) {
-            this.logger.error(`[SessionRepository] Failed to list sessions: ${err.message}`);
+            this.logger.error(`Failed to list sessions: ${err.message}`);
             throw err;
         }
     }

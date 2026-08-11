@@ -26,6 +26,7 @@ export interface ILogEntry {
     timestamp: string;      // ISO8601
     level: LogLevel;
     type: string;           // 業務類型
+    name?: string;           // 業務名稱
     session_id?: string;
     agent_id?: string;
     trace_id?: string;
@@ -53,9 +54,7 @@ export class LogManager {
      * 供基礎設施 (如 EventBus, WorkspaceManager) 在遭遇共用層級錯誤時使用，避免直接 throw 導致進程崩潰
      */
     public static readonly recorder: LogManager = (() => {
-        const logger = new LogManager({ type: 'SYSTEM' });
-        logger.addTransport(new ConsoleTransport('DEBUG'));
-        return logger;
+        return new LogManager({ type: 'SYSTEM' }).addTransport(new ConsoleTransport('DEBUG'));
     })();
 
     private transports: ILogTransport[] = [];
@@ -72,8 +71,9 @@ export class LogManager {
      */
     public constructor(private defaultContext: Partial<ILogEntry> = {}) { }
 
-    public addTransport(transport: ILogTransport): void {
+    public addTransport(transport: ILogTransport): LogManager {
         this.transports.push(transport);
+        return this;
     }
 
     /**

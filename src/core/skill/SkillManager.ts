@@ -23,7 +23,8 @@ export class SkillManager {
      * 取得或載入並實例化 Skill
      */
     public async getOrLoadSkill(sessionId: string, agentId: string, skillId: string): Promise<BaseSkill<any>> {
-        let skill = this.skillCache.get(skillId);
+        const cacheKey = `${sessionId}:${agentId}:${skillId}`;
+        let skill = this.skillCache.get(cacheKey);
         if (!skill) {
             const filePath = await this.codeSkillRepo.getSkillFilePath(sessionId, agentId, skillId);
             const module = await import(`${filePath}?t=${Date.now()}`);
@@ -32,7 +33,7 @@ export class SkillManager {
             
             const skillContext = this.getCodeSkillContext(agentId);
             skill = new SkillClass(skillContext);
-            this.skillCache.set(skillId, skill!);
+            this.skillCache.set(cacheKey, skill!);
         }
         return skill!;
     }
@@ -83,9 +84,10 @@ export class SkillManager {
     /**
      * 清除指定 Skill 的快取，強迫下次重新載入
      */
-    public invalidateCache(skillId: string): void {
-        this.skillCache.delete(skillId);
-        this.logger.info(`[SkillManager] Invalidated cache for skill: ${skillId}`);
+    public invalidateCache(sessionId: string, agentId: string, skillId: string): void {
+        const cacheKey = `${sessionId}:${agentId}:${skillId}`;
+        this.skillCache.delete(cacheKey);
+        this.logger.info(`[SkillManager] Invalidated cache for skill: ${cacheKey}`);
     }
 
     /**

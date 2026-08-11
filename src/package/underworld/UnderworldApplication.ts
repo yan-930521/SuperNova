@@ -4,16 +4,16 @@ import { EmbodiedAgent } from '@core/agent';
 import { AgentEvent, IEvent } from '@core/domain/IBus';
 import { ICodeSkillRepository } from '@core/domain/ICodeSkillRepository';
 import { LogManager } from '@core/infra';
+import { ConsoleTransport } from '@core/infra/transports';
 import { CodeSkillContext, ObservationSkill } from '@core/skill/BaseSkill';
 import { SkillManager } from '@core/skill/SkillManager';
-import {
-    CreateCodeSkillTool, DeleteCodeSkillTool, ExecuteCodeSkillTool, ReadCodeSkillTool, RollbackCodeSkillTool, TestCodeSkillTool
-} from '../../core/tools/CodeSkillTools';
 
 import { agent, config, lifecycle, messaging, session } from '../../core';
-import { BotManager } from './BotManager';
-import { setupAgentEvents } from './events/agentEvents';
-import { setupMineflayerEvents } from './events/mineflayerEvents';
+import {
+    CreateCodeSkillTool, DeleteCodeSkillTool, ExecuteCodeSkillTool, ReadCodeSkillTool,
+    RollbackCodeSkillTool, TestCodeSkillTool
+} from '../../core/tools/CodeSkillTools';
+import { MinecraftEnv } from './wrapper/MinecraftEnv';
 import { seedSkills } from './wrapper/SkillSeeder';
 
 export class UnderworldApplication {
@@ -22,15 +22,14 @@ export class UnderworldApplication {
     private agentManager!: agent.AgentManager;
     private sessionManager!: session.SessionManager;
     private codeSkillRepo!: ICodeSkillRepository;
-    private botManager!: BotManager;
-    private skillManager!: SkillManager;
+    private minecraftEnv!: MinecraftEnv;
     private rl?: readline.Interface;
 
     private readonly MainAgentId = 'shimo-main';
     private readonly EmbodiedAgentId = 'minecraft-bot-01';
     private readonly sessionId = 'underworld-session';
 
-    private readonly logger = LogManager.recorder;
+    private readonly logger = new LogManager({ type: 'SYSTEM', name: 'UnderworldApplication' }).addTransport(new ConsoleTransport('DEBUG'));
 
     public async bootstrap(): Promise<void> {
         console.log('=============================================');
@@ -47,8 +46,9 @@ export class UnderworldApplication {
         this.sessionManager = container.resolve<session.SessionManager>('SessionManager');
         this.codeSkillRepo = container.resolve<ICodeSkillRepository>('ICodeSkillRepository');
         
-        this.botManager = new BotManager(this.eventBus);
-        await this.botManager.initialize();
+        const workspaceManager = container.resolve<any>('IWorkspaceManager');
+        this.minecraftEnv = new MinecraftEnv(this.eventBus, this.codeSkillRepo, workspaceManager);
+        await this.minecraftEnv.initialize();
 
         this.setupProcessEvents();
     }
@@ -67,41 +67,9 @@ export class UnderworldApplication {
                     agent.AgentType.MAIN
                 );
 
-                // 定義 Minecraft 專屬的環境 API，讓 LLM (夏沫) 知道怎麼操作
-                const botSdkDeclaration = `
-    import { Bot } from 'mineflayer';
-    import { Entity } from 'prismarine-entity';
-    import { Block } from 'prismarine-block';
-
-    export interface SuperNovaBot {
-        readonly core: Bot;
-        isMoving(): boolean;
-        moveTo(x: number, y: number, z: number): void;
-        follow(entity: Entity, range?: number): void;
-        stopMoving(): void;
-        chat(message: string): void;
-        whisper(player: string, message: string): void;
-        isAttacking(): boolean;
-        stopCombat(): void;
-        attackTarget(target: Entity, preferWeapon?: 'bow' | 'sword'): Promise<void>;
-        digBlock(block: Block, requireHarvest?: boolean): Promise<void>;
-        stopDigging(): void;
-        stopAll(): void;
-    }
-    
-    // 覆寫 TEnv 的型別為 SuperNovaBot
-    interface CodeSkillContext {
-        env: SuperNovaBot;
-    }
-    abstract class BaseSkill {
-        protected readonly env: SuperNovaBot;
-    }
-`;
-
-                // 手動生成右腦 (EmbodiedAgent) 並註冊到同一個 Session 中，並注入 SDK 宣告
-                await this.agentManager.spawnAgent(agent.AgentType.EMBODIED, this.EmbodiedAgentId, this.sessionId, {
-                    envSdkDeclaration: botSdkDeclaration
-                });
+                // 手動生成右腦 (EmbodiedAgent) 並註冊到同一個 Session 中
+                await this.agentManager.spawnAgent(agent.AgentType.EMBODIED, this.EmbodiedAgentId, this.sessionId, {});
+                
                 
                 sessionInst.registerAgentId(this.EmbodiedAgentId);
                 await this.sessionManager.saveSession(this.sessionId);
@@ -115,36 +83,15 @@ export class UnderworldApplication {
     }
 
     public async configureAgents(): Promise<void> {
-        const container = this.kernel.getContainer();
-        const workspaceManager = container.resolve<any>('IWorkspaceManager');
         const toolRegistry = this.agentManager.getToolRegistry();
 
-        // 1. 將包含 Minecraft 實體與 Agent 狀態樹的 CodeSkillContext 註冊進特化版的 Tool 中
-        const getCodeSkillContext = (agentId: string) : CodeSkillContext => {
-            const ctx = this.botManager.getBotContext(agentId);
-            const agent = this.agentManager.getAgent(agentId) as EmbodiedAgent;
-            return {
-                state: agent?.stateRegistry,
-                eventBus: this.eventBus,
-                env: ctx?.bot
-            };
-        };
-
-        this.skillManager = new SkillManager(this.codeSkillRepo, getCodeSkillContext);
-
-        // 覆寫 Core 層的動態技能工具，注入含有 Minecraft Bot 的環境與 SkillManager 快取機制
-        toolRegistry.register(new ExecuteCodeSkillTool(workspaceManager, this.skillManager));
-        toolRegistry.register(new CreateCodeSkillTool(this.codeSkillRepo, this.skillManager));
-        toolRegistry.register(new RollbackCodeSkillTool(this.codeSkillRepo, this.skillManager));
-        toolRegistry.register(new DeleteCodeSkillTool(this.codeSkillRepo, this.skillManager));
-        
-        // 註冊 TestCodeSkillTool
-        toolRegistry.register(new TestCodeSkillTool(workspaceManager));
-        
-        // 2. 取得剛建立的 Right Brain (EmbodiedAgent) 進行配置
-        const mcAgent = await this.agentManager.rehydrate(this.EmbodiedAgentId, this.sessionId);
+        // 1. 取得剛建立的 Right Brain (EmbodiedAgent) 進行配置
+        const mcAgent = await this.agentManager.rehydrate(this.EmbodiedAgentId, this.sessionId) as EmbodiedAgent;
         const embodiedDefaults = this.agentManager.getDefaultTools(agent.AgentType.EMBODIED);
-        mcAgent.updateTools(toolRegistry.getTools([...embodiedDefaults, 'execute_code_skill', 'test_code_skill']));
+        mcAgent.updateTools(toolRegistry.getTools(embodiedDefaults));
+        
+        // 將 MinecraftEnv 掛載到 Agent 身上
+        await mcAgent.mountEnvironment(this.minecraftEnv);
 
         // 3. 取得 MainAgent 進行配置
         const mainAgent = await this.agentManager.rehydrate(this.MainAgentId, this.sessionId);
@@ -155,23 +102,8 @@ export class UnderworldApplication {
     }
 
     public async startMinecraftBot(): Promise<void> {
-        const host = process.env.MINECRAFT_HOST || '127.0.0.1';
-        const port = parseInt(process.env.MINECRAFT_PORT || '25565', 10);
-        const username = process.env.MINECRAFT_USERNAME || 'SuperNovaBot';
-
-        const ctx = await this.botManager.spawnBot(
-            host,
-            port,
-            username,
-            this.EmbodiedAgentId,
-            this.sessionId
-        );
-
+        // Seeding skills (Should happen before observation or during it, depending on logic)
         await seedSkills(this.codeSkillRepo, this.sessionId, this.EmbodiedAgentId);
-        setupMineflayerEvents(ctx.bot.core, this.eventBus, this.sessionId, this.EmbodiedAgentId, this.MainAgentId);
-        setupAgentEvents(ctx.bot.core, this.eventBus, this.EmbodiedAgentId, this.sessionId);
-        
-        await this.skillManager.startObservationSkills(this.sessionId, this.EmbodiedAgentId);
     }
 
     public startCLI(): void {
@@ -228,11 +160,8 @@ export class UnderworldApplication {
         if (this.rl) {
             this.rl.close();
         }
-        if (this.skillManager) {
-            this.skillManager.stopAll();
-        }
-        if (this.botManager) {
-            await this.botManager.stop();
+        if (this.minecraftEnv) {
+            await this.minecraftEnv.stop();
         }
         if (this.kernel) {
             await this.kernel.stop();

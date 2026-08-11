@@ -5,3 +5,4 @@ export * from './EmbodiedAgent';
 export * from './AgentManager';
 export * from '../tools/BaseTool';
 export * from '../tools/ToolRegistry';
+export * from './BaseEmbodiedEnv';

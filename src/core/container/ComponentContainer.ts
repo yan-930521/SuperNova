@@ -1,3 +1,5 @@
+import { ConsoleTransport } from '@core/infra/transports';
+
 import { LogManager } from '../infra/LogManager';
 import { ILifecycle } from '../lifecycle/ILifecycle';
 
@@ -5,7 +7,7 @@ import { ILifecycle } from '../lifecycle/ILifecycle';
  * 組件容器，負責管理組件的註冊、解析以及生命週期調度
  */
 export class ComponentContainer {
-  private logger = new LogManager({ type: 'SYSTEM', agent_id: 'ComponentContainer' });
+  private readonly logger = new LogManager({ type: 'SYSTEM', name: 'ComponentContainer' }).addTransport(new ConsoleTransport('DEBUG'));
 
   /**
    * 存儲所有註冊的組件實例
@@ -68,7 +70,7 @@ export class ComponentContainer {
         }
       }
 
-      this.logger.info('[ComponentContainer] Container booted successfully');
+      this.logger.debug('[ComponentContainer] Container booted successfully');
     } catch (error) {
       // 啟動失敗時，記錄錯誤並重新拋出
       this.logger.error('[ComponentContainer] Container boot failed', {
@@ -91,7 +93,7 @@ export class ComponentContainer {
         }
       }
 
-      this.logger.info('[ComponentContainer] Container stopped successfully');
+      this.logger.debug('[ComponentContainer] Container stopped successfully');
     } catch (error) {
       // 停止失敗時，記錄錯誤並重新拋出
       this.logger.error('[ComponentContainer] Container shutdown failed', {

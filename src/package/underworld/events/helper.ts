@@ -1,7 +1,11 @@
 import { messaging } from '../../../core';
+import { IEventBus } from '../../../core/domain/IBus';
 
+/**
+ * 輔助函數：發布 Sensor 變動事件
+ */
 export function publishSensorEvent(
-    eventBus: messaging.EventBus,
+    eventBus: IEventBus,
     sessionId: string,
     targetId: string,
     type: 'system' | 'human',

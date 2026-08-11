@@ -1,8 +1,9 @@
 import { Bot } from 'mineflayer';
 
 import { messaging } from '../../../core';
+import { IEventBus } from '../../../core/domain/IBus';
 
-export function setupAgentEvents(bot: Bot, eventBus: messaging.EventBus, embodiedAgentId: string, sessionId: string) {
+export function setupAgentEvents(bot: Bot, eventBus: IEventBus, embodiedAgentId: string, sessionId: string) {
 
     eventBus.subscribe(messaging.AgentEvent.AgentMessage, async (event: messaging.IEvent<messaging.AgentEvent.AgentMessage>) => {
         const payload = event.payload as any;

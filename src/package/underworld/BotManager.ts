@@ -1,20 +1,21 @@
 import mineflayer from 'mineflayer';
 
 import { infra, lifecycle, messaging } from '../../core';
+import { IEventBus } from '../../core/domain/IBus';
 import { SuperNovaBot } from './wrapper/SuperNovaBot';
 
 export interface BotContext {
     bot: SuperNovaBot;
     agentId: string;
     sessionId: string;
-    eventBus: messaging.EventBus;
+    eventBus: IEventBus;
 }
 export class BotManager implements lifecycle.ILifecycle {
     private bots: Map<string, BotContext> = new Map();
-    private eventBus: messaging.EventBus;
+    private eventBus: IEventBus;
     private logger = infra.LogManager.recorder;
 
-    constructor(eventBus: messaging.EventBus) {
+    constructor(eventBus: IEventBus) {
         this.eventBus = eventBus;
     }
 

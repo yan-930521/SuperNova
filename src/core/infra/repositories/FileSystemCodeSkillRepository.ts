@@ -4,18 +4,14 @@ import * as path from 'path';
 
 import { Config } from '../../config/Config';
 import { CodeSkillEntity, ICodeSkillRepository } from '../../domain/ICodeSkillRepository';
-import { LRUCache } from '../../utils/LRUCache';
-import { LogManager } from '../LogManager';
-
 import { IdGenerator } from '../../utils/IdGenerator';
+import { LRUCache } from '../../utils/LRUCache';
 
 /**
  * 基於本地檔案系統的 CodeSkill 倉儲實作。
  * 支援 LRU 快取，檔案存放在 `workspace/session/{sessionId}/agents/{agentId}/skills` 
  */
 export class FileSystemCodeSkillRepository implements ICodeSkillRepository {
-    private readonly logger = LogManager.recorder;
-
     // 記憶體快取：以 `${sessionId}:${agentId}` 為 Key
     private readonly cache: LRUCache<string, Record<string, CodeSkillEntity>>;
 

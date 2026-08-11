@@ -7,6 +7,7 @@ import { EMBODIED_SDK_DECLARATION } from '../skill/EmbodiedSDK';
 import { PromptLoader } from '../utils/PromptLoader';
 import { AgentOptions, AgentType, BaseAgent, BaseAgentData } from './BaseAgent';
 import { StateEntry, StateRegistry } from './StateRegistry';
+import { BaseEmbodiedEnv } from './BaseEmbodiedEnv';
 
 export interface EmbodiedAgentData extends BaseAgentData {
     dynamicState?: Record<string, StateEntry>;
@@ -22,6 +23,28 @@ export class EmbodiedAgent extends BaseAgent {
 
     // 動態狀態樹，用於儲存感知與執行期記憶
     public readonly stateRegistry = new StateRegistry();
+
+    // 具體掛載的虛擬環境或物理環境
+    private mountedEnv?: BaseEmbodiedEnv;
+
+    /**
+     * 掛載具體環境，自動注入 SDK 宣告、專屬工具，並啟動背景感知
+     */
+    public async mountEnvironment(env: BaseEmbodiedEnv): Promise<void> {
+        this.mountedEnv = env;
+        
+        await env.registerAgent(this.id, this.sessionId, this.stateRegistry);
+
+        // 將環境專屬工具加到 Agent 身上
+        const envTools = env.getTools();
+        if (envTools && envTools.length > 0) {
+            this.updateTools([...this.tools, ...envTools]);
+            this.logger.info(`Mounted environment '${env.envId}' and added ${envTools.length} specific tools.`);
+        }
+
+        // 啟動環境的感知迴圈
+        await env.start();
+    }
 
     constructor(
         id: string,
@@ -57,6 +80,9 @@ export class EmbodiedAgent extends BaseAgent {
             let sdkDeclaration = EMBODIED_SDK_DECLARATION;
             if (this.options.envSdkDeclaration) {
                 sdkDeclaration += '\n' + this.options.envSdkDeclaration;
+            }
+            if (this.mountedEnv) {
+                sdkDeclaration += '\n' + this.mountedEnv.getSdkDeclaration();
             }
 
             payload.injectedPrompts.push({

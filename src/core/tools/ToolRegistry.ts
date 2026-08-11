@@ -1,10 +1,11 @@
 import { EmbodiedAgent } from '@core/agent';
+import { ICodeSkillRepository } from '@core/domain/ICodeSkillRepository';
+import { ITaskManager } from '@core/domain/ITask';
+import { IWorkspaceManager } from '@core/domain/IWorkspaceManager';
+import { LogManager } from '@core/infra';
+import { LLMProvider } from '@core/infra/llm/LLMProvider';
+import { ConsoleTransport } from '@core/infra/transports';
 
-import { ICodeSkillRepository } from '../domain/ICodeSkillRepository';
-import { ITaskManager } from '../domain/ITask';
-import { IWorkspaceManager } from '../domain/IWorkspaceManager';
-import { LogManager } from '../infra';
-import { LLMProvider } from '../infra/llm/LLMProvider';
 import {
     AssignTaskTool, SendMessageTool, SpawnAgentTool, ToggleProjectionTool, UpdateTaskStatusTool
 } from './AgentTools';
@@ -21,6 +22,7 @@ import {
 
 import type { AgentManager } from '../agent/AgentManager';
 export class ToolRegistry {
+    private readonly logger = new LogManager({ type: 'SYSTEM', name: 'ToolRegistry' }).addTransport(new ConsoleTransport('DEBUG'));
     private readonly tools: Map<string, BaseTool> = new Map();
 
     constructor(
@@ -75,7 +77,7 @@ export class ToolRegistry {
             if (tool) {
                 result.push(tool);
             } else {
-                LogManager.recorder.warn(`[ToolRegistry] Tool '${name}' not found.`);
+                this.logger.warn(`Tool '${name}' not found.`);
             }
         }
         return result;

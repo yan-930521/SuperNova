@@ -1,5 +1,7 @@
 import * as path from 'path';
 
+import { ConsoleTransport } from '@core/infra/transports';
+
 import { AgentManager } from '../agent/AgentManager';
 import { Config } from '../config/Config';
 import { ComponentContainer } from '../container/ComponentContainer';
@@ -26,7 +28,7 @@ import { ILifecycle } from './ILifecycle';
  * 負責全局系統框架組件的啟動引導 (Bootstrap)、依賴註冊與優雅停機 (Graceful Shutdown)
  */
 export class RuntimeKernel implements ILifecycle {
-  private readonly logger = LogManager.recorder;
+  private readonly logger = new LogManager({ type: 'SYSTEM', name: 'Kernel' }).addTransport(new ConsoleTransport('DEBUG'));
   private readonly container: ComponentContainer;
   private isHooked = false;
   private isShuttingDown = false;
@@ -42,7 +44,7 @@ export class RuntimeKernel implements ILifecycle {
    * 初始化內核，按依賴拓撲順序實例化並註冊核心管理器
    */
   public async initialize(): Promise<void> {
-    this.logger.info('[Kernel] Initializing Runtime Kernel...');
+    this.logger.info('Initializing Runtime Kernel...');
 
     try {
       // 0. 初始化靜態工具類別
@@ -93,9 +95,9 @@ export class RuntimeKernel implements ILifecycle {
       this.container.register('AgentStateRepository', agentStateRepo);
       this.container.register('GraphRepository', graphRepo);
 
-      this.logger.info('[Kernel] Kernel components registered successfully');
+      this.logger.info('Kernel components registered successfully');
     } catch (error: any) {
-      this.logger.error(`[Kernel] Kernel initialization failed: ${error.message}`);
+      this.logger.error(`Kernel initialization failed: ${error.message}`);
       throw error;
     }
   }
@@ -106,7 +108,7 @@ export class RuntimeKernel implements ILifecycle {
    * 啟動內核與所有核心組件，並註冊作業系統信號監聽
    */
   public async start(): Promise<void> {
-    this.logger.info('[Kernel] Booting Runtime Kernel...');
+    this.logger.info('Booting Runtime Kernel...');
 
     try {
       // 啟動 IoC 容器，容器會依序執行所有組件的 initialize() 和 start()
@@ -125,9 +127,9 @@ export class RuntimeKernel implements ILifecycle {
           });
       }, 1000);
 
-      this.logger.info('[Kernel] Kernel booted, signal handlers registered, and Tick Engine started.');
+      this.logger.info('Kernel booted, signal handlers registered, and Tick Engine started.');
     } catch (error: any) {
-      this.logger.error(`[Kernel] Kernel boot failed: ${error.message}`);
+      this.logger.error(`Kernel boot failed: ${error.message}`);
       throw error;
     }
   }
@@ -137,11 +139,11 @@ export class RuntimeKernel implements ILifecycle {
    */
   public async stop(): Promise<void> {
     if (this.isShuttingDown) {
-      this.logger.warn('[Kernel] Kernel is already shutting down, ignoring duplicate stop request.');
+      this.logger.warn('Kernel is already shutting down, ignoring duplicate stop request.');
       return;
     }
     this.isShuttingDown = true;
-    this.logger.info('[Kernel] Shutting down Runtime Kernel...');
+    this.logger.info('Shutting down Runtime Kernel...');
 
     try {
       // 停止系統心跳
@@ -157,9 +159,9 @@ export class RuntimeKernel implements ILifecycle {
       // 停機順序會自動為: SessionManager -> WorkspaceManager -> EventBus
       await this.container.shutdown();
 
-      this.logger.info('[Kernel] Kernel shutdown completed');
+      this.logger.info('Kernel shutdown completed');
     } catch (error: any) {
-      this.logger.error(`[Kernel] Kernel shutdown failed: ${error.message}`);
+      this.logger.error(`Kernel shutdown failed: ${error.message}`);
       throw error;
     }
   }
@@ -197,12 +199,12 @@ export class RuntimeKernel implements ILifecycle {
    * 停機信號處理常式
    */
   private handleSignal = async (signal: string): Promise<void> => {
-    this.logger.warn(`[Kernel] Received signal ${signal}. Starting graceful shutdown...`);
+    this.logger.warn(`Received signal ${signal}. Starting graceful shutdown...`);
     try {
       await this.stop();
       process.exit(0);
     } catch (error: any) {
-      this.logger.error(`[Kernel] Graceful shutdown aborted due to error: ${error.message}`);
+      this.logger.error(`Graceful shutdown aborted due to error: ${error.message}`);
       process.exit(1);
     }
   };

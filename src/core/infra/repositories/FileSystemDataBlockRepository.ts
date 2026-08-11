@@ -4,11 +4,12 @@ import * as path from 'path';
 
 import { Config } from '../../config/Config';
 import { DEFAULT_CONFIG } from '../../config/DefaultConfig';
+import { IDataBlockRepository } from '../../domain/IRepository';
 import { DataBlock } from '../../messaging/DataBlock';
 import { IdGenerator } from '../../utils/IdGenerator';
 import { LRUCache } from '../../utils/LRUCache';
 import { LogManager } from '../LogManager';
-import { IDataBlockRepository } from '../../domain/IRepository';
+import { ConsoleTransport } from '../transports';
 
 /**
  * FileSystemDataBlockRepository
@@ -16,7 +17,7 @@ import { IDataBlockRepository } from '../../domain/IRepository';
  * 實作了 IRepository<DataBlock> 與 IDataBlockRepository 介面。
  */
 export class FileSystemDataBlockRepository implements IDataBlockRepository {
-    private readonly logger = LogManager.recorder;
+    private readonly logger = new LogManager({ type: 'SYSTEM', name: 'DataBlockRepository' }).addTransport(new ConsoleTransport('DEBUG'));
 
     // 記憶體快取：以 `${sessionId}:${agentId}` 為 Key
     private readonly cache: LRUCache<string, DataBlock<any>[]>;
@@ -48,14 +49,14 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
 
             // 覆寫寫入
             await fs.writeFile(historyFilePath, lines, 'utf-8');
-            
+
             // 更新快取
             const cacheKey = `${sessionId}:${agentId}`;
             this.cache.set(cacheKey, [...blocks]);
-            
-            this.logger.debug(`[DataBlockRepository] Overwrote history for agent ${agentId} under session ${sessionId}`);
+
+            this.logger.debug(`Overwrote history for agent ${agentId} under session ${sessionId}`);
         } catch (err: any) {
-            this.logger.error(`[DataBlockRepository] Failed to save history for agent ${agentId}: ${err.message}`);
+            this.logger.error(`Failed to save history for agent ${agentId}: ${err.message}`);
             throw err;
         }
     }
@@ -73,17 +74,17 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
 
             // 批次追加寫入 (Single I/O)
             await fs.appendFile(historyFilePath, lines, 'utf-8');
-            
+
             // 更新快取
             const cacheKey = `${sessionId}:${agentId}`;
             const existing = this.cache.get(cacheKey);
             if (existing) {
                 existing.push(...blocks);
             }
-            
-            this.logger.debug(`[DataBlockRepository] Appended ${blocks.length} blocks to history for agent ${agentId} under session ${sessionId}`);
+
+            this.logger.debug(`Appended ${blocks.length} blocks to history for agent ${agentId} under session ${sessionId}`);
         } catch (err: any) {
-            this.logger.error(`[DataBlockRepository] Failed to append history for agent ${agentId}: ${err.message}`);
+            this.logger.error(`Failed to append history for agent ${agentId}: ${err.message}`);
             throw err;
         }
     }
@@ -103,14 +104,14 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
         const historyFilePath = this.getFileName(sessionId, agentId);
 
         if (!existsSync(historyFilePath)) {
-            this.logger.debug(`[DataBlockRepository] History file not found: ${historyFilePath}`);
+            this.logger.debug(`History file not found: ${historyFilePath}`);
             return [];
         }
 
         try {
             const content = await fs.readFile(historyFilePath, 'utf-8');
             let lines = content.split('\n');
-            
+
             // 安全上限 (Safety Cap)：在 JSON.parse 前強制切片，防止 OOM
             const safetyCap = this.config?.agent?.max_history_lines_safety_cap ?? DEFAULT_CONFIG.agent.max_history_lines_safety_cap;
             if (lines.length > safetyCap) {
@@ -127,7 +128,7 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
                     const data = JSON.parse(trimmed);
                     blocks.push(DataBlock.fromJSON(data));
                 } catch (parseErr: any) {
-                    this.logger.error(`[DataBlockRepository] Error parsing line in ${historyFilePath}: ${parseErr.message}`);
+                    this.logger.error(`Error parsing line in ${historyFilePath}: ${parseErr.message}`);
                 }
             }
 
@@ -135,8 +136,8 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
             this.cache.set(cacheKey, blocks);
 
             return blocks;
-    } catch (err: any) {
-            this.logger.error(`[DataBlockRepository] Failed to read history for agent ${agentId}: ${err.message}`);
+        } catch (err: any) {
+            this.logger.error(`Failed to read history for agent ${agentId}: ${err.message}`);
             throw err;
         }
     }
@@ -171,10 +172,10 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
             async (largeString) => {
                 const blobId = IdGenerator.blob();
                 const blobPath = path.join(blobsDir, `${blobId}.txt`);
-                
+
                 // 寫入實體硬碟
                 await fs.writeFile(blobPath, largeString, 'utf-8');
-                
+
                 newDataPointers.push({
                     type: 'FILE',
                     uri: blobId,
@@ -193,8 +194,8 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
             return block;
         }
 
-        this.logger.debug(`[DataBlockRepository] Offloaded large payload in block ${block.id}`);
-        
+        this.logger.debug(`Offloaded large payload in block ${block.id}`);
+
         // 建立並回傳一個全新的 DataBlock (不可變)
         const blockData = block.toJSON();
         blockData.controlPayload = newPayload;
@@ -210,7 +211,7 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
         if (existsSync(historyFilePath)) {
             const rotatedFilePath = path.join(this.getDirName(sessionId, agentId), `${dateString}.jsonl`);
             await fs.rename(historyFilePath, rotatedFilePath);
-            this.logger.info(`[DataBlockRepository] Rotated history file for agent ${agentId} to ${dateString}.jsonl`);
+            this.logger.info(`Rotated history file for agent ${agentId} to ${dateString}.jsonl`);
         }
         const cacheKey = `${sessionId}:${agentId}`;
         this.cache.delete(cacheKey);
@@ -224,7 +225,7 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
         }
         const summaryFile = path.join(dailyDir, `${dateString}.md`);
         await fs.writeFile(summaryFile, summaryMarkdown, 'utf-8');
-        this.logger.info(`[DataBlockRepository] Saved daily summary for session ${sessionId} to ${summaryFile}`);
+        this.logger.info(`Saved daily summary for session ${sessionId} to ${summaryFile}`);
     }
 
     public async getRecentSummaries(sessionId: string, agentId: string, maxDays: number = 3): Promise<string[]> {
@@ -234,7 +235,7 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
 
         try {
             const dirents = await fs.readdir(dailyDir, { withFileTypes: true });
-            
+
             // 找出所有與該 agentId 相關的總結檔案 (格式為 {dateStr}_{agentId}.md)
             const summaryFiles = dirents
                 .filter(d => d.isFile() && d.name.endsWith(`_${agentId}.md`))
@@ -248,11 +249,11 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
                 const content = await fs.readFile(filePath, 'utf-8');
                 summaries.push(content);
             }
-            
+
             // 回傳時反轉，讓最舊的在前面，最新的在後面，符合閱讀直覺
             return summaries.reverse();
         } catch (err: any) {
-            this.logger.error(`[DataBlockRepository] Failed to read recent summaries: ${err.message}`);
+            this.logger.error(`Failed to read recent summaries: ${err.message}`);
             return [];
         }
     }
@@ -260,16 +261,16 @@ export class FileSystemDataBlockRepository implements IDataBlockRepository {
     public async listAgentsForSession(sessionId: string): Promise<string[]> {
         const agentDirName = this.config.storage.agent_dir ?? DEFAULT_CONFIG.storage.agent_dir;
         const sessionAgentsDir = path.join(this.baseDir, sessionId, agentDirName);
-        
+
         if (!existsSync(sessionAgentsDir)) return [];
-        
+
         try {
             const dirents = await fs.readdir(sessionAgentsDir, { withFileTypes: true });
             return dirents
                 .filter(dirent => dirent.isDirectory())
                 .map(dirent => dirent.name);
         } catch (err: any) {
-            this.logger.error(`[DataBlockRepository] Failed to list agents for session ${sessionId}: ${err.message}`);
+            this.logger.error(`Failed to list agents for session ${sessionId}: ${err.message}`);
             return [];
         }
     }

@@ -3,6 +3,8 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { z } from 'zod';
 
+import { ConsoleTransport } from '@core/infra/transports';
+
 import { LogManager } from '../infra/LogManager';
 import { Config, ConfigSchema, DeepPartial } from './Config';
 import { DEFAULT_CONFIG } from './DefaultConfig';
@@ -14,7 +16,7 @@ const generateYamlTemplate = (schema: z.ZodTypeAny | undefined, values: any, ind
 
     const isObjectSchema = schema instanceof z.ZodObject;
     const isRecordSchema = schema instanceof z.ZodRecord;
-    
+
     let yamlString = '';
     const spaces = ' '.repeat(indent);
 
@@ -25,11 +27,11 @@ const generateYamlTemplate = (schema: z.ZodTypeAny | undefined, values: any, ind
     for (const key in values) {
         const fieldSchema = isObjectSchema ? schema.shape[key] : (isRecordSchema ? schema.valueType : undefined);
         const value = values[key];
-        
+
         if (fieldSchema?.description) {
             yamlString += `${spaces}# ${fieldSchema.description.replace(/\n/g, `${spaces}# `)}\n`;
         }
-        
+
         if (value === null || typeof value !== 'object') {
             yamlString += `${spaces}${key}: ${YAML.stringify(value).trim()}\n`;
         } else if (Array.isArray(value)) {
@@ -51,6 +53,8 @@ const generateYamlTemplate = (schema: z.ZodTypeAny | undefined, values: any, ind
  * 負責系統配置的加載、合併、持久化與不可變性處理。
  */
 export class ConfigLoader {
+    private readonly logger = new LogManager({ type: 'SYSTEM', name: 'ConfigLoader' }).addTransport(new ConsoleTransport('DEBUG'));
+
     /**
      * 系統引導啟動 (Bootstrap)
      * 執行「檢查檔案 -> 缺失則生成 -> 讀取 -> 合併 -> 凍結」的完整流程。
@@ -70,13 +74,13 @@ export class ConfigLoader {
                 customConfig = YAML.parse(content) || {};
             } catch (parseError) {
                 // 若解析失敗，記錄錯誤並拋出，防止以損壞的配置啟動
-                LogManager.recorder.error(`[ConfigLoader] Failed to parse config file at ${targetPath}:`, { payload: { error: parseError }, type: 'SYSTEM' });
+                this.logger.error(`Failed to parse config file at ${targetPath}:`, { payload: { error: parseError }, type: 'SYSTEM' });
                 throw parseError;
             }
         } catch (error: any) {
             if (error.code === 'ENOENT') {
                 // 檔案不存在：執行初始化生成邏輯
-                LogManager.recorder.info(`[ConfigLoader] Config file not found. Generating default at ${targetPath}`, { type: 'SYSTEM' });
+                this.logger.info(`Config file not found. Generating default at ${targetPath}`, { type: 'SYSTEM' });
 
                 // 確保目標目錄存在
                 const dir = path.dirname(targetPath);
@@ -86,7 +90,7 @@ export class ConfigLoader {
 
                 // 利用 Zod schema 與 describe 產生完美的 YAML 註解模板
                 const defaultYaml = generateYamlTemplate(ConfigSchema, DEFAULT_CONFIG);
-                
+
                 await fs.writeFile(targetPath, defaultYaml.trim() + '\n', 'utf-8');
             } else {
                 // 其他系統級別的檔案訪問錯誤

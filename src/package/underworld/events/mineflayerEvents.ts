@@ -8,10 +8,11 @@ import { plugin as tool } from 'mineflayer-tool';
 import { mineflayer as mineflayerViewer } from 'prismarine-viewer';
 
 import { messaging } from '../../../core';
+import { IEventBus } from '../../../core/domain/IBus';
 import { SuperNovaBot } from '../wrapper/SuperNovaBot';
 import { publishSensorEvent } from './helper';
 
-export function setupMineflayerEvents(bot: Bot, eventBus: messaging.EventBus, sessionId: string, embodiedAgentId: string, mainAgentId: string) {
+export function setupMineflayerEvents(bot: Bot, eventBus: IEventBus, sessionId: string, embodiedAgentId: string, mainAgentId: string) {
     bot.once('spawn', () => {
         bot.loadPlugin(pathfinder);
         bot.loadPlugin(armorManager);

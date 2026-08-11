@@ -8,6 +8,7 @@ import {
 } from '../domain/IRepository';
 import { IWorkspaceManager, WorkspaceType } from '../domain/IWorkspaceManager';
 import { LogManager } from '../infra/LogManager';
+import { ConsoleTransport } from '../infra/transports';
 import { ILifecycle } from '../lifecycle/ILifecycle';
 import { DataBlock, MessagePriority } from '../messaging/DataBlock';
 import { IdGenerator } from '../utils/IdGenerator';
@@ -20,7 +21,7 @@ import { Session, SessionState } from './Session';
  * 所有資料存取委託給 ISessionRepository 進行，徹底解耦本機檔案系統。
  */
 export class SessionManager implements ILifecycle {
-    private readonly logger = LogManager.recorder;
+    private readonly logger = new LogManager({ type: 'SYSTEM', name: 'SessionManager' }).addTransport(new ConsoleTransport('DEBUG'));
     private activeSessions: Map<string, Session> = new Map();
     private activeTaskPromises: Set<Promise<void>> = new Set();
     constructor(
@@ -36,7 +37,7 @@ export class SessionManager implements ILifecycle {
      * 實作 ILifecycle 初始化方法
      */
     public async initialize(): Promise<void> {
-        this.logger.info('[SessionManager] Initializing session manager...');
+        this.logger.info('Initializing session manager...');
         try {
             if (this.sessionRepo.initialize) {
                 await this.sessionRepo.initialize();
@@ -47,7 +48,7 @@ export class SessionManager implements ILifecycle {
             this.eventBus.subscribe(AgentEvent.AgentStateChanged, this.handleAgentStateChanged.bind(this));
             this.eventBus.subscribe(AgentEvent.ProjectionToggled, this.handleProjectionToggled.bind(this));
         } catch (err: any) {
-            this.logger.error(`[SessionManager] Failed to initialize session repository: ${err.message}`);
+            this.logger.error(`Failed to initialize session repository: ${err.message}`);
         }
     }
 
@@ -55,7 +56,7 @@ export class SessionManager implements ILifecycle {
      * 實作 ILifecycle 啟動引導方法 (執行會話自動恢復流)
      */
     public async start(): Promise<void> {
-        this.logger.info('[SessionManager] Starting SessionManager and running session recovery flow...');
+        this.logger.info('Starting SessionManager and running session recovery flow...');
 
         try {
             const dirs = await this.sessionRepo.list();
@@ -74,7 +75,7 @@ export class SessionManager implements ILifecycle {
                         // 3. 容錯驗證：若是 PERSISTENT 類型，檢查其物理工作空間是否存在
                         const isHealthy = await this.workspaceManager.hasWorkspace(sessionId, workspaceType);
                         if (!isHealthy) {
-                            this.logger.error(`[SessionManager] Session ${sessionId} workspace directory lost. Marking session as FAILED.`);
+                            this.logger.error(`Session ${sessionId} workspace directory lost. Marking session as FAILED.`);
                             session.status = SessionState.FAILED;
                             session.touch();
                             await this.sessionRepo.save(session);
@@ -83,7 +84,7 @@ export class SessionManager implements ILifecycle {
 
                         // 4. 工作空間健康，執行重啟還原
                         await this.workspaceManager.initWorkspace(sessionId, sessionId, workspaceType);
-                        this.logger.info(`[SessionManager] Re-mounted workspace for session ${sessionId} (${workspaceType})`);
+                        this.logger.info(`Re-mounted workspace for session ${sessionId} (${workspaceType})`);
 
                         // 將狀態恢復為 ACTIVE 並加載至活躍記憶體中
                         session.status = SessionState.ACTIVE;
@@ -91,10 +92,10 @@ export class SessionManager implements ILifecycle {
                         await this.sessionRepo.save(session);
                         this.activeSessions.set(sessionId, session);
 
-                        this.logger.info(`[SessionManager] Successfully recovered active session ${sessionId}`);
+                        this.logger.info(`Successfully recovered active session ${sessionId}`);
                     }
                 } catch (wsErr: any) {
-                    this.logger.error(`[SessionManager] Failed to recover session ${sessionId}: ${wsErr.message}`);
+                    this.logger.error(`Failed to recover session ${sessionId}: ${wsErr.message}`);
                     try {
                         const failedSession = await this.sessionRepo.load(sessionId);
                         if (failedSession) {
@@ -110,7 +111,7 @@ export class SessionManager implements ILifecycle {
             await Promise.all(recoveryPromises);
 
         } catch (error: any) {
-            this.logger.error(`[SessionManager] Error running session recovery flow: ${error.message}`);
+            this.logger.error(`Error running session recovery flow: ${error.message}`);
         }
     }
 
@@ -118,14 +119,14 @@ export class SessionManager implements ILifecycle {
      * 實作 ILifecycle 停止方法 (優雅停機凍結)
      */
     public async stop(): Promise<void> {
-        this.logger.info('[SessionManager] Stopping SessionManager. Waiting for background tasks to complete...');
+        this.logger.info('Stopping SessionManager. Waiting for background tasks to complete...');
 
         if (this.activeTaskPromises.size > 0) {
-            this.logger.info(`[SessionManager] Waiting for ${this.activeTaskPromises.size} active agent tasks...`);
+            this.logger.info(`Waiting for ${this.activeTaskPromises.size} active agent tasks...`);
             await Promise.all(Array.from(this.activeTaskPromises));
         }
 
-        this.logger.info('[SessionManager] All agent tasks finished. Freezing active sessions...');
+        this.logger.info('All agent tasks finished. Freezing active sessions...');
 
         // 遍歷所有記憶體中活躍的會話，更新為 SUSPENDED 凍結狀態並保存至磁碟
         // 使用 Promise.all 並行寫入，加速停機流程
@@ -135,9 +136,9 @@ export class SessionManager implements ILifecycle {
                 session.touch();
                 try {
                     await this.sessionRepo.save(session);
-                    this.logger.info(`[SessionManager] Suspended active session ${session.id} due to graceful shutdown`);
+                    this.logger.info(`Suspended active session ${session.id} due to graceful shutdown`);
                 } catch (err: any) {
-                    this.logger.error(`[SessionManager] Failed to suspend session ${session.id}: ${err.message}`);
+                    this.logger.error(`Failed to suspend session ${session.id}: ${err.message}`);
                 }
             }
         });
@@ -145,7 +146,7 @@ export class SessionManager implements ILifecycle {
         await Promise.all(stopPromises);
 
         this.activeSessions.clear();
-        this.logger.info('[SessionManager] SessionManager stopped');
+        this.logger.info('SessionManager stopped');
     }
 
     /**
@@ -173,7 +174,7 @@ export class SessionManager implements ILifecycle {
         // 建立會話時，一併註冊與建立 MainAgent (強制預期此時不應存在同名 Agent)
         await this.agentManager.spawnAgent(agentType, mainAgentId, sessionId);
 
-        this.logger.info(`[SessionManager] Created new session: ${sessionId} (${workspaceType}) for agent: ${mainAgentId} of type: ${agentType}`);
+        this.logger.info(`Created new session: ${sessionId} (${workspaceType}) for agent: ${mainAgentId} of type: ${agentType}`);
         return session;
     }
 
@@ -196,10 +197,10 @@ export class SessionManager implements ILifecycle {
 
             this.activeSessions.set(sessionId, session);
 
-            this.logger.info(`[SessionManager] Loaded session: ${sessionId} from repository`);
+            this.logger.info(`Loaded session: ${sessionId} from repository`);
             return session;
         } catch (err: any) {
-            this.logger.error(`[SessionManager] Failed to load session ${sessionId}: ${err.message}`);
+            this.logger.error(`Failed to load session ${sessionId}: ${err.message}`);
             throw err;
         }
     }
@@ -225,7 +226,7 @@ export class SessionManager implements ILifecycle {
         session.status = SessionState.INTERRUPTED;
         session.touch();
         await this.sessionRepo.save(session);
-        this.logger.info(`[SessionManager] Session ${sessionId} marked as INTERRUPTED (Waiting for HITL)`);
+        this.logger.info(`Session ${sessionId} marked as INTERRUPTED (Waiting for HITL)`);
     }
 
     /**
@@ -240,7 +241,7 @@ export class SessionManager implements ILifecycle {
         session.status = SessionState.ACTIVE;
         session.touch();
         await this.sessionRepo.save(session);
-        this.logger.info(`[SessionManager] Session ${sessionId} resumed to ACTIVE`);
+        this.logger.info(`Session ${sessionId} resumed to ACTIVE`);
         return session;
     }
 
@@ -265,7 +266,7 @@ export class SessionManager implements ILifecycle {
             sessionId
         });
         
-        this.logger.info(`[SessionManager] Session ${sessionId} archived and cleared from memory`);
+        this.logger.info(`Session ${sessionId} archived and cleared from memory`);
     }
 
     /**
@@ -284,7 +285,7 @@ export class SessionManager implements ILifecycle {
         // 確保 Session 存在 (Fail-Fast: 僅處理已存在記憶體的活躍會話，徹底杜絕 Session Load Race)
         const session = this.getSession(sessionId);
         if (!session) {
-            this.logger.warn(`[SessionManager] Dropped message: Session ${sessionId} is not active in memory.`);
+            this.logger.warn(`Dropped message: Session ${sessionId} is not active in memory.`);
             return;
         }
 
@@ -334,14 +335,14 @@ export class SessionManager implements ILifecycle {
         for (const [senderId, blocks] of senderBlocksMap.entries()) {
             appendTasks.push(
                 this.dataBlockRepo.appendForAgent(sessionId, senderId, blocks).catch((e: any) => {
-                    this.logger.error(`[SessionManager] Failed to batch append sender history for ${senderId}: ${e}`);
+                    this.logger.error(`Failed to batch append sender history for ${senderId}: ${e}`);
                 })
             );
         }
         for (const [targetId, blocks] of targetBlocksMap.entries()) {
             appendTasks.push(
                 this.dataBlockRepo.appendForAgent(sessionId, targetId, blocks).catch((e: any) => {
-                    this.logger.error(`[SessionManager] Failed to batch append target history for ${targetId}: ${e}`);
+                    this.logger.error(`Failed to batch append target history for ${targetId}: ${e}`);
                 })
             );
         }
@@ -352,7 +353,7 @@ export class SessionManager implements ILifecycle {
         // 4. 背景非同步執行舊紀錄壓縮 (每個 Sender 只需要觸發一次)
         for (const senderId of sendersToCompact) {
             this.compactAgentHistory(sessionId, senderId).catch((e: any) => {
-                this.logger.error(`[SessionManager] Failed to compact history for ${senderId}: ${e}`);
+                this.logger.error(`Failed to compact history for ${senderId}: ${e}`);
             });
         }
 
@@ -379,7 +380,7 @@ export class SessionManager implements ILifecycle {
             session.registerAgentId(agentId);
 
             if (newState === 'IDLE' && session.hasPendingMessages(agentId)) {
-                this.logger.info(`[SessionManager] Agent ${agentId} is IDLE and has pending messages. Triggering dispatch.`);
+                this.logger.info(`Agent ${agentId} is IDLE and has pending messages. Triggering dispatch.`);
                 await this.dispatchInboxForAgent(session, agentId);
             }
         }
@@ -393,23 +394,23 @@ export class SessionManager implements ILifecycle {
         const sessionId = event.sessionId;
 
         if (!sessionId) {
-            this.logger.warn(`[SessionManager] Ignored projection toggle: Missing sessionId.`);
+            this.logger.warn(`Ignored projection toggle: Missing sessionId.`);
             return;
         }
 
         // 確保 Session 存在 (Fail-Fast)
         const session = this.getSession(sessionId);
         if (!session) {
-            this.logger.warn(`[SessionManager] Dropped projection toggle: Session ${sessionId} is not active in memory.`);
+            this.logger.warn(`Dropped projection toggle: Session ${sessionId} is not active in memory.`);
             return;
         }
 
         if (enable) {
             session.setProjectedBodyId(controllerId, targetAgentId);
-            this.logger.info(`[SessionManager] Projection started: ${controllerId} -> ${targetAgentId} in session`);
+            this.logger.info(`Projection started: ${controllerId} -> ${targetAgentId} in session`);
         } else {
             session.setProjectedBodyId(controllerId, null);
-            this.logger.info(`[SessionManager] Projection ended for ${controllerId} in session`);
+            this.logger.info(`Projection ended for ${controllerId} in session`);
         }
 
         if (this.sessionRepo.save) {
@@ -435,7 +436,7 @@ export class SessionManager implements ILifecycle {
             // 排隊機制：如果 Agent 正在忙碌，則不派發，讓訊息留在 Inbox 內。
             // 系統會透過 handleAgentStateChanged 監聽 IDLE 事件並再次觸發 dispatch。
             if (mainAgent.getState() === AgentState.BUSY) {
-                this.logger.debug(`[SessionManager] Agent ${agentId} is BUSY. Messages will be queued in inbox.`);
+                this.logger.debug(`Agent ${agentId} is BUSY. Messages will be queued in inbox.`);
                 return;
             }
 
@@ -451,7 +452,7 @@ export class SessionManager implements ILifecycle {
             // 若本尊正在投影 (靈魂轉移)，透過 ProjectionHandler 產生合成的執行器處理 Inbox
             if (projectedBodyId && bodyAgent) {
                 if (!mainAgent.projectionHandler || mainAgent.projectionHandler.body.id !== projectedBodyId) {
-                    this.logger.info(`[SessionManager] Agent ${agentId} is projecting into ${projectedBodyId}. Initializing stateful ProjectionHandler!`);
+                    this.logger.info(`Agent ${agentId} is projecting into ${projectedBodyId}. Initializing stateful ProjectionHandler!`);
                     mainAgent.projectionHandler = new ProjectionHandler(mainAgent, bodyAgent, this.dataBlockRepo, this.config);
                 }
                 workerAgent = mainAgent.projectionHandler as any;
@@ -461,11 +462,11 @@ export class SessionManager implements ILifecycle {
 
             // 獨立非同步並行處理 (不 await，讓它在背景跑)
             const resumePromise = workerAgent.resume(messages).catch((e: any) => {
-                this.logger.error(`[SessionManager] Agent ${workerAgent.id} failed to resume: ${e}`);
+                this.logger.error(`Agent ${workerAgent.id} failed to resume: ${e}`);
             }).finally(async () => {
                 // 確保對話結束後，將本尊的最新狀態 (如 Token 消耗量、歷史指針) 存檔
                 await this.agentManager.saveAgent(mainAgent.id).catch((e: any) => {
-                    this.logger.error(`[SessionManager] Failed to save main agent ${mainAgent.id} state: ${e}`);
+                    this.logger.error(`Failed to save main agent ${mainAgent.id} state: ${e}`);
                 });
 
                 this.activeTaskPromises.delete(resumePromise);
@@ -474,11 +475,11 @@ export class SessionManager implements ILifecycle {
 
             // 保存會話狀態 (更新 Inbox 狀態)
             await this.sessionRepo.save(session).catch((e: any) => {
-                this.logger.error(`[SessionManager] Failed to save session state: ${e}`);
+                this.logger.error(`Failed to save session state: ${e}`);
             });
 
         } catch (e) {
-            this.logger.error(`[SessionManager] Failed to dispatch inbox for agent ${agentId}: ${e}`);
+            this.logger.error(`Failed to dispatch inbox for agent ${agentId}: ${e}`);
         }
     }
 
@@ -519,10 +520,10 @@ export class SessionManager implements ILifecycle {
             if (changed) {
                 // 如果有任何改變，覆寫回檔案
                 await this.dataBlockRepo.saveForAgent(sessionId, agentId, allBlocks);
-                this.logger.debug(`[SessionManager] Compacted and offloaded old history for agent ${agentId}`);
+                this.logger.debug(`Compacted and offloaded old history for agent ${agentId}`);
             }
         } catch (e) {
-            this.logger.error(`[SessionManager] Failed to compact history for agent ${agentId}: ${e}`);
+            this.logger.error(`Failed to compact history for agent ${agentId}: ${e}`);
         }
     }
 }

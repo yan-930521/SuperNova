@@ -1,24 +1,27 @@
+import { ConsoleTransport } from '@core/infra/transports';
 import { PromptTemplate } from '@langchain/core/prompts';
 
-import { LLMProvider } from '../infra/llm/LLMProvider';
 import { Config } from '../config/Config';
-import { LogManager } from '../infra/LogManager';
-import { GraphEdge, GraphNode, IGraphRepository } from '../domain/IGraphRepository';
-import { IDataBlockRepository } from '../domain/IRepository';
-import { ILifecycle } from '../lifecycle/ILifecycle';
-import { DataBlock } from '../messaging/DataBlock';
 import {
     AgentEvent, HookEvent, IEvent, IEventBus, PromptSectionIndex, SystemEvent
 } from '../domain/IBus';
+import { GraphEdge, GraphNode, IGraphRepository } from '../domain/IGraphRepository';
+import { IDataBlockRepository } from '../domain/IRepository';
+import { LLMProvider } from '../infra/llm/LLMProvider';
+import { LogManager } from '../infra/LogManager';
+import { ILifecycle } from '../lifecycle/ILifecycle';
+import { DataBlock } from '../messaging/DataBlock';
+import {
+    GRAPH_EXTRACTOR_PROMPT, GRAPH_EXTRACTOR_TYPE, SESSION_SUMMARY_PROMPT
+} from '../prompts/memory.prompt';
 import { IdGenerator } from '../utils/IdGenerator';
-import { GRAPH_EXTRACTOR_PROMPT, GRAPH_EXTRACTOR_TYPE, SESSION_SUMMARY_PROMPT } from '../prompts/memory.prompt';
 
 /**
  * 記憶萃取引擎 (Memory Manager)
  * 負責將對話歷史 (DataBlocks/Oplog) 轉換為 Graph Memory 節點與邊。
  */
 export class MemoryManager implements ILifecycle {
-    private readonly logger = LogManager.recorder;
+    private readonly logger = new LogManager({ type: 'SYSTEM', name: 'MemoryManager' }).addTransport(new ConsoleTransport('DEBUG'));
 
     constructor(
         private readonly config: Config,
@@ -37,7 +40,7 @@ export class MemoryManager implements ILifecycle {
     private lastTickCheckTime: number = 0;
 
     public async initialize(): Promise<void> {
-        this.logger.info('[MemoryManager] Initializing Memory Manager...');
+        this.logger.info('Initializing Memory Manager...');
 
         this.currentLogicalDayStr = this.getLogicalDateStr(Date.now(), this.config.agent.daily_optimization_time);
 
@@ -50,11 +53,11 @@ export class MemoryManager implements ILifecycle {
     }
 
     public async start(): Promise<void> {
-        this.logger.info('[MemoryManager] Started.');
+        this.logger.info('Started.');
     }
 
     public async stop(): Promise<void> {
-        this.logger.info('[MemoryManager] Stopping...');
+        this.logger.info('Stopping...');
     }
 
     /**
@@ -68,7 +71,7 @@ export class MemoryManager implements ILifecycle {
 
         if (this.extractingSessions.has(sessionId)) return;
 
-        this.logger.info(`[MemoryManager] Triggering background memory extraction for closed session: ${sessionId}`);
+        this.logger.info(`Triggering background memory extraction for closed session: ${sessionId}`);
 
         this.extractingSessions.add(sessionId);
         try {
@@ -76,11 +79,11 @@ export class MemoryManager implements ILifecycle {
             for (const agentId of agentIds) {
                 this.extractAndSaveSessionMemory(sessionId, agentId)
                     .catch((err: any) => {
-                        this.logger.error(`[MemoryManager] Failed to extract memory for session ${sessionId}, agent ${agentId}: ${err.message}`);
+                        this.logger.error(`Failed to extract memory for session ${sessionId}, agent ${agentId}: ${err.message}`);
                     });
             }
         } catch (err: any) {
-            this.logger.error(`[MemoryManager] Error fetching agents for closed session ${sessionId}: ${err.message}`);
+            this.logger.error(`Error fetching agents for closed session ${sessionId}: ${err.message}`);
         } finally {
             this.extractingSessions.delete(sessionId);
         }
@@ -115,12 +118,12 @@ export class MemoryManager implements ILifecycle {
 
                 const unextractedBlocks = allBlocks.filter(b => !b.isExtracted && (b.type === 'human' || b.type === 'ai'));
                 if (unextractedBlocks.length >= this.config.agent.memory_extract_threshold) {
-                    this.logger.info(`[MemoryManager] Unextracted blocks for agent ${agentId} reached threshold (${this.config.agent.memory_extract_threshold}). Triggering background extraction...`);
+                    this.logger.info(`Unextracted blocks for agent ${agentId} reached threshold (${this.config.agent.memory_extract_threshold}). Triggering background extraction...`);
 
                     this.extractingSessions.add(sessionId);
                     this.extractAndSaveSessionMemory(sessionId, agentId)
                         .catch((err: any) => {
-                            this.logger.error(`[MemoryManager] Failed to extract memory for session ${sessionId}, agent ${agentId}: ${err.message}`);
+                            this.logger.error(`Failed to extract memory for session ${sessionId}, agent ${agentId}: ${err.message}`);
                         })
                         .finally(() => {
                             this.extractingSessions.delete(sessionId);
@@ -128,7 +131,7 @@ export class MemoryManager implements ILifecycle {
                 }
             }
         } catch (err: any) {
-            this.logger.error(`[MemoryManager] Error checking extraction threshold: ${err.message}`);
+            this.logger.error(`Error checking extraction threshold: ${err.message}`);
         }
     }
 
@@ -220,7 +223,7 @@ export class MemoryManager implements ILifecycle {
                             content: memoryContext
                         });
                         
-                        this.logger.info(`[MemoryManager] Injected ${graphContext.nodes.length} graph memory nodes and ${graphContext.edges.length} edges for context retrieval.`);
+                        this.logger.info(`Injected ${graphContext.nodes.length} graph memory nodes and ${graphContext.edges.length} edges for context retrieval.`);
                     }
                 }
             }
@@ -247,12 +250,12 @@ export class MemoryManager implements ILifecycle {
                         content: episodicContext
                     });
 
-                    this.logger.info(`[MemoryManager] Injected ${recentSummaries.length} daily summaries for episodic memory retrieval.`);
+                    this.logger.info(`Injected ${recentSummaries.length} daily summaries for episodic memory retrieval.`);
                 }
             }
 
         } catch (err: any) {
-            this.logger.error(`[MemoryManager] Failed to retrieve dynamic context: ${err.message}`);
+            this.logger.error(`Failed to retrieve dynamic context: ${err.message}`);
         }
     }
 
@@ -261,7 +264,7 @@ export class MemoryManager implements ILifecycle {
      */
     private async handleSessionOptimization(event: IEvent<SystemEvent.SessionOptimization>): Promise<void> {
         const sessionId = event.payload.sessionId;
-        this.logger.info(`[MemoryManager] Starting daily session optimization for session ${sessionId}...`);
+        this.logger.info(`Starting daily session optimization for session ${sessionId}...`);
 
         try {
             const agentIds = await this.dataBlockRepo.listAgentsForSession(sessionId);
@@ -286,7 +289,7 @@ export class MemoryManager implements ILifecycle {
 
                         const summaryChain = summaryPrompt.pipe(model);
 
-                        this.logger.info(`[MemoryManager] Generating daily summary...`);
+                        this.logger.info(`Generating daily summary...`);
                         const response = await summaryChain.invoke({ conversation: dialogue });
 
                         // 儲存總結 (檔名可以加上 agentId 以免覆蓋)
@@ -297,10 +300,10 @@ export class MemoryManager implements ILifecycle {
                     await this.dataBlockRepo.rotateHistoryFile(sessionId, agentId, dateStr);
                 }
 
-                this.logger.info(`[MemoryManager] Session optimization completed for session ${sessionId}.`);
+                this.logger.info(`Session optimization completed for session ${sessionId}.`);
             }
         } catch (err: any) {
-            this.logger.error(`[MemoryManager] Session optimization failed for session ${sessionId}: ${err.message}`);
+            this.logger.error(`Session optimization failed for session ${sessionId}: ${err.message}`);
         }
     }
 
@@ -319,7 +322,7 @@ export class MemoryManager implements ILifecycle {
 
         // 偵測到換日
         if (this.currentLogicalDayStr !== todayLogicalStr) {
-            this.logger.info(`[MemoryManager] Logical day flipped from ${this.currentLogicalDayStr} to ${todayLogicalStr}. Scheduling daily optimizations...`);
+            this.logger.info(`Logical day flipped from ${this.currentLogicalDayStr} to ${todayLogicalStr}. Scheduling daily optimizations...`);
 
             const dayToSummarize = this.currentLogicalDayStr;
             this.currentLogicalDayStr = todayLogicalStr;
@@ -336,7 +339,7 @@ export class MemoryManager implements ILifecycle {
         for (const [sessionId, targetDate] of this.pendingOptimizations.entries()) {
             const lastTime = this.lastMessageTimes.get(sessionId) || 0;
             if (event.timestamp - lastTime >= IDLE_THRESHOLD) {
-                this.logger.info(`[MemoryManager] Session ${sessionId} has been idle for ${IDLE_THRESHOLD / 1000}s after logical day flip. Triggering optimization...`);
+                this.logger.info(`Session ${sessionId} has been idle for ${IDLE_THRESHOLD / 1000}s after logical day flip. Triggering optimization...`);
                 this.pendingOptimizations.delete(sessionId);
 
                 this.eventBus.publish({
@@ -387,7 +390,7 @@ export class MemoryManager implements ILifecycle {
         // 過濾出尚未萃取 (isExtracted !== true) 且為對話類型 ('human' 或是 'ai') 的 Block
         const unextractedBlocks = blocks.filter(b => !b.isExtracted && (b.type === 'human' || b.type === 'ai'));
         if (unextractedBlocks.length === 0) {
-            this.logger.debug(`[MemoryManager] No new blocks to extract for session ${sessionId}, agent ${agentId}.`);
+            this.logger.debug(`No new blocks to extract for session ${sessionId}, agent ${agentId}.`);
             return;
         }
 
@@ -415,16 +418,16 @@ export class MemoryManager implements ILifecycle {
             const graphPrompt = PromptTemplate.fromTemplate(GRAPH_EXTRACTOR_PROMPT);
             const graphChain = graphPrompt.pipe(model.withStructuredOutput(GRAPH_EXTRACTOR_TYPE));
 
-            this.logger.debug(`[MemoryManager] Extracting factual graph triples for session ${sessionId} (${agentId}) batch ${i / BATCH_SIZE + 1}...`);
+            this.logger.debug(`Extracting factual graph triples for session ${sessionId} (${agentId}) batch ${i / BATCH_SIZE + 1}...`);
             const graphResult = await graphChain.invoke({ conversation: dialogue });
 
             if (!graphResult.entities || graphResult.entities.length === 0) {
-                this.logger.debug(`[MemoryManager] No entities extracted in this batch.`);
+                this.logger.debug(`No entities extracted in this batch.`);
                 await this.markBlocksAsExtracted(sessionId, agentId, blocks, batchBlocks);
                 continue;
             }
 
-            this.logger.debug(`[MemoryManager] Successfully extracted ${graphResult.entities.length} entities and ${graphResult.relations?.length || 0} relations.`);
+            this.logger.debug(`Successfully extracted ${graphResult.entities.length} entities and ${graphResult.relations?.length || 0} relations.`);
 
             // ==========================================
             // 2. 第二階段：沉澱至圖譜資料庫 (Graph Repository)
@@ -436,7 +439,7 @@ export class MemoryManager implements ILifecycle {
 
                 let node = await this.graphRepo.getNode(sessionId, nodeId);
                 if (!node) {
-                    this.logger.debug(`[MemoryManager] Generating embedding for new node: ${entity.id}`);
+                    this.logger.debug(`Generating embedding for new node: ${entity.id}`);
                     // 將 description 加入記憶體文本，增加向量比對的語意豐富度
                     const memoryText = `${entity.id}: ${entity.description}`;
                     const embedding = await this.llmProvider.generateEmbeddings(memoryText);
@@ -477,7 +480,7 @@ export class MemoryManager implements ILifecycle {
             }
 
             await this.markBlocksAsExtracted(sessionId, agentId, blocks, batchBlocks);
-            this.logger.info(`[MemoryManager] Batch ${i / BATCH_SIZE + 1} memory graph persistence completed.`);
+            this.logger.info(`Batch ${i / BATCH_SIZE + 1} memory graph persistence completed.`);
         }
     }
 

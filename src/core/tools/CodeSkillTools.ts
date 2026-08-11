@@ -39,7 +39,7 @@ export class CreateCodeSkillTool extends BaseTool {
                 args.code
             );
             if (this.skillManager) {
-                this.skillManager.invalidateCache(args.skillName);
+                this.skillManager.invalidateCache(context.sessionId, context.agentId, args.skillName);
             }
             return `Successfully created CodeSkill ${args.skillName} (Version: ${versionId}). It has been registered in the skills index.`;
         } catch (error: any) {
@@ -118,7 +118,7 @@ export class RollbackCodeSkillTool extends BaseTool {
         try {
             await this.codeSkillRepo.rollbackSkill(context.sessionId, context.agentId, args.skillName, args.versionId);
             if (this.skillManager) {
-                this.skillManager.invalidateCache(args.skillName);
+                this.skillManager.invalidateCache(context.sessionId, context.agentId, args.skillName);
             }
             return `Successfully rolled back CodeSkill ${args.skillName}.`;
         } catch (error: any) {
@@ -178,7 +178,7 @@ export class DeleteCodeSkillTool extends BaseTool {
             } else {
                 await this.codeSkillRepo.deleteSkill(context.sessionId, context.agentId, args.skillName);
                 if (this.skillManager) {
-                    this.skillManager.invalidateCache(args.skillName);
+                    this.skillManager.invalidateCache(context.sessionId, context.agentId, args.skillName);
                 }
                 return `Successfully deleted CodeSkill ${args.skillName} entirely.`;
             }

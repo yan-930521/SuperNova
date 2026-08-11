@@ -18,7 +18,7 @@ export class ConsoleTransport implements ILogTransport {
     const traceInfo = entry.trace_id ? ` [Trace: ${entry.trace_id}]` : '';
     const spanInfo = entry.span_id ? ` [Span: ${entry.span_id}]` : '';
     const typeInfo = `[${entry.type}]`;
-    const prefixStr = this.prefix ? `${this.prefix} ` : '';
+    const prefixStr = this.prefix ? `${this.prefix} ` : this.name ? `[${this.name}] ` : '';
     
     const formattedMessage = `[${timestamp}] [${entry.level}] ${typeInfo}${sessionInfo}${traceInfo}${spanInfo} ${prefixStr}${entry.message}`;
 

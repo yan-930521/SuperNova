@@ -18,14 +18,12 @@ interface ICallbackRegistration {
  * 3. 基於 sessionId 的租戶安全隔離路由。
  */
 export class EventBus implements IEventBus {
-    private readonly logger = new LogManager({ type: 'SYSTEM', agent_id: 'ComponentContainer' });
+    private readonly logger = new LogManager({ type: 'SYSTEM', name: 'EventBus' }).addTransport(new ConsoleTransport('ERROR'));
     private readonly callbackSubscribers = new Map<string, Set<ICallbackRegistration>>();
     private readonly handlerIndex = new Map<Function, { type: string; reg: ICallbackRegistration }>();
     private readonly targetCache: LRUCache<string, ICallbackRegistration[]>;
 
     constructor(config?: any) {
-        this.logger.addTransport(new ConsoleTransport("ERROR"));
-        
         const lruSize = config?.cache?.event_bus_lru_size ?? DEFAULT_CONFIG.cache.event_bus_lru_size ?? 500;
         this.targetCache = new LRUCache<string, ICallbackRegistration[]>(lruSize);
     }
@@ -38,7 +36,7 @@ export class EventBus implements IEventBus {
         if (regs.length === 0) return;
 
         setImmediate(() => {
-            this.logger.debug(`[EventBus] Publishing event: ${event.type} to ${regs.length} callback subscribers`, { type: 'SYSTEM' });
+            this.logger.debug(`Publishing event: ${event.type} to ${regs.length} callback subscribers`, { type: 'SYSTEM' });
 
             regs.forEach(reg => {
                 try {
@@ -46,7 +44,7 @@ export class EventBus implements IEventBus {
                     // 對於異步 Promise，防禦性捕獲其錯誤，防止異步 reject 造成全域進程崩潰
                     if (result instanceof Promise) {
                         result.catch(error => {
-                            this.logger.error(`[EventBus] Async subscriber failed for event: ${event.type}`, {
+                            this.logger.error(`Async subscriber failed for event: ${event.type}`, {
                                 type: 'SYSTEM',
                                 payload: { error: error instanceof Error ? error.message : String(error) }
                             });
@@ -54,7 +52,7 @@ export class EventBus implements IEventBus {
                     }
                 } catch (error) {
                     // 捕獲同步錯誤
-                    this.logger.error(`[EventBus] Sync subscriber failed for event: ${event.type}`, {
+                    this.logger.error(`Sync subscriber failed for event: ${event.type}`, {
                         type: 'SYSTEM',
                         payload: { error: error instanceof Error ? error.message : String(error) }
                     });
@@ -70,13 +68,13 @@ export class EventBus implements IEventBus {
         const regs = this.getTargetCallbackRegistrations(event.type, event.sessionId);
         if (regs.length === 0) return [];
 
-        this.logger.debug(`[EventBus] Async publishing event: ${event.type} to ${regs.length} callback subscribers`, { type: 'SYSTEM' });
+        this.logger.debug(`Async publishing event: ${event.type} to ${regs.length} callback subscribers`, { type: 'SYSTEM' });
 
         const promises = regs.map(async (reg) => {
             try {
                 return await reg.handler(event);
             } catch (error: any) {
-                this.logger.error(`[EventBus] Subscriber failed in publishAsync for event: ${event.type}`, {
+                this.logger.error(`Subscriber failed in publishAsync for event: ${event.type}`, {
                     type: 'SYSTEM',
                     payload: { error: error.message }
                 });
@@ -108,7 +106,7 @@ export class EventBus implements IEventBus {
         this.callbackSubscribers.get(type)!.add(reg);
         this.handlerIndex.set(handler, { type, reg });
         this.targetCache.clear(); // 訂閱異動時清空快取
-        this.logger.debug(`[EventBus] Callback subscribed to: ${type}${options?.sessionId ? ` (Session: ${options.sessionId})` : ''}`, { type: 'SYSTEM' });
+        this.logger.debug(`Callback subscribed to: ${type}${options?.sessionId ? ` (Session: ${options.sessionId})` : ''}`, { type: 'SYSTEM' });
     }
 
     /**
@@ -127,7 +125,7 @@ export class EventBus implements IEventBus {
             }
             this.handlerIndex.delete(handler);
             this.targetCache.clear(); // 訂閱異動時清空快取
-            this.logger.info(`[EventBus] Callback unsubscribed from: ${type}`, { type: 'SYSTEM' });
+            this.logger.info(`Callback unsubscribed from: ${type}`, { type: 'SYSTEM' });
         }
     }
 

@@ -4,8 +4,9 @@ import * as path from 'path';
 
 import { BaseAgentData } from '../../agent/BaseAgent';
 import { Config } from '../../config/Config';
-import { LogManager } from '../LogManager';
 import { IAgentStateRepository } from '../../domain/IRepository';
+import { LogManager } from '../LogManager';
+import { ConsoleTransport } from '../transports';
 
 /**
  * FileSystemAgentStateRepository
@@ -13,7 +14,7 @@ import { IAgentStateRepository } from '../../domain/IRepository';
  * 保存於 `workspace/session/{sessionId}/agents/{agentId}/`
  */
 export class FileSystemAgentStateRepository implements IAgentStateRepository {
-    private readonly logger = LogManager.recorder;
+    private readonly logger = new LogManager({ type: 'SYSTEM', name: 'AgentStateRepository' }).addTransport(new ConsoleTransport('DEBUG'));
 
     constructor(
         private readonly config: Config,
@@ -39,9 +40,9 @@ export class FileSystemAgentStateRepository implements IAgentStateRepository {
         try {
             const data = JSON.stringify(state, null, 2);
             await fs.writeFile(filePath, data, 'utf-8');
-            this.logger.debug(`[AgentStateRepository] State saved successfully to ${filePath}`);
+            this.logger.debug(`State saved successfully to ${filePath}`);
         } catch (err: any) {
-            this.logger.error(`[AgentStateRepository] Failed to save state to ${filePath}: ${err.message}`);
+            this.logger.error(`Failed to save state to ${filePath}: ${err.message}`);
             throw err;
         }
     }
@@ -56,14 +57,14 @@ export class FileSystemAgentStateRepository implements IAgentStateRepository {
         const filePath = this.getFileName(sessionId, agentId);
 
         if (!existsSync(filePath)) {
-            this.logger.debug(`[AgentStateRepository] State file not found: ${filePath}`);
+            this.logger.debug(`State file not found: ${filePath}`);
             return null;
         }
         try {
             const content = await fs.readFile(filePath, 'utf-8');
             return JSON.parse(content) as BaseAgentData;
         } catch (err: any) {
-            this.logger.error(`[AgentStateRepository] Failed to load state from ${filePath}: ${err.message}`);
+            this.logger.error(`Failed to load state from ${filePath}: ${err.message}`);
             throw err;
         }
     }
