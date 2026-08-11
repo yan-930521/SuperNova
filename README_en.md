@@ -77,16 +77,42 @@ bun run bench:oom       # Test writing 100k history records and OOM defense
 ## Project Structure
 
 ```text
-SuperNova/
-├── src/
-│   ├── core/        # Core Engine: EventBus, Agent, Memory, Session, etc.
-│   └── package/     # Domain Extensions: Minecraft integration and other applications
-├── demo/            # Demo programs and performance benchmark scripts
-├── docs/            # Architecture design documents (ARCH.md as the entry point)
-├── web/             # Web frontend interface
-├── scripts/         # Helper scripts
-├── config.yaml      # System configuration file
-└── .env.template    # Environment variables template
+SuperNova (Runtime Kernel)
+├── 1. Agent Layer - Responsible for thinking and decision-making
+│   ├── MainAgent          (Brain: Emotion, High-level Planning, Consciousness Projection)
+│   ├── TaskAgent          (Left Brain: Focuses on IDE logic and task flow execution)
+│   ├── EmbodiedAgent      (Right Brain: Interacts with physical environments, dynamic StateRegistry)
+│   └── ProjectionHandler  (Stateless projection mechanism, manages context merging)
+│
+├── 2. Skill & Tool Layer - Responsible for external interactions
+│   ├── ToolRegistry       (Tool registry, supports dynamic Delegation)
+│   ├── BaseTool           (Standard static tools: File I/O, Bash)
+│   └── skill/             (Self-evolving skill ecosystem)
+│       ├── SkillManager   (Skill manager: LRUCache caching, Auto-Invalidation)
+│       ├── CodeSkill      (TypeScript skills dynamically written and loaded by LLM)
+│       └── EmbodiedSDK    (Self-documenting SDK exposed for LLM comprehension)
+│
+├── 3. State & Memory Layer - Responsible for long-term stability
+│   ├── SessionManager     (Session inbox, message dispatching, Agent freeze/wakeup)
+│   ├── MemoryManager      (Gatekeeper for long-term memory)
+│   │   ├── GraphMemory    (Graph Memory: Extracts entities/relations, dynamic Prompt injection)
+│   │   └── EpisodicMemory (Episodic Memory: Idle daily summary, condensed AI diary)
+│   └── DataBlock          (Data carrier: Supports large string Blob offloading, sliding window compression)
+│
+├── 4. Scheduling & Event Layer - Responsible for asynchronous decoupling
+│   ├── EventBus           (Neural network: Async publishing, declarative subscription, isolated security)
+│   └── TaskManager        (Scheduling center: DAG dependency resolution, cascading cancellation, background broadcasting)
+│
+├── 5. Infrastructure Layer - Low-level generic support
+│   ├── RuntimeKernel      (Lifecycle hub: IoC container, bootstrap/graceful shutdown)
+│   ├── WorkspaceManager   (Dual-tier sandbox: Persistent & Volatile Git Worktree isolation)
+│   ├── repositories/      (File/DB storage: Session, DataBlock, AgentState)
+│   └── LogManager         (Dual-track logging: Global errors + Agent-exclusive Oplog)
+│
+└── 6. Package/Domain Layer - Concrete application integration
+    └── package/underworld (Minecraft Embodied AI sandbox integration)
+        ├── BotManager     (Manages mineflayer instances)
+        └── skills/        (Concrete implementations of Action/Observation Skills)
 ```
 
 > **Architecture Boundary**: Modules in `src/core/` are uniformly exported via `src/core/index.ts`. `src/package/` must reference core modules through this entry point; deep coupling is strictly prohibited.

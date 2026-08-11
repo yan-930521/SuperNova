@@ -73,16 +73,42 @@ bun run bench:oom       # 測試 10 萬筆歷史對話寫入與 OOM 防禦
 ## Project Structure
 
 ```text
-SuperNova/
-├── src/
-│   ├── core/        # 核心引擎：EventBus、Agent、Memory、Session 等
-│   └── package/     # 業務擴充：Minecraft 整合等領域應用
-├── demo/            # 示範程式與效能壓測腳本
-├── docs/            # 架構設計文件（ARCH.md 為入口）
-├── web/             # Web 前端介面
-├── scripts/         # 輔助腳本
-├── config.yaml      # 系統組態設定檔
-└── .env.template    # 環境變數範本
+SuperNova (Runtime Kernel)
+├── 1. 代理層 (Agent Layer) - 負責思考與決策
+│   ├── MainAgent          (大腦：情感、高階規劃、意識投影)
+│   ├── TaskAgent          (左腦：專注 IDE 邏輯與任務流執行)
+│   ├── EmbodiedAgent      (右腦：與物理環境互動，具備動態 StateRegistry)
+│   └── ProjectionHandler  (無狀態意識投影機制，管理上下文合併)
+│
+├── 2. 技能與工具層 (Skill & Tool Layer) - 負責對外互動
+│   ├── ToolRegistry       (工具註冊表，支援動態分配 Delegate)
+│   ├── BaseTool           (標準靜態工具：讀寫檔案、Bash)
+│   └── skill/             (自進化技能生態系)
+│       ├── SkillManager   (技能管理器：LRUCache 快取、自動失效 Invalidation)
+│       ├── CodeSkill      (可被 LLM 動態編寫、載入的 TypeScript 技能)
+│       └── EmbodiedSDK    (暴露給 LLM 閱讀的自描述 SDK)
+│
+├── 3. 狀態與記憶層 (State & Memory Layer) - 負責長期穩定性
+│   ├── SessionManager     (會話收件箱、訊息派發、Agent 狀態凍結/喚醒)
+│   ├── MemoryManager      (長期記憶守門員)
+│   │   ├── GraphMemory    (圖譜記憶：擷取實體與關係，動態 Prompt 注入)
+│   │   └── EpisodicMemory (情節記憶：閒置換日總結，濃縮 AI 日記)
+│   └── DataBlock          (資料載體：支援大字串 Blob 卸載、滑動視窗壓縮)
+│
+├── 4. 排程與通訊層 (Scheduling & Event Layer) - 負責非同步解耦
+│   ├── EventBus           (神經網路：非同步發布、宣告式訂閱、隔離安全)
+│   └── TaskManager        (排程中心：DAG 依賴解析、級聯取消、背景廣播)
+│
+├── 5. 基礎設施層 (Infrastructure Layer) - 底層通用支援
+│   ├── RuntimeKernel      (生命週期中樞：IoC 容器、啟動/優雅停機)
+│   ├── WorkspaceManager   (雙層沙盒：持久層與揮發層 Git Worktree 隔離)
+│   ├── repositories/      (檔案/資料庫倉儲：Session, DataBlock, AgentState)
+│   └── LogManager         (雙軌日誌：全局報錯 + Agent 專屬 Oplog)
+│
+└── 6. 業務應用層 (Package/Domain Layer) - 實體應用落地
+    └── package/underworld (Minecraft 具身智能沙盒整合)
+        ├── BotManager     (管理 mineflayer 實例)
+        └── skills/        (具體實作的 Action/Observation Skills)
 ```
 
 > **架構邊界**：`src/core/` 透過 `src/core/index.ts` 統一匯出。`src/package/` 必須透過此入口引用核心模組，嚴禁深層耦合。
