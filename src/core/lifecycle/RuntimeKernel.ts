@@ -95,7 +95,7 @@ export class RuntimeKernel implements ILifecycle {
       this.container.register('AgentStateRepository', agentStateRepo);
       this.container.register('GraphRepository', graphRepo);
 
-      this.logger.info('Kernel components registered successfully');
+      this.logger.debug('Kernel components registered successfully');
     } catch (error: any) {
       this.logger.error(`Kernel initialization failed: ${error.message}`);
       throw error;

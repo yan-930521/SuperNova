@@ -72,7 +72,7 @@ export class AgentManager implements ILifecycle {
     // ==========================================
 
     public async initialize(): Promise<void> {
-        this.logger.debug('Initialized.');
+        this.logger.info('Initialized.');
 
         // 註冊全局 Hook，在每個 Agent 思考前注入隊友狀態
         this.eventBus.subscribe(HookEvent.BeforeAgentStep, async (event: IEvent<HookEvent.BeforeAgentStep>) => {
@@ -105,7 +105,7 @@ export class AgentManager implements ILifecycle {
     }
 
     public async start(): Promise<void> {
-        this.logger.debug('Started.');
+        this.logger.info('Started.');
     }
 
     public async stop(): Promise<void> {

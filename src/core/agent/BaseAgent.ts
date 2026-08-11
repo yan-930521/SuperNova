@@ -471,7 +471,7 @@ export abstract class BaseAgent {
      * 子類別可依需求 Override (例如 TaskAgent 實作 PDCA)
      */
     public async processInbox(messages: DataBlock[], contextOverride?: ContextOverride): Promise<{ usageDelta: UsageStats }> {
-        this.logger.info(`Processing ${messages.length} messages.`);
+        this.logger.debug(`Processing ${messages.length} messages.`);
 
         // 提取覆寫參數 (若無提供則回退到本體狀態)
         const effectiveProfile = contextOverride?.profile ?? this.profile;
@@ -532,7 +532,7 @@ export abstract class BaseAgent {
             senderId: historyTargetId
         });
 
-        this.logger.debug(`LLM Respond with ${newBlocks.length} new blocks.`);
+        this.logger.info(`LLM Respond with ${newBlocks.length} new blocks.`);
 
         // 4. 將決策廣播至整個 Session (若需私訊，LLM 應呼叫 SendMessageTool)
         // newBlocks 裡已經包含了 LLM 思考、工具呼叫、最後回覆的完整陣列

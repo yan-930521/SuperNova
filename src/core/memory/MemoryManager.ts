@@ -223,7 +223,7 @@ export class MemoryManager implements ILifecycle {
                             content: memoryContext
                         });
                         
-                        this.logger.info(`Injected ${graphContext.nodes.length} graph memory nodes and ${graphContext.edges.length} edges for context retrieval.`);
+                        this.logger.debug(`Injected ${graphContext.nodes.length} graph memory nodes and ${graphContext.edges.length} edges for context retrieval.`);
                     }
                 }
             }
@@ -250,7 +250,7 @@ export class MemoryManager implements ILifecycle {
                         content: episodicContext
                     });
 
-                    this.logger.info(`Injected ${recentSummaries.length} daily summaries for episodic memory retrieval.`);
+                    this.logger.debug(`Injected ${recentSummaries.length} daily summaries for episodic memory retrieval.`);
                 }
             }
 
