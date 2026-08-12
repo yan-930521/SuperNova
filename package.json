@@ -11,8 +11,8 @@
         "test:memory": "bun ./demo/test_memory.ts",
         "test:task_lats": "bun ./demo/task_lats_demo.ts",
         "test:task": "bun ./demo/task_assignment.ts",
-        "bench:core": "bun ./demo/benchmark.ts",
-        "bench:oom": "bun ./demo/benchmark_oom.ts"
+        "bench:core": "bun ./demo/benchmark/core_throughput.ts",
+        "bench:oom": "bun ./demo/benchmark/oom_defense.ts"
     },
     "devDependencies": {
         "@types/bun": "^1.3.14",
