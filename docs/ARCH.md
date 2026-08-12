@@ -29,8 +29,9 @@ related_docs:
 *   [任務指派與調度 (`docs/architecture/task/task_dispatch.md`)](./architecture/task/task_dispatch.md)：定義基於事件驅動的 Task 指派閉環。包含 `SpawnAgentTool`、`AssignTaskTool` 與 `UpdateTaskStatusTool` 的權責分離，透過 `BeforeAgentStep` 動態注入任務儀表板 (Task Dashboard) 來解耦 Agent 與單一任務綁定。
 
 ## 3. 狀態與記憶層 (State & Memory Layer)
-*   [記憶與狀態管理 (docs/architecture/core/memory.md)](./architecture/core/memory.md)：包含 `DataBlock` (資料載體、雙軸語意編碼、Claim Check Pattern)、透過 `SessionManager` 實現的收件箱機制、透過 `IDataBlockRepository` 實現的歷史紀錄管理，以及系統安全熔斷機制 (Circuit Breaker)。支援 `DataPointer` 大資料卸載與延遲加載機制，並已整合泛型 `LRUCache` 以確保效能與記憶體安全。具備時間感知插針 (Temporal Injection)、換日總結 (Daily Summary) 與防打斷延遲 (Debounce) 機制。
-*   [圖譜記憶 (docs/architecture/memory/graph_memory.md)](./architecture/memory/graph_memory.md)：圖譜長期記憶架構。定義 `MemoryNode` 實體與 `MemoryEdge` 關聯。透過 `MemoryManager` 在背景依據閾值自動觸發三元組萃取，並支援 Feature Flags 開關 (`enable_graph_memory`, `enable_daily_summary`) 與多代理人 (Multi-Agent) 遍歷處理。具備防重入保護與 Tick 驅動的換日最佳化邏輯。
+*   [記憶與狀態管理 (docs/architecture/core/memory.md)](./architecture/core/memory.md)：包含 `DataBlock` (資料載體、雙軸語意編碼、Claim Check Pattern)、透過 `SessionManager` 實現的收件箱機制、透過 `IDataBlockRepository` 實現的歷史紀錄管理，以及系統安全熔斷機制 (Circuit Breaker)。支援 `DataPointer` 大資料卸載與延遲加載機制，並已整合泛型 `LRUCache` 以確保效能與記憶體安全。具備時間感知插針 (Temporal Injection) 與防打斷延遲 (Debounce) 機制。
+*   [圖譜記憶 (docs/architecture/memory/graph_memory.md)](./architecture/memory/graph_memory.md)：圖譜長期記憶架構。定義 `MemoryNode` 實體與 `MemoryEdge` 關聯。透過 `MemoryManager` 在背景依據閾值自動觸發三元組萃取，並支援 Feature Flags 開關 (`enable_graph_memory`) 與多代理人 (Multi-Agent) 遍歷處理。具備防重入保護機制。
+*   [每日總結與情景記憶 (docs/architecture/memory/daily_summary.md)](./architecture/memory/daily_summary.md)：處理換日邏輯與巨觀情境記憶，包含 Tick 驅動的自動換日、多代理人背景總結，以及歷史對話檔輪替 (Log Rotation)。
 *   [會話與工作階段管理 (`docs/architecture/core/session.md`)](./architecture/core/session.md)：定義 `Session` 與 `Thread` 的生命週期狀態機。負責全局訊息派發 (`SessionManager.dispatchInboxForAgent`)，透過監聽 `AgentStateChanged` 事件主動釋放積壓訊息。已實現 **「統一喚醒 (Unified Wakeup)」** 機制與 **「會話廣播 (Broadcast)」** 分層回覆架構。支援基於 `ISessionRepository`、`IDataBlockRepository`、`IAgentStateRepository` 等儲存庫的持久化。
 
 ## 4. 系統基礎建設 (Infrastructure)

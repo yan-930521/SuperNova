@@ -37,7 +37,6 @@ docs/
     *   `APPROVED`: 已核准，代表該設計已與使用者達成共識，屬於正式開發依據。
     *   `DEPRECATED`: 已過時，代表該設計已被更新的文檔或代碼取代，僅供歷史參考。
 *   `last_updated` (String): 最後更新日期（格式：`YYYY-MM-DD`）。
-*   `author` (String): 撰寫或修改文件的作者（如 `Antigravity & User`）。
 *   `related_codes` (Array[String]): 此架構文件所直接關聯的**程式碼檔案相對路徑連結**。
 *   `related_docs` (Array[String]): 與此文件緊密相關的其他**架構文件相對路徑連結**。
 

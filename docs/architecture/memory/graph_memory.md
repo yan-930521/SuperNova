@@ -53,9 +53,9 @@ related_docs:
 
 這些進階功能可以透過 `Config.ts` 中的布林值進行開關，以適應輕量或重度會話。
 - **記憶圖譜萃取 (`enable_graph_memory`)**：決定是否使用 LLM 結構化輸出在背景提煉對話為三元組。
-- **宏觀情境記憶 / 每日總結 (`enable_daily_summary`)**：控制是否利用 LLM 產生 Markdown 每日總結。
-- **`handleTick` 換日邏輯**：透過 `Tick` 心跳引擎動態計算自訂換日時間。系統利用 `lastMessageTimes` 記錄各 Session 最後活動時間，並以 `pendingOptimizations` 佇列管理待優化任務。滿足換日及防打斷靜默機制 (`daily_optimization_idle_threshold_ms`) 後，即觸發每日總結並自動將 `history.jsonl` 輪替為日期檔。
 - **超大文本自動卸載 (`enable_payload_offload`)**：攔截幾萬字的超大上下文，轉為 `DataPointer`，保護系統記憶體不被撐爆。
 - **多代理人遍歷 (Multi-Agent Support)**：在上述所有萃取與總結過程中，`MemoryManager` 會主動向 Repository 查詢 (`listAgentsForSession`)，遍歷處理該 Session 下所有的子分身與主腦，不遺漏任何 Agent 的歷史。
+
+> 關於換日邏輯 (`handleTick`) 與巨觀情境記憶的機制，已獨立抽離至 [每日總結與情景記憶 (daily_summary.md)](daily_summary.md)。
 
 > 進階功能規劃（向量嵌入、進階圖譜查詢、情緒權重動態調整）請參閱 [圖譜記憶進階規劃](../../todo/graph_memory_advanced.md)。
