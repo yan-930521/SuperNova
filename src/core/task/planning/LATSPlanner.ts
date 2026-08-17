@@ -2,20 +2,29 @@ import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 
 import { LLMProvider } from '../../infra/llm/LLMProvider';
 import { LogManager } from '../../infra/LogManager';
-import { ExpansionSchema, ReflectionSchema, TASK_PROMPTS } from '../../prompts/task.prompt';
+import { ExpansionSchemaHolistic, ExpansionSchemaStepwise, ReflectionSchemaHolistic, ReflectionSchemaStepwise, TASK_PROMPTS } from '../../prompts/task.prompt';
 import { LATSNode } from './LATSNode';
+
+export interface LATSPlannerOptions {
+    objective: string;
+    context: string;
+    maxIterations?: number;
+    mode?: 'holistic' | 'step_by_step';
+    scoringCriteria?: string;
+    expansionHint?: string;
+}
+
 
 export class LATSPlanner {
     constructor(private readonly llmProvider: LLMProvider) {}
 
     /**
      * 執行 MCTS/LATS 演算法，搜尋並產出最佳文字策略
-     * @param objective 最終任務目標
-     * @param context 系統或環境的補充上下文
-     * @param maxIterations 最大搜尋回合數
+     * @param options 搜尋選項 (目標、模式、最大回合、自訂評分標準等)
      */
-    public async search(objective: string, context: string, maxIterations: number = 5): Promise<string> {
-        LogManager.recorder.debug(`[LATSPlanner] Starting search for objective: "${objective.substring(0, 50)}..." (Max Iterations: ${maxIterations})`);
+    public async search(options: LATSPlannerOptions): Promise<string> {
+        const { objective, context, maxIterations = 5, mode = 'holistic', scoringCriteria, expansionHint } = options;
+        LogManager.recorder.debug(`[LATSPlanner] Starting search for objective: "${objective.substring(0, 50)}..." (Mode: ${mode}, Max Iterations: ${maxIterations})`);
         const rootState = `Objective: ${objective}\nContext: ${context}\nPlan: (Not started)`;
         const root = new LATSNode(null, 'Initialize', rootState);
         
@@ -34,7 +43,7 @@ export class LATSPlanner {
 
             // 2. Expansion
             LogManager.recorder.debug(`[LATSPlanner] Expanding node... Calling LLM...`);
-            const children = await this.expand(nodeToExpand);
+            const children = await this.expand(nodeToExpand, options);
             if (children.length === 0) {
                 LogManager.recorder.warn(`[LATSPlanner] Expansion failed (Dead end). Backpropagating score 0.`);
                 this.backpropagate(nodeToExpand, 0);
@@ -44,20 +53,18 @@ export class LATSPlanner {
             LogManager.recorder.debug(`[LATSPlanner] Expanded into ${children.length} candidate actions.`);
 
             // 3. Simulation & Evaluation (Reflection)
-            for (let j = 0; j < children.length; j++) {
-                const child = children[j];
-                LogManager.recorder.debug(`[LATSPlanner] Evaluating child ${j + 1}/${children.length}: "${child.action}"...`);
-                const { score, reflection, isTerminal } = await this.evaluate(child);
+            await Promise.all(children.map(async (child, j) => {
+                const { score, reflection, isTerminal } = await this.evaluate(child, options);
                 child.reflection = reflection;
                 child.isTerminal = isTerminal;
                 
-                LogManager.recorder.debug(`[LATSPlanner] Evaluation result -> Score: ${score}/10, Terminal: ${isTerminal}`);
+                LogManager.recorder.debug(`[LATSPlanner] Evaluated child ${j + 1}/${children.length}: "${child.action}" -> Score: ${score}/10, Terminal: ${isTerminal}`);
                 
                 const normalizedValue = score / 10;
                 
                 // 4. Backpropagation
                 this.backpropagate(child, normalizedValue);
-            }
+            }));
         }
 
         const bestNode = root.getBestSolution();
@@ -97,12 +104,17 @@ export class LATSPlanner {
         }
     }
 
-    private async expand(node: LATSNode): Promise<LATSNode[]> {
+    private async expand(node: LATSNode, options: LATSPlannerOptions): Promise<LATSNode[]> {
         const history = node.getTrajectory().map(n => `Action: ${n.action}\nState: ${n.state}\nFeedback: ${n.reflection || 'None'}`).join('\n---\n');
         
-        const systemPrompt = TASK_PROMPTS.lats.expansion_system;
+        let systemPrompt = options.mode === 'step_by_step' ? TASK_PROMPTS.lats.expansion_system_stepwise : TASK_PROMPTS.lats.expansion_system;
+        
+        if (options.expansionHint) {
+            systemPrompt += `\n\nExpansion Hint / Direction:\n${options.expansionHint}`;
+        }
 
-        const model = this.llmProvider.getModel().withStructuredOutput(ExpansionSchema);
+        const schema = options.mode === 'step_by_step' ? ExpansionSchemaStepwise : ExpansionSchemaHolistic;
+        const model = this.llmProvider.getModel().withStructuredOutput(schema);
         
         try {
             const result = await model.invoke([
@@ -117,15 +129,25 @@ export class LATSPlanner {
         }
     }
 
-    private async evaluate(node: LATSNode): Promise<{ score: number, reflection: string, isTerminal: boolean }> {
-        const systemPrompt = TASK_PROMPTS.lats.evaluation_system;
-
-        const model = this.llmProvider.getModel().withStructuredOutput(ReflectionSchema);
+    private async evaluate(node: LATSNode, options: LATSPlannerOptions): Promise<{ score: number, reflection: string, isTerminal: boolean }> {
+        let systemPrompt = options.mode === 'step_by_step' ? TASK_PROMPTS.lats.evaluation_system_stepwise : TASK_PROMPTS.lats.evaluation_system;
         
+        if (options.scoringCriteria) {
+            systemPrompt += `\n\nAdditional Scoring Criteria:\n${options.scoringCriteria}`;
+        }
+
+        const schema = options.mode === 'step_by_step' ? ReflectionSchemaStepwise : ReflectionSchemaHolistic;
+        const model = this.llmProvider.getModel().withStructuredOutput(schema);
+        
+        const history = node.getTrajectory().map(n => `Action: ${n.action}\nState: ${n.state}`).join('\n---\n');
+        const evaluationPrompt = options.mode === 'step_by_step' 
+            ? `Current Trajectory:\n${history}\n\nEvaluate the LAST step in the trajectory above.`
+            : `Evaluate this plan draft:\n\n${node.state}`;
+
         try {
             const result = await model.invoke([
                 new SystemMessage(systemPrompt),
-                new HumanMessage(`Evaluate this plan draft:\n\n${node.state}`)
+                new HumanMessage(evaluationPrompt)
             ]);
 
             return {

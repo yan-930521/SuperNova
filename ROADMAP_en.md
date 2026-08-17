@@ -47,7 +47,7 @@ After ensuring the stability of the v0.1.0 infrastructure, we have moved towards
 - **Materialized Task System (Completed)**
   - Added the Task system, allowing the main brain and developers to clearly see the execution progress of each step.
   - **Technical Highlights**:
-    - **LATS Strategy Search Engine**: Combines MCTS (Monte Carlo Tree Search) and UCB1 algorithm to perform deep and broad strategy search and reflection before generating the DAG, finding the optimal solution path.
+    - **LATS Strategy Search Engine**: Combines MCTS (Monte Carlo Tree Search) and UCB1 algorithm to perform deep and broad strategy search and reflection before generating the DAG, finding the optimal solution path. Recently introduced `Promise.all` parallel evaluation to drastically reduce latency, and implemented a precise step-by-step reasoning mode through dynamic Schema extraction.
     - **Asynchronous Event Scheduling**: `TaskManager` and `StrategizeAndPlanTool` are fully integrated with EventBus, unleashing the Agent's multi-tasking concurrency capabilities through background execution and Event Injection.
     - **Task Dashboard Injection**: Through the `BeforeAgentStep` lifecycle Hook, a dedicated task dashboard (global tree view or personal task list) is dynamically injected based on the Agent's role (Creator vs. Assignee), achieving high contextual awareness.
     - **Orchestration Loop**: Separated the responsibilities of `SpawnAgentTool` and `AssignTaskTool`, combined with `UpdateTaskStatusTool` and `TaskManager`'s background event broadcasting, to achieve a fully automated loop from assignment, execution, reporting to dependency unlocking.

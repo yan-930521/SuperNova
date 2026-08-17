@@ -66,3 +66,23 @@ export interface ITaskManager extends ILifecycle {
      */
     assignTask(sessionId: string, id: string, agentId: string): void;
 }
+
+/**
+ * 任務規劃服務介面
+ */
+export interface ITaskPlanningService extends ILifecycle {
+    /**
+     * 啟動背景規劃任務，完成後將透過 EventBus 發送結果
+     */
+    strategizeAndPlanAsync(
+        sessionId: string,
+        agentId: string,
+        objective: string,
+        contextInfo: string,
+        useMcts: boolean,
+        mctsIterations: number,
+        mode: 'holistic' | 'step_by_step',
+        scoringCriteria?: string,
+        expansionHint?: string
+    ): void;
+}

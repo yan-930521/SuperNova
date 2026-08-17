@@ -6,6 +6,13 @@
 
 ---
 
+## [Unreleased]
+### Changed (效能與架構優化)
+- **任務規劃引擎 (LATS Planning Engine) 優化與錯誤修復**：
+  - **動態 Schema 抽離 (Dynamic Schema Extraction)**：成功分離了 `ExpansionSchema`，解除 `holistic` 與 `step_by_step` 模式下的 Zod Schema 耦合問題。LLM 進行逐步推演時不再會被強制輸出整體計畫，實現了真正意義上的單步狀態推演。
+  - **歷史軌跡注入 (Trajectory Context Injection)**：在 `step_by_step` 的評估 (Evaluate) 階段補上歷史推演路徑 (Trajectory)，讓評估器能夠理解上下文，避免盲目評分。
+  - **平行評分機制 (Parallel Evaluation)**：將 LATS 展開後的子節點評估從循序執行 (Sequential) 升級為 `Promise.all` 平行處理，大幅縮短整體推演時間（高達 50% 以上的時間節省）。
+
 ## [0.2.2] - 2026-08-11
 ### Added (新增功能與基礎設施)
 - **多代理人具身環境隔離 (Multi-Agent EmbodiedEnv Isolation)**：

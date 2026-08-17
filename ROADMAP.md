@@ -47,7 +47,7 @@
 - **具象化 Task 系統 (已完成)**
   - 新增 Task 系統，讓主腦與開發者能清楚看見每一步驟的執行進度。
   - **技術亮點 (Technical Highlights)**：
-    - **LATS 策略搜尋引擎**：結合 MCTS (蒙地卡羅樹狀搜尋) 與 UCB1 演算法，在生成 DAG 之前先進行深度與廣度的策略搜尋與反思，找出最佳解題路徑。
+    - **LATS 策略搜尋引擎**：結合 MCTS (蒙地卡羅樹狀搜尋) 與 UCB1 演算法，在生成 DAG 之前先進行深度與廣度的策略搜尋與反思，找出最佳解題路徑。近期更導入 `Promise.all` 平行評估機制大幅縮減延遲，並透過動態 Schema 抽離實作了精準的單步 (step-by-step) 推演模式。
     - **非同步事件排程**：`TaskManager` 與 `StrategizeAndPlanTool` 全面整合 EventBus，以背景執行與事件插針 (Event Injection) 完全解放 Agent 的多工並發能力。
     - **任務儀表板動態注入 (Task Dashboard Injection)**：透過 `BeforeAgentStep` 生命週期 Hook，根據 Agent 角色（創建者 vs 執行者）動態注入專屬的任務儀表板（全局樹狀圖或專屬任務列表），實現高度情境感知。
     - **自動化調度閉環 (Orchestration Loop)**：將 `SpawnAgentTool` 與 `AssignTaskTool` 職責分離，搭配 `UpdateTaskStatusTool` 與 `TaskManager` 的背景事件廣播，實現指派、執行、回報到依賴解鎖的全自動閉環。

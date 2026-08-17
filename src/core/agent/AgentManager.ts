@@ -4,7 +4,7 @@ import { Config } from '../config/Config';
 import { HookEvent, IEvent, IEventBus, PromptSectionIndex } from '../domain/IBus';
 import { ICodeSkillRepository } from '../domain/ICodeSkillRepository';
 import { IAgentStateRepository, IDataBlockRepository } from '../domain/IRepository';
-import { ITaskManager } from '../domain/ITask';
+import { ITaskManager, ITaskPlanningService } from '../domain/ITask';
 import { IWorkspaceManager } from '../domain/IWorkspaceManager';
 import { LLMProvider } from '../infra/llm/LLMProvider';
 import { LogManager } from '../infra/LogManager';
@@ -58,9 +58,10 @@ export class AgentManager implements ILifecycle {
         private readonly workspaceManager: IWorkspaceManager,
         private readonly llmProvider: LLMProvider,
         private readonly taskManager: ITaskManager,
-        private readonly codeSkillRepo: ICodeSkillRepository
+        private readonly codeSkillRepo: ICodeSkillRepository,
+        private readonly taskPlanningService: ITaskPlanningService
     ) {
-        this.toolRegistry = new ToolRegistry(this.workspaceManager, this, this.taskManager, this.llmProvider, this.codeSkillRepo);
+        this.toolRegistry = new ToolRegistry(this.workspaceManager, this, this.taskManager, this.codeSkillRepo, this.taskPlanningService);
     }
 
     public getToolRegistry(): ToolRegistry {

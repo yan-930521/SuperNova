@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [Unreleased]
+### Changed
+- **LATS Planning Engine Optimization & Bug Fixes**:
+  - **Dynamic Schema Extraction**: Successfully separated `ExpansionSchema` to decouple Zod schemas between `holistic` and `step_by_step` modes. The LLM is no longer forced to output the complete plan when performing step-by-step reasoning, realizing true single-step state deduction.
+  - **Trajectory Context Injection**: Added historical deduction path (Trajectory) injection during the `step_by_step` Evaluation phase, enabling the evaluator to understand the context and avoiding blind scoring.
+  - **Parallel Evaluation**: Upgraded the child node evaluation after LATS expansion from Sequential execution to `Promise.all` parallel processing, drastically shortening the overall reasoning time (saving over 50% of time).
+
 ## [0.2.2] - 2026-08-11
 ### Added
 - **Multi-Agent EmbodiedEnv Isolation**:

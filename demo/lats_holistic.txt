@@ -1,0 +1,449 @@
+==========================================
+  Starting LATS Task Planning Demo
+==========================================
+
+[08:14:15] [INFO] [SYSTEM] [ConfigLoader] Config file not found. Generating default at ./config.yaml
+[08:14:15] [INFO] [SYSTEM] [LLMProvider] Initializing LLM Provider...
+
+Objective: 開發一個簡單的加密貨幣追蹤工具。需要先從外部 API 獲取比特幣與以太幣的最新價格，然後計算這兩者的價差，最後將結果儲存成一個 HTML 報告檔案。
+Context: 這是一個在本地環境執行的腳本工具，沒有任何前端框架。
+
+
+==========================================
+Running LATS Strategy Search (Mode: holistic)
+==========================================
+
+[08:14:15] [DEBUG] [SYSTEM] [LATSPlanner] Starting search for objective: "開發一個簡單的加密貨幣追蹤工具。需要先從外部 API 獲取比特幣與以太幣的最新價格，然後計算這兩者的..." (Mode: holistic, Max Iterations: 3)
+[08:14:15] [DEBUG] [SYSTEM] [LATSPlanner] --- Iteration 1/3 ---
+[08:14:15] [DEBUG] [SYSTEM] [LATSPlanner] Selected node for expansion: "Initialize"
+[08:14:15] [DEBUG] [SYSTEM] [LATSPlanner] Expanding node... Calling LLM...
+[08:14:48] [DEBUG] [SYSTEM] [LATSPlanner] Expanded into 3 candidate actions.
+[08:15:02] [DEBUG] [SYSTEM] [LATSPlanner] Evaluated child 1/3: "建立具備 API 斷線與重試機制的完整執行流程" -> Score: 8/10, Terminal: false
+[08:15:03] [DEBUG] [SYSTEM] [LATSPlanner] Evaluated child 2/3: "加入快取與降級策略，讓短暫斷線時仍可產生明確的報告" -> Score: 8.3/10, Terminal: false
+[08:15:04] [DEBUG] [SYSTEM] [LATSPlanner] Evaluated child 3/3: "採用多來源交叉比對，處理 API 回傳看似成功但數值不合理的情況" -> Score: 8.5/10, Terminal: false
+[08:15:04] [DEBUG] [SYSTEM] [LATSPlanner] --- Iteration 2/3 ---
+[08:15:04] [DEBUG] [SYSTEM] [LATSPlanner] Selected node for expansion: "採用多來源交叉比對，處理 API 回傳看似成功但數值不合理的情況"
+[08:15:04] [DEBUG] [SYSTEM] [LATSPlanner] Expanding node... Calling LLM...
+[08:16:04] [DEBUG] [SYSTEM] [LATSPlanner] Expanded into 3 candidate actions.
+[08:16:26] [DEBUG] [SYSTEM] [LATSPlanner] Evaluated child 1/3: "建立明確的 API 容錯與重試狀態機，具體化斷線、HTTP 錯誤、速率限制與 circuit breaker 行為" -> Score: 8.6/10, Terminal: false
+[08:16:27] [DEBUG] [SYSTEM] [LATSPlanner] Evaluated child 2/3: "優先建立故障狀態矩陣與快取降級策略，確保 API 斷線時仍能產生誠實且可理解的 HTML 結果" -> Score: 8.2/10, Terminal: false
+[08:16:30] [DEBUG] [SYSTEM] [LATSPlanner] Evaluated child 3/3: "將不合理數值驗證與來源契約測試前置，避免『HTTP 200 但內容錯誤』被誤當成成功" -> Score: 8.4/10, Terminal: false
+[08:16:30] [DEBUG] [SYSTEM] [LATSPlanner] --- Iteration 3/3 ---
+[08:16:30] [DEBUG] [SYSTEM] [LATSPlanner] Selected node for expansion: "加入快取與降級策略，讓短暫斷線時仍可產生明確的報告"
+[08:16:30] [DEBUG] [SYSTEM] [LATSPlanner] Expanding node... Calling LLM...
+[08:17:17] [DEBUG] [SYSTEM] [LATSPlanner] Expanded into 2 candidate actions.
+[08:17:34] [DEBUG] [SYSTEM] [LATSPlanner] Evaluated child 2/2: "採用「失敗情境優先」方式設計 API 取得器與測試矩陣，再回推正常流程，確保斷線與異常數值都有可驗證的處理路徑" -> Score: 8.5/10, Terminal: false
+[08:17:36] [DEBUG] [SYSTEM] [LATSPlanner] Evaluated child 1/2: "先建立可執行的 API、重試、時間與資料驗證規格，消除所有降級決策歧義" -> Score: 8.5/10, Terminal: false
+[08:17:36] [DEBUG] [SYSTEM] [LATSPlanner] Search complete. Best trajectory depth: 3
+
+[HOLISTIC Final Strategy Trajectory]
+------------------------------------------
+### Step 0: Initialize
+
+**Plan Draft**: 
+Objective: 開發一個簡單的加密貨幣追蹤工具。需要先從外部 API 獲取比特幣與以太幣的最新價格，然後計算這兩者的價差，最後將結果儲存成一個 HTML 報告檔案。
+Context: 這是一個在本地環境執行的腳本工具，沒有任何前端框架。
+Plan: (Not started)
+
+**Feedback**: 
+N/A
+
+---
+
+### Step 1: 採用多來源交叉比對，處理 API 回傳看似成功但數值不合理的情況
+
+**Plan Draft**: 
+Objective: 開發一個本地執行的加密貨幣追蹤工具，從外部 API 取得 BTC 與 ETH 價格、計算價差並輸出 HTML 報告，且在 API 斷線或資料異常時提供可靠結果。
+
+Plan:
+1. 選擇主要與備援資料來源
+   - 設定主要 API 及至少一個備援 API，統一資產符號、幣別與價格欄位格式。
+   - 為每個來源設定逾時、重試次數、速率限制與健康狀態。
+
+2. 取得並標準化資料
+   - 依序呼叫主要來源；遇到連線錯誤、逾時、非成功 HTTP 狀態或無效 JSON 時執行重試。
+   - 重試失敗後切換備援來源，而不是把錯誤回應當作價格。
+   - 將各來源資料轉成統一的數值、時間戳與來源結構。
+
+3. 執行多層合理性檢查
+   - 檢查價格為有限正數、幣別正確、時間戳不過舊。
+   - 比較不同來源的價格；若相對差異超過門檻，標記為來源不一致並拒絕自動選擇，或依預先定義的可信度規則選用並在報告警告。
+   - 與最近一次有效結果比較，偵測不合理的瞬間暴漲或暴跌。
+   - 未通過檢查的資料不得用於計算或覆寫快取。
+
+4. 定義故障決策
+   - 主要來源失敗、備援成功且驗證通過時，使用備援並標示來源切換。
+   - 所有來源失敗時，若有仍在有效期限內的快取則降級使用；否則產生無法計算的錯誤報告。
+   - 若 BTC 與 ETH 使用的來源或資料時間差過大，顯示資料不可直接比較，避免輸出誤導性價差。
+
+5. 計算與產生 HTML
+   - 僅對通過驗證且時間條件一致的兩筆價格計算絕對價差及百分比差異。
+   - 顯示價格、價差、來源、取得時間、備援切換、資料一致性檢查與所有警告。
+   - 無法計算時仍輸出狀態清楚的 HTML，避免使用空值或零值冒充結果。
+   - 以安全 escaping 處理文字，並用暫存檔及原子替換保護報告檔案。
+
+6. 可觀測性與測試
+   - 記錄每個來源的請求、重試、切換、數值檢查與最終決策。
+   - 為成功、降級、部分失敗與完全失敗設定不同退出碼或明確狀態。
+   - 測試主要 API 斷線、備援斷線、來源價格不一致、異常尖峰、過期快取、雙 API 失敗與 HTML 報告內容。
+
+**Feedback**: 
+整體計畫完整涵蓋資料來源、標準化、驗證、故障降級、計算、HTML 輸出與測試，依賴順序也大致正確：先取得並標準化，再驗證與做故障決策，最後計算與輸出。特別是拒絕將錯誤回應當價格、快取有效期限、來源不一致及無法計算時仍輸出明確報告，能處理多數重要錯誤情境。
+
+仍有幾項不足，尚未達到可直接轉成無歧義 TaskDAG 的程度：
+1. 缺少明確的 API 與資料模型規格，例如 API endpoint、交易對格式、幣別換算規則、回應欄位映射、時間戳時區與精度，以及不同來源是否提供相同報價基準。
+2. 重試策略仍不完整，應明確定義指數退避、抖動、哪些 HTTP 狀態可重試、總請求期限，以及如何避免重試觸發速率限制。也需說明健康狀態如何更新、何時恢復主要來源，以及是否使用 circuit breaker。
+3. BTC 與 ETH 的資料取得策略未明確：應先並行取得以降低時間差，還是依序取得；若一個成功、一個失敗，是否允許分別使用快取；時間差門檻與快取 TTL 需具體化。
+4. 價格異常檢查需要明確邊界與設定來源，例如尖峰門檻、參考窗口、首次執行沒有歷史資料時的行為、長時間市場波動如何避免誤判，以及來源間比較時如何處理不同取得時間。百分比差異的分母也應明確定義。
+5. 快取機制缺少實作細節：持久化位置、格式、版本、寫入原子性、損毀或無法讀取時的處理、時鐘倒退，以及快取本身的來源與驗證資訊。不能只保護 HTML 報告而忽略快取更新的一致性。
+6. 「所有來源失敗」與「部分資產成功」的狀態矩陣應明確列出，包含退出碼、HTML 狀態、是否保留舊報告，以及主來源失敗但備援資料通過時的警告內容。
+7. 安全與部署面仍欠缺：API key/環境變數管理、TLS/憑證驗證、連線代理設定、檔案權限、路徑穿越防護，以及外部資料進入 HTML 時對屬性與文字內容的完整 escaping。原子替換也需考慮跨平台行為與磁碟寫入失敗。
+8. 測試項目方向正確，但缺少單元、整合、契約與重現性測試，亦應加入 malformed schema、NaN/Infinity、負數或零、錯誤幣別、未來時間戳、部分 JSON、速率限制、磁碟滿、權限不足、快取損毀、所有來源回傳互相矛盾資料等邊界情況。應定義測試通過標準與可注入的 clock/network。
+9. 尚未明確說明執行介面（CLI 或設定檔）、輸出路徑、返回碼規格、日誌敏感資訊遮罩、版本化設定與 README/操作文件，因此實際交付仍需補充。
+
+---
+
+### Step 2: 建立明確的 API 容錯與重試狀態機，具體化斷線、HTTP 錯誤、速率限制與 circuit breaker 行為
+
+**Plan Draft**: 
+Objective: 開發一個本地執行的加密貨幣追蹤工具，從外部 API 取得 BTC 與 ETH 價格、計算價差並輸出 HTML 報告；當 API 斷線、逾時、回傳錯誤格式或不合理數值時，工具不得產生誤導性結果，且必須提供可追蹤的降級狀態。
+
+Plan:
+1. 定義資料來源與統一資料模型
+   - 設定主要 API 與至少一個備援 API，明確記錄 endpoint、交易對格式、報價幣別、回應欄位與時間戳欄位。
+   - 所有來源統一轉換為：asset、price、quote_currency、source、fetched_at、provider_timestamp、request_id、validation_status。
+   - 價格必須使用同一報價幣別；若來源幣別不同，先依明確且可驗證的匯率規則換算，否則標記為不可比較。
+   - 使用 UTC 時間戳與固定精度，拒絕無法解析、未來時間或過度陳舊的資料。
+
+2. 設計單一 API 請求的重試流程
+   - 每次請求設定連線逾時、讀取逾時、總請求期限與最大重試次數，例如總期限不得超過本次執行的全域 deadline。
+   - 對網路斷線、DNS 失敗、連線逾時、HTTP 408、425、429、500、502、503、504 執行有限次數重試；對 400、401、403、404、格式錯誤及明確業務錯誤不重試，直接切換來源或失敗。
+   - 使用指數退避加隨機抖動；HTTP 429 若提供 Retry-After，優先遵循但不得超過全域 deadline。
+   - 每次重試記錄來源、錯誤類型、等待時間與剩餘期限，但不得記錄 API key。
+   - 當請求成功回應但 JSON 不完整、欄位缺失、數值為 NaN/Infinity、非有限正數、幣別不符或時間戳不合理時，視為資料驗證失敗，不得把該回應當成有效價格。
+
+3. 實作來源健康狀態與切換
+   - 為每個來源維護 CLOSED、OPEN、HALF_OPEN 三種 circuit breaker 狀態。
+   - 連續發生連線失敗、超時、服務端錯誤或資料驗證失敗時累計失敗次數；超過門檻後暫停呼叫該來源一段冷卻時間。
+   - 冷卻時間後只允許有限的探測請求；驗證通過才恢復主要來源，否則延長冷卻時間。
+   - 每次執行優先使用健康的主要來源，失敗後依序使用備援來源；來源切換必須顯示在結果與日誌中。
+   - 不因單次短暫失敗永久停用來源，也不在同一執行中無限制重試。
+
+4. 並行取得 BTC 與 ETH 並處理部分失敗
+   - 在全域 deadline 內並行取得 BTC 與 ETH，以縮短兩筆資料的時間差；每個資產各自執行主要來源、重試與備援切換流程。
+   - 分別記錄每個資產的來源、取得時間與驗證結果。
+   - 若一個資產成功、另一個資產失敗，不得以零值或空值計算價差；依快取政策判斷是否可使用該資產的有效快取。
+   - 若兩筆資料時間差超過設定門檻，即使數值有效，也標記為不可直接比較，除非明確啟用並顯示降級比較模式。
+
+5. 執行數值合理性檢查
+   - 檢查價格是否為有限正數、幣別與交易對正確、時間戳不過舊且不在未來。
+   - 比較同一資產的多來源價格；相對差異超過設定門檻時標記來源矛盾，不自動選用未經規則確認的數值。
+   - 與最近一次有效結果比較，偵測不合理瞬間變化；首次執行沒有歷史資料時，只執行格式、範圍與跨來源檢查，不因缺少歷史而判定失敗。
+   - 所有門檻、TTL、價格跳變比例與百分比差異分母均放入版本化設定檔，不硬編碼在流程中。
+
+6. 定義故障決策矩陣
+   - 主要來源成功且驗證通過：使用主要來源，狀態為 SUCCESS。
+   - 主要來源失敗、備援成功且驗證通過：使用備援，狀態為 DEGRADED，報告顯示切換原因。
+   - API 回傳成功但資料不合理：視同來源失敗，禁止計算，並列出驗證錯誤。
+   - 一個資產成功、另一個資產失敗：只有在失敗資產的快取仍未過期且驗證通過時才允許降級計算，否則狀態為 PARTIAL_FAILURE。
+   - 所有來源失敗且沒有有效快取：輸出不可計算的 ERROR 報告，不使用零值、舊值冒充即時值。
+
+7. 快取與輸出
+   - 將每個資產的最後有效資料及驗證資訊寫入版本化快取；使用暫存檔、fsync（可行時）與原子替換，處理損毀、權限不足、磁碟滿與時鐘倒退。
+   - 快取有明確 TTL；過期快取不得參與計算，只能作為診斷資訊。
+   - 僅使用兩筆均通過驗證且時間條件一致的資料計算絕對價差與百分比價差，明確定義百分比分母。
+   - 以暫存 HTML 加原子替換產生報告；對所有外部資料進行 HTML 文字與屬性 escaping。
+   - 報告列出價格、來源、取得時間、重試、切換、circuit breaker 狀態、驗證錯誤、快取使用與最終決策。
+
+8. 可觀測性、介面與測試
+   - 提供 CLI、設定檔與輸出路徑選項；定義 SUCCESS、DEGRADED、PARTIAL_FAILURE、ERROR 的退出碼。
+   - 使用可注入的 clock、network client 與 fixture 測試：斷線、DNS 失敗、逾時、429、5xx、malformed JSON、缺欄位、NaN/Infinity、負數、零、錯誤幣別、未來時間戳、來源矛盾與異常尖峰。
+   - 測試重試上限、退避、deadline、circuit breaker 恢復、部分成功、快取損毀與 HTML 內容，並驗證任何不合理數值都不會進入計算。
+
+**Feedback**: 
+整體計畫完整且可行，已涵蓋資料正規化、重試與 deadline、來源切換、circuit breaker、部分失敗、快取、數值驗證、原子輸出、HTML escaping、退出碼與測試，對錯誤處理及邊界情況的考量明顯優於一般草案。依賴順序大致正確：資料模型與設定先於請求流程，請求與驗證先於決策、快取及報告輸出，沒有明顯循環依賴。
+
+仍有幾個需要在轉成 TaskDAG 前補明的缺口：
+1. 「價差」需明確定義公式與方向，例如 BTC 價格減 ETH 價格、絕對價差是否取絕對值、百分比價差的分母，以及分母為零或極小值時的處理。計畫提到分母需定義，但尚未實際定義。
+2. 「比較同一資產的多來源價格」的取得策略不清楚。若主要來源成功便不呼叫備援來源，實際上無法進行跨來源一致性檢查；應明確區分必要備援請求與可選的交叉驗證請求，並定義其 deadline、成本與失敗影響。
+3. 需要定義資料一致性規則：BTC 與 ETH 是否必須來自同一批次、相同 quote currency、同一來源或允許不同來源；provider_timestamp 缺失、時間戳解析時區錯誤、時間精度不同時如何處理。
+4. circuit breaker 的狀態是程序內記憶體還是跨執行持久化、失敗計數的時間窗口、半開狀態允許的並行探測數量，以及多執行緒下的鎖定方式尚未明確。並行取得兩項資產時尤其要避免探測競爭與重複計數。
+5. 快取部分雖涵蓋損毀、權限、磁碟滿與時鐘倒退，但缺少檔案鎖/並行執行策略、快取 schema migration、部分寫入後恢復，以及快取內容的完整性或版本相容性規則。
+6. 缺少設定檔與 CLI 的輸入驗證，例如 deadline、TTL、重試次數、門檻為負值或互相矛盾時的啟動失敗行為；API key 的注入、權限、環境變數優先順序與錯誤訊息遮罩也應明確化。
+7. 需要明確定義 HTTP response body 大小限制、JSON 深度/解析資源限制、壓縮炸彈、TLS 憑證驗證、重新導向政策及 API key 不應出現在 URL、快取或 traceback 中。這些是本地工具仍可能遇到的安全與資源邊界情況。
+8. HTML 報告的錯誤狀態、無法計算狀態、日期格式、數值格式及瀏覽器可讀性需定義；同時應確認輸出檔案原子替換在 Windows/檔案被鎖定時的失敗行為。日誌格式、層級、保留策略與 request_id 的關聯方式也可再具體化。
+9. 測試雖然很廣，但尚未明確涵蓋屬性測試/模糊測試、並行請求競爭、程序中途崩潰後的原子寫入恢復、所有來源同時失敗、deadline 在退避中耗盡，以及 HTML 報告在 Unicode/特殊控制字元下的輸出。
+
+建議將上述規則補成可測試的規格，並在實作順序中加入「設定與 schema 驗證」、「公式與狀態機定義」、「並行/檔案鎖設計」及「安全性與資源限制」等工作。補完後即可接近直接轉換為 TaskDAG；目前尚未達到 100% 無需 refinement 的程度。
+------------------------------------------
+LATS Search took 200831ms
+
+Translating holistic Strategy into TaskDAG...
+
+[HOLISTIC Generated TaskDAG JSON]
+------------------------------------------
+[
+  {
+    "id": "define_requirements",
+    "objective": "整理並固定工具的功能與交付規格，包括 CLI、設定檔、輸出路徑、退出碼、報告狀態、日誌格式、保留策略與 README 需求。",
+    "dependencies": []
+  },
+  {
+    "id": "define_data_model",
+    "objective": "定義來源 endpoint、交易對格式、報價幣別、欄位映射、UTC 時間戳與精度，並建立包含 asset、price、quote_currency、source、fetched_at、provider_timestamp、request_id 和 validation_status 的版本化資料模型。",
+    "dependencies": [
+      "define_requirements"
+    ]
+  },
+  {
+    "id": "define_price_formula",
+    "objective": "明確定義 BTC 與 ETH 價格的價差方向、絕對價差是否取絕對值、百分比差異的分母，以及分母為零或極小值時的不可計算規則。",
+    "dependencies": [
+      "define_data_model"
+    ]
+  },
+  {
+    "id": "define_consistency_rules",
+    "objective": "定義 BTC 與 ETH 是否必須使用相同報價幣別、批次、來源或可接受不同來源，並固定 provider_timestamp 缺失、時區錯誤、精度不同及最大時間差的處理規則。",
+    "dependencies": [
+      "define_data_model",
+      "define_price_formula"
+    ]
+  },
+  {
+    "id": "define_config_schema",
+    "objective": "建立版本化設定 schema，涵蓋 API、逾時、全域 deadline、TTL、重試、退避、抖動、速率限制、來源一致性、尖峰門檻、circuit breaker 與輸出設定。",
+    "dependencies": [
+      "define_requirements",
+      "define_data_model"
+    ]
+  },
+  {
+    "id": "validate_config_inputs",
+    "objective": "實作啟動時的設定與 CLI 輸入驗證，拒絕負值、矛盾門檻、無效路徑或不支援版本，並定義 API key 注入方式、環境變數優先順序、權限與敏感資訊遮罩。",
+    "dependencies": [
+      "define_config_schema"
+    ]
+  },
+  {
+    "id": "define_retry_state_machine",
+    "objective": "以可測試規格定義 API 請求狀態機，明確區分網路錯誤、逾時、可重試 HTTP 狀態、不可重試狀態、429 Retry-After、最大重試次數、指數退避、抖動與全域 deadline。",
+    "dependencies": [
+      "define_config_schema",
+      "define_data_model"
+    ]
+  },
+  {
+    "id": "define_circuit_breaker",
+    "objective": "定義 CLOSED、OPEN、HALF_OPEN 狀態、失敗計數時間窗口、冷卻時間、探測數量、恢復條件、程序內或持久化範圍，以及並行存取時的鎖定規則。",
+    "dependencies": [
+      "define_retry_state_machine"
+    ]
+  },
+  {
+    "id": "define_fetch_strategy",
+    "objective": "定義 BTC 與 ETH 的並行取得流程、每個資產的主要與備援來源順序、必要備援與可選交叉驗證請求、交叉驗證 deadline，以及部分成功時的處理方式。",
+    "dependencies": [
+      "define_retry_state_machine",
+      "define_circuit_breaker",
+      "define_consistency_rules"
+    ]
+  },
+  {
+    "id": "define_validation_rules",
+    "objective": "固定資料驗證規則，包括有限正數、幣別與交易對、JSON schema、時間戳不可為未來或過舊、多來源相對差異、歷史尖峰門檻、首次執行與不同取得時間的處理。",
+    "dependencies": [
+      "define_data_model",
+      "define_consistency_rules",
+      "define_config_schema"
+    ]
+  },
+  {
+    "id": "define_failure_matrix",
+    "objective": "建立完整狀態矩陣，涵蓋 SUCCESS、DEGRADED、PARTIAL_FAILURE、ERROR、部分資產成功、快取可用性、來源矛盾、報告狀態、退出碼、警告與舊報告保留政策。",
+    "dependencies": [
+      "define_fetch_strategy",
+      "define_validation_rules"
+    ]
+  },
+  {
+    "id": "define_cache_spec",
+    "objective": "定義版本化快取格式、持久化位置、來源與驗證資訊、TTL、schema migration、完整性檢查、時鐘倒退、損毀、部分寫入恢復、檔案鎖與並行執行策略。",
+    "dependencies": [
+      "define_data_model",
+      "define_config_schema",
+      "define_failure_matrix"
+    ]
+  },
+  {
+    "id": "define_security_limits",
+    "objective": "制定 HTTP response body 大小、JSON 深度與解析資源、壓縮資料、TLS 憑證、重新導向、代理、API key 禁止出現在 URL/快取/traceback、檔案權限與路徑穿越防護規則。",
+    "dependencies": [
+      "define_requirements",
+      "define_config_schema"
+    ]
+  },
+  {
+    "id": "define_html_output",
+    "objective": "定義 HTML 報告的成功、降級、部分失敗與不可計算版型、日期與數值格式、瀏覽器可讀性、Unicode/控制字元處理、完整 escaping，以及 Windows 鎖檔與替換失敗行為。",
+    "dependencies": [
+      "define_price_formula",
+      "define_failure_matrix",
+      "define_security_limits"
+    ]
+  },
+  {
+    "id": "implement_config_cli",
+    "objective": "實作 CLI、設定檔載入、版本相容性、輸出路徑選項、環境變數與 API key 管理，並套用完整輸入驗證與錯誤遮罩。",
+    "dependencies": [
+      "validate_config_inputs"
+    ]
+  },
+  {
+    "id": "implement_http_client",
+    "objective": "實作具備 TLS 驗證、重新導向政策、代理支援、response body 限制、安全 JSON 解析與 request_id 關聯的 HTTP client。",
+    "dependencies": [
+      "define_retry_state_machine",
+      "define_security_limits"
+    ]
+  },
+  {
+    "id": "implement_retry_logic",
+    "objective": "實作單一來源請求的重試、分類錯誤、Retry-After、指數退避與抖動，遵守單次請求及整體執行 deadline，並記錄不含秘密的重試資訊。",
+    "dependencies": [
+      "implement_http_client",
+      "define_retry_state_machine"
+    ]
+  },
+  {
+    "id": "implement_source_adapter",
+    "objective": "實作主要與備援 API adapter，將不同 endpoint、交易對、欄位、報價幣別與時間戳轉換為統一資料模型，拒絕 malformed 或不完整回應。",
+    "dependencies": [
+      "define_data_model",
+      "implement_http_client"
+    ]
+  },
+  {
+    "id": "implement_circuit_breaker",
+    "objective": "實作來源 circuit breaker、失敗窗口、冷卻與 HALF_OPEN 探測，使用同步機制避免並行 BTC/ETH 請求重複探測或錯誤計數。",
+    "dependencies": [
+      "define_circuit_breaker",
+      "implement_retry_logic"
+    ]
+  },
+  {
+    "id": "implement_parallel_fetch",
+    "objective": "實作在全域 deadline 內並行取得 BTC 與 ETH，依來源健康狀態執行切換與可選交叉驗證，並保留每個資產的來源、時間、request_id 與驗證結果。",
+    "dependencies": [
+      "implement_source_adapter",
+      "implement_retry_logic",
+      "implement_circuit_breaker",
+      "define_fetch_strategy"
+    ]
+  },
+  {
+    "id": "implement_validation",
+    "objective": "實作 schema、數值、時間、幣別、跨來源一致性與歷史尖峰檢查；未通過驗證的資料不得進入計算或覆寫快取。",
+    "dependencies": [
+      "implement_source_adapter",
+      "define_validation_rules"
+    ]
+  },
+  {
+    "id": "implement_cache",
+    "objective": "實作版本化快取的讀寫、TTL、完整性驗證、schema migration、檔案鎖、暫存檔、fsync、原子替換及損毀、磁碟滿、權限不足、崩潰恢復處理。",
+    "dependencies": [
+      "define_cache_spec",
+      "implement_config_cli"
+    ]
+  },
+  {
+    "id": "implement_failure_decision",
+    "objective": "根據來源結果、驗證結果、時間一致性與快取狀態套用故障決策矩陣，產生 SUCCESS、DEGRADED、PARTIAL_FAILURE 或 ERROR 的結構化結果。",
+    "dependencies": [
+      "implement_parallel_fetch",
+      "implement_validation",
+      "implement_cache",
+      "define_failure_matrix"
+    ]
+  },
+  {
+    "id": "implement_calculation",
+    "objective": "僅對兩筆通過驗證且符合時間與報價幣別規則的資料，依固定公式計算價差與百分比差異；不符合條件時回傳明確不可計算原因。",
+    "dependencies": [
+      "implement_failure_decision",
+      "define_price_formula",
+      "define_consistency_rules"
+    ]
+  },
+  {
+    "id": "implement_html_report",
+    "objective": "實作 HTML 報告產生器，輸出價格、公式結果、來源、時間、重試、切換、circuit breaker、驗證錯誤、快取使用與警告，並以安全 escaping、暫存檔及原子替換寫入。",
+    "dependencies": [
+      "implement_calculation",
+      "define_html_output"
+    ]
+  },
+  {
+    "id": "implement_observability",
+    "objective": "實作結構化日誌、層級、request_id 關聯、敏感資訊遮罩、來源請求與最終決策記錄，以及各狀態對應的退出碼。",
+    "dependencies": [
+      "implement_failure_decision",
+      "implement_html_report",
+      "define_requirements"
+    ]
+  },
+  {
+    "id": "unit_test_components",
+    "objective": "以可注入 clock、network client 與 fixture 撰寫單元測試，涵蓋設定驗證、資料標準化、公式、驗證規則、重試分類、退避、deadline、circuit breaker 與快取。",
+    "dependencies": [
+      "implement_config_cli",
+      "implement_retry_logic",
+      "implement_source_adapter",
+      "implement_circuit_breaker",
+      "implement_validation",
+      "implement_cache",
+      "implement_calculation"
+    ]
+  },
+  {
+    "id": "integration_test_workflows",
+    "objective": "撰寫整合與契約測試，涵蓋主要/備援 API 斷線、DNS、逾時、429、5xx、malformed JSON、來源矛盾、尖峰、部分成功、所有來源失敗、過期或損毀快取與狀態矩陣。",
+    "dependencies": [
+      "implement_failure_decision",
+      "implement_html_report",
+      "implement_observability"
+    ]
+  },
+  {
+    "id": "security_property_test",
+    "objective": "執行安全、資源邊界、屬性與模糊測試，涵蓋 NaN/Infinity、Unicode、控制字元、巨大或深層 JSON、壓縮炸彈、路徑穿越、API key 洩漏與任意外部資料 escaping。",
+    "dependencies": [
+      "implement_http_client",
+      "implement_html_report",
+      "implement_config_cli"
+    ]
+  },
+  {
+    "id": "concurrency_recovery_test",
+    "objective": "測試並行請求與 circuit breaker 探測競爭、檔案鎖、程序中途崩潰、原子寫入恢復、Windows 鎖檔、磁碟滿、權限不足及退避期間耗盡 deadline。",
+    "dependencies": [
+      "implement_circuit_breaker",
+      "implement_parallel_fetch",
+      "implement_cache",
+      "implement_html_report"
+    ]
+  },
+  {
+    "id": "document_and_release",
+    "objective": "整理 README、設定範例、CLI 使用方式、退出碼、故障狀態、快取與安全限制說明，執行完整測試並確認可在本地環境部署與重現。",
+    "dependencies": [
+      "integration_test_workflows",
+      "security_property_test",
+      "concurrency_recovery_test",
+      "implement_observability"
+    ]
+  }
+]
+------------------------------------------
+DAG Translation took 29316ms

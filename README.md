@@ -46,7 +46,7 @@ bun test
 ### 多代理人協作系統
 - **多腦架構**：`MainAgent`（決策與排程）、`TaskAgent`（專注任務流執行）、`EmbodiedAgent`（環境感知與操作），職責分離避免 Prompt 污染。
 - **動態上下文投影**：主腦可無縫接管子代理人的歷史與工具集，親自下場完成高難度任務。
-- **任務 DAG 引擎**：基於 LATS (Language Agent Tree Search) 策略搜尋與有向無環圖的自動化任務排程與依賴解鎖。
+- **任務 DAG 引擎**：基於 LATS (Language Agent Tree Search) 策略搜尋與有向無環圖的自動化任務排程與依賴解鎖。（參閱規劃引擎輸出範例：[全局大綱 Holistic](demo/lats_holistic.txt) 與 [逐步推演 Step-by-step](demo/lats_step_by_step.txt)）
 - **細粒度工具權限**：依據代理人角色動態分配工具集，嚴格劃分權限邊界。
 
 ### 記憶與上下文管理

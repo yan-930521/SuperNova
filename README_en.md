@@ -49,7 +49,7 @@ bun test
 ### Multi-Agent Collaboration
 - **Multi-Brain Architecture**: `MainAgent` (decision & scheduling), `TaskAgent` (focused task execution), and `EmbodiedAgent` (environment perception & manipulation) — separation of concerns to prevent Prompt pollution.
 - **Dynamic Context Projection**: The main brain can seamlessly take over a sub-agent's history and toolset to personally handle high-difficulty tasks.
-- **Task DAG Engine**: Automated task scheduling and dependency resolution powered by LATS (Language Agent Tree Search) strategy planning and directed acyclic graphs.
+- **Task DAG Engine**: Automated task scheduling and dependency resolution powered by LATS (Language Agent Tree Search) strategy planning and directed acyclic graphs. (See planner output examples: [Holistic Mode](demo/lats_holistic.txt) and [Step-by-step Mode](demo/lats_step_by_step.txt))
 - **Fine-grained Tool Permissions**: Dynamically assign toolsets based on agent roles, strictly enforcing permission boundaries.
 
 ### Memory & Context Management

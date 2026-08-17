@@ -1,9 +1,8 @@
 import { EmbodiedAgent } from '@core/agent';
 import { ICodeSkillRepository } from '@core/domain/ICodeSkillRepository';
-import { ITaskManager } from '@core/domain/ITask';
+import { ITaskManager, ITaskPlanningService } from '@core/domain/ITask';
 import { IWorkspaceManager } from '@core/domain/IWorkspaceManager';
 import { LogManager } from '@core/infra';
-import { LLMProvider } from '@core/infra/llm/LLMProvider';
 import { ConsoleTransport } from '@core/infra/transports';
 
 import {
@@ -29,8 +28,8 @@ export class ToolRegistry {
         workspaceManager: IWorkspaceManager,
         agentManager: AgentManager,
         taskManager: ITaskManager,
-        llmProvider: LLMProvider,
-        codeSkillRepo: ICodeSkillRepository
+        codeSkillRepo: ICodeSkillRepository,
+        taskPlanningService: ITaskPlanningService
     ) {
         // Workspace Tools
         this.register(new ReadFileTool(workspaceManager));
@@ -55,7 +54,7 @@ export class ToolRegistry {
 
         // Task Tools
         this.register(new PlanTasksTool(taskManager));
-        this.register(new StrategizeAndPlanTool(taskManager, llmProvider));
+        this.register(new StrategizeAndPlanTool(taskPlanningService));
 
         // Research Tools
         this.register(new SearchWebTool());
