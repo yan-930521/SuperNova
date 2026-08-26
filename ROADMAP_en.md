@@ -68,3 +68,14 @@ After ensuring the stability of the v0.1.0 infrastructure, we have moved towards
     - Extracted a pure `domain` layer, completely decoupling core interfaces like all IRepository and IEventBus.
     - Flattened the underlying `infra` folders into `llm`, `repositories`, `storage`, `workspace`, solving the original dependency hell up to 5 layers deep.
     - Centrally manage brain config files in `prompts/`, providing a cleaner injection pipeline for Sub-Agents with different responsibilities.
+
+## v0.2.3 - Novalink Communication & Environment Lightweighting (Completed)
+
+To resolve the performance bottlenecks caused by traditional polling mechanisms, we completed a comprehensive upgrade of the environment control layer:
+
+- **Novalink Bidirectional Communication (Pure WebSocket & JSON-RPC)**:
+  - Deprecated the `mineflayer` framework in favor of a single WebSocket connection, enabling ultra-low latency event streaming and command dispatching.
+  - Removed `mineflayer-pathfinder`, migrating physical navigation computation to the Java server backend, which drastically reduces CPU and memory overhead on the Node.js Runtime.
+- **Interface Abstraction & Type Safety Isolation (Interface Abstraction & Type Isolation)**:
+  - Introduced the `IBody` interface, entirely replacing dependencies on specific bot implementations. Standardized parameter naming conventions to reduce LLM hallucinations during type inference.
+  - Implemented an LLM-specific type declaration file (`NovaLink.d.ts`), stripping unnecessary `import/export` module syntax to ensure context purity when dynamically injected into Prompts.

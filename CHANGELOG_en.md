@@ -7,6 +7,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ---
 
 ## [Unreleased]
+
+## [0.2.3] - 2026-08-26
+### Added
+- **Virtual Environment Communication & SDK Upgrade**:
+  - **Novalink Architecture (WebSocket JSON-RPC)**: Completely replaced the traditional `mineflayer` polling mechanism with a single WebSocket connection using JSON-RPC 2.0, achieving low-latency, full-duplex event streaming and command dispatching.
+  - **Environment Interface Refactoring & Lightweighting**:
+    - Introduced the `IBody` interface, entirely replacing the deprecated `SuperNovaBot` implementation. Globally renamed the environment variable `env` to `body` across the core runtime and all CodeSkills. This unifies variable naming conventions to improve the LLM's context alignment accuracy.
+    - Offloaded Node.js computational load by removing `mineflayer-pathfinder`. Physical navigation, collision detection, and pathfinding are now strictly delegated to the backend server (Java/Netty), significantly reducing CPU and memory overhead on the Node side.
+  - **LLM-Specific Type Declaration Isolation**: Created `NovaLink.d.ts`, a pristine type declaration file stripped of `import/export` module syntax. It serves as a pure context supplement injected dynamically into the Agent's Prompt, effectively reducing hallucination rates during type inference.
+
+
 ### Changed
 - **LATS Planning Engine Optimization & Bug Fixes**:
   - **Dynamic Schema Extraction**: Successfully separated `ExpansionSchema` to decouple Zod schemas between `holistic` and `step_by_step` modes. The LLM is no longer forced to output the complete plan when performing step-by-step reasoning, realizing true single-step state deduction.

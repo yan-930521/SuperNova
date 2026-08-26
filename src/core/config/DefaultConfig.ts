@@ -6,7 +6,7 @@ import { Config } from './Config';
  * 提供合理的預設值確保系統即便在沒有設定檔的情況下也能正常啟動。
  */
 export const DEFAULT_CONFIG: Config = {
-    version: "0.2.2",
+    version: "0.2.3",
     security: {
         /** 工具執行超時預設為 30 秒 (30000ms) */
         default_tool_timeout_ms: 30000,

@@ -66,3 +66,14 @@
     - 萃取出純粹的 `domain` 層，將所有 IRepository, IEventBus 等核心介面獨立解耦。
     - 扁平化底層 `infra` 資料夾為 `llm`, `repositories`, `storage`, `workspace`，解決原先高達 5 層的巢狀依賴地獄。
     - 集中管理大腦設定檔於 `prompts/`，為不同職責的子代理人提供更整潔的注入管線。
+
+## v0.2.3 - Novalink 通訊與環境輕量化重構 (已完成)
+
+為了解決傳統輪詢 (Polling) 機制帶來的效能瓶頸，我們完成了環境控制層的全面升級：
+
+- **Novalink 雙向通訊 (Pure WebSocket & JSON-RPC)**：
+  - 放棄 `mineflayer` 框架，全面改用單一 WebSocket 連線，實現極低延遲的事件推播與指令發送。
+  - 將 `mineflayer-pathfinder` 移除，物理導航演算移轉至 Java 伺服器端，大幅減輕 Node.js Runtime 的 CPU 與記憶體消耗。
+- **介面抽象與型別安全隔離 (Interface Abstraction & Type Isolation)**：
+  - 導入 `IBody` 介面，全面取代對特定 Bot 實作的依賴，並統一底層參數命名規範，降低 LLM 型別推斷時的幻覺。
+  - 實作 LLM 專用的型別宣告檔 (`NovaLink.d.ts`)，去除不必要的 `import/export` 模組語法，確保動態注入 Prompt 時的上下文純淨度。
