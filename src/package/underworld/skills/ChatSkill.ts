@@ -1,5 +1,5 @@
 import { ActionSkill } from '@core/skill/BaseSkill';
-import { SuperNovaBot } from '@underworld/wrapper/SuperNovaBot';
+import { IBody } from '../../novalink/novalink-sdk/IBody';
 
 export interface ChatArgs {
     /** 發言模式：'public' 為公頻發言，'pm' 為私訊 */
@@ -10,7 +10,7 @@ export interface ChatArgs {
     player?: string;
 }
 
-export default class ChatSkill extends ActionSkill<SuperNovaBot> {
+export default class ChatSkill extends ActionSkill<IBody> {
     public readonly name = 'chat';
     public readonly description = '在 Minecraft 中發言。可以選擇在公開頻道 (public) 發言，或者私訊 (pm) 指定的玩家。';
 
@@ -25,12 +25,12 @@ export default class ChatSkill extends ActionSkill<SuperNovaBot> {
             if (!args.player) {
                 throw new Error('私訊模式 (pm) 必須提供目標玩家名稱 (player)。');
             }
-            this.env.whisper(args.player, args.message);
+            await this.body.say(`/msg ${args.player} ${args.message}`);
             this.state.update('lastChat', { mode: 'pm', player: args.player, message: args.message });
             return `[Chat] 已私訊 ${args.player}: ${args.message}`;
         }
 
-        this.env.chat(args.message);
+        await this.body.say(args.message);
         this.state.update('lastChat', { mode: 'public', message: args.message });
         return `[Chat] 已於公頻發言: ${args.message}`;
     }
