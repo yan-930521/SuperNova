@@ -13,14 +13,14 @@ import {
     CreateCodeSkillTool, DeleteCodeSkillTool, ExecuteCodeSkillTool, ReadCodeSkillTool, RollbackCodeSkillTool, TestCodeSkillTool
 } from '@core/tools/CodeSkillTools';
 
-import { BotManager } from '../BotManager';
+import { MobManager } from '../MobManager';
 import { setupAgentEvents } from '../events/agentEvents';
-import { setupMineflayerEvents } from '../events/mineflayerEvents';
+import { setupMobEvents } from '../events/mobEvents';
 
-export class MinecraftEnv extends BaseEmbodiedEnv {
-    public readonly envId = 'minecraft-underworld';
+export class AvatarEnv extends BaseEmbodiedEnv {
+    public readonly envId = 'novalink-avatar-env';
 
-    private botManager!: BotManager;
+    private mobManager!: MobManager;
     private workspaceManager!: IWorkspaceManager;
 
     constructor(
@@ -35,20 +35,20 @@ export class MinecraftEnv extends BaseEmbodiedEnv {
     }
 
     public async initialize(): Promise<void> {
-        this.botManager = new BotManager(this.eventBus);
-        await this.botManager.initialize();
+        this.mobManager = new MobManager(this.eventBus);
+        await this.mobManager.initialize();
     }
 
     public async registerAgent(agentId: string, sessionId: string, stateRegistry: any): Promise<void> {
         await super.registerAgent(agentId, sessionId, stateRegistry);
 
         const getCodeSkillContext = (id: string): CodeSkillContext => {
-            const ctx = this.botManager.getBotContext(id);
+            const ctx = this.mobManager.getBotContext(id);
             const agentContext = this.registeredAgents.get(id);
             return {
                 state: agentContext?.stateRegistry,
                 eventBus: this.eventBus,
-                env: ctx?.bot
+                body: ctx?.bot
             };
         };
 
@@ -58,11 +58,11 @@ export class MinecraftEnv extends BaseEmbodiedEnv {
     }
 
     public getSdkDeclaration(): string {
-        const filePath = path.join(__dirname, 'SuperNovaBot.d.ts');
         try {
-            return fs.readFileSync(filePath, 'utf-8');
+            const dtsPath = path.join(__dirname, '../../novalink/novalink-sdk/NovaLink.d.ts');
+            return fs.existsSync(dtsPath) ? fs.readFileSync(dtsPath, 'utf-8') : '';
         } catch (e) {
-            console.warn('Failed to load SuperNovaBot.d.ts', e);
+            console.warn('Failed to load SDK declarations', e);
             return '';
         }
     }
@@ -80,36 +80,30 @@ export class MinecraftEnv extends BaseEmbodiedEnv {
 
     public async start(): Promise<void> {
         if (this.registeredAgents.size === 0) {
-            console.warn('[MinecraftEnv] start() called but no agent bound yet.');
+            console.warn('[AvatarEnv] start() called but no agent bound yet.');
             return;
         }
 
-        // 假設只示範其中一個 Agent 的啟動
         const firstAgentId = Array.from(this.registeredAgents.keys())[0];
         const firstAgent = this.registeredAgents.get(firstAgentId)!;
 
-        // Here we could start the Bot connection
-        const host = process.env.MINECRAFT_HOST || '127.0.0.1';
-        const port = parseInt(process.env.MINECRAFT_PORT || '25565', 10);
-        const username = process.env.MINECRAFT_USERNAME || 'SuperNovaBot';
+        // You should provide the real UUID binded in Minecraft
+        const uuid = process.env.MINECRAFT_UUID || '00000000-0000-0000-0000-000000000000';
 
-        const ctx = await this.botManager.spawnBot(
-            host,
-            port,
-            username,
+        const ctx = await this.mobManager.spawnBot(
+            uuid,
             firstAgentId,
             firstAgent.sessionId
         );
 
-        // Assume MainAgent is 'shimo-main' for now, this could be passed in config
-        setupMineflayerEvents(ctx.bot.core, this.eventBus, firstAgent.sessionId, firstAgentId, 'shimo-main');
-        setupAgentEvents(ctx.bot.core, this.eventBus, firstAgentId, firstAgent.sessionId);
+        setupMobEvents(this.mobManager.rpcClient, this.eventBus, firstAgent.sessionId, firstAgentId, 'shimo-main');
+        setupAgentEvents(ctx.bot, this.eventBus, firstAgentId, firstAgent.sessionId);
         
         await this.skillManager.startObservationSkills(firstAgent.sessionId, firstAgentId);
     }
 
     public async stop(): Promise<void> {
         this.skillManager.stopAll();
-        await this.botManager.stop();
+        await this.mobManager.stop();
     }
 }

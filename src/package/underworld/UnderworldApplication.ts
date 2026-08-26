@@ -13,7 +13,7 @@ import {
     CreateCodeSkillTool, DeleteCodeSkillTool, ExecuteCodeSkillTool, ReadCodeSkillTool,
     RollbackCodeSkillTool, TestCodeSkillTool
 } from '../../core/tools/CodeSkillTools';
-import { MinecraftEnv } from './wrapper/MinecraftEnv';
+import { AvatarEnv } from './wrapper/AvatarEnv';
 import { seedSkills } from './wrapper/SkillSeeder';
 
 export class UnderworldApplication {
@@ -22,7 +22,7 @@ export class UnderworldApplication {
     private agentManager!: agent.AgentManager;
     private sessionManager!: session.SessionManager;
     private codeSkillRepo!: ICodeSkillRepository;
-    private minecraftEnv!: MinecraftEnv;
+    private avatarEnv!: AvatarEnv;
     private rl?: readline.Interface;
 
     private readonly MainAgentId = 'shimo-main';
@@ -32,9 +32,9 @@ export class UnderworldApplication {
     private readonly logger = new LogManager({ type: 'SYSTEM', name: 'UnderworldApplication' }).addTransport(new ConsoleTransport('DEBUG'));
 
     public async bootstrap(): Promise<void> {
-        console.log('=============================================');
-        console.log('   SuperNova Minecraft Underworld Node');
-        console.log('=============================================');
+        this.logger.info('=============================================');
+        this.logger.info('   SuperNova Minecraft Underworld Node');
+        this.logger.info('=============================================');
 
         this.kernel = new lifecycle.RuntimeKernel(config.DEFAULT_CONFIG);
         await this.kernel.initialize();
@@ -47,8 +47,8 @@ export class UnderworldApplication {
         this.codeSkillRepo = container.resolve<ICodeSkillRepository>('ICodeSkillRepository');
         
         const workspaceManager = container.resolve<any>('IWorkspaceManager');
-        this.minecraftEnv = new MinecraftEnv(this.eventBus, this.codeSkillRepo, workspaceManager);
-        await this.minecraftEnv.initialize();
+        this.avatarEnv = new AvatarEnv(this.eventBus, this.codeSkillRepo, workspaceManager);
+        await this.avatarEnv.initialize();
 
         this.setupProcessEvents();
     }
@@ -90,8 +90,8 @@ export class UnderworldApplication {
         const embodiedDefaults = this.agentManager.getDefaultTools(agent.AgentType.EMBODIED);
         mcAgent.updateTools(toolRegistry.getTools(embodiedDefaults));
         
-        // 將 MinecraftEnv 掛載到 Agent 身上
-        await mcAgent.mountEnvironment(this.minecraftEnv);
+        // 將 AvatarEnv 掛載到 Agent 身上
+        await mcAgent.mountEnvironment(this.avatarEnv);
 
         // 3. 取得 MainAgent 進行配置
         const mainAgent = await this.agentManager.rehydrate(this.MainAgentId, this.sessionId);
@@ -160,8 +160,8 @@ export class UnderworldApplication {
         if (this.rl) {
             this.rl.close();
         }
-        if (this.minecraftEnv) {
-            await this.minecraftEnv.stop();
+        if (this.avatarEnv) {
+            await this.avatarEnv.stop();
         }
         if (this.kernel) {
             await this.kernel.stop();

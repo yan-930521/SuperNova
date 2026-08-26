@@ -12,3 +12,7 @@ workspace/profiles/*
 .env
 GEMINI.md
 bun.lockb
+src/package/*
+!src/package/underworld/
+!src/package/novalink/
+.vscode/*

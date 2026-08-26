@@ -4,7 +4,7 @@ import { IEventBus } from '../domain/IBus';
 export interface CodeSkillContext<TEnv = any> {
     state: StateRegistry;
     eventBus: IEventBus;
-    env: TEnv;
+    body: TEnv;
 }
 
 export abstract class BaseSkill<TEnv = any> {
@@ -13,12 +13,12 @@ export abstract class BaseSkill<TEnv = any> {
     
     protected readonly state: StateRegistry;
     protected readonly eventBus: IEventBus;
-    protected readonly env: TEnv;
+    protected readonly body: TEnv;
 
     constructor(context: CodeSkillContext<TEnv>) {
         this.state = context.state;
         this.eventBus = context.eventBus;
-        this.env = context.env;
+        this.body = context.body;
     }
 
     public abstract execute(args?: any): Promise<any>;

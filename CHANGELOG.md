@@ -7,6 +7,17 @@
 ---
 
 ## [Unreleased]
+
+## [0.2.3] - 2026-08-26
+### Added (新增功能與基礎設施)
+- **虛擬環境通訊與 SDK 升級 (Virtual Environment Communication & SDK Upgrade)**：
+  - **Novalink 雙向通訊架構 (WebSocket JSON-RPC)**：徹底移除傳統的 `mineflayer` 輪詢機制。改用單一 WebSocket 連線搭配 JSON-RPC 2.0，實現低延遲、全雙工的事件推播與指令發送。
+  - **環境介面重構與輕量化 (Environment Interface Refactoring)**：
+    - 導入了純粹的 `IBody` 介面，完全取代過時的 `SuperNovaBot` 實作。將所有底層原始碼與 CodeSkill 內的環境變數 `env` 全面更名為 `body`，統一物件命名規範以強化 LLM 的上下文對齊準確度。
+    - 移除 Node.js 端的 `mineflayer-pathfinder` 模組，將物理導航、碰撞偵測與尋路演算全權交由後端伺服器 (Java/Netty) 處理，大幅降低 Node 端的 CPU 與記憶體開銷。
+  - **LLM 專屬型別宣告隔離 (Type Declaration Isolation)**：新增 `NovaLink.d.ts`，專門去除 `import/export` 等模組化語法，作為純粹的型別補充包動態注入 Agent 的 Prompt 中，有效降低型別推斷上的幻覺 (Hallucination) 發生率。
+
+
 ### Changed (效能與架構優化)
 - **任務規劃引擎 (LATS Planning Engine) 優化與錯誤修復**：
   - **動態 Schema 抽離 (Dynamic Schema Extraction)**：成功分離了 `ExpansionSchema`，解除 `holistic` 與 `step_by_step` 模式下的 Zod Schema 耦合問題。LLM 進行逐步推演時不再會被強制輸出整體計畫，實現了真正意義上的單步狀態推演。

@@ -5,7 +5,7 @@
 [![TypeScript](https://img.shields.io/badge/Language-TypeScript-blue.svg)](https://www.typescriptlang.org/)
 [![Runtime](https://img.shields.io/badge/Runtime-Bun-black.svg)](https://bun.sh/)
 [![Architecture](https://img.shields.io/badge/Architecture-Event--Driven-orange.svg)](#核心特色)
-[![Stage](https://img.shields.io/badge/Stage-v0.2.2-green.svg)](CHANGELOG.md)
+[![Stage](https://img.shields.io/badge/Stage-v0.2.3-green.svg)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
 SuperNova 是一個專注於效能與狀態管理的 **Agent Runtime (代理人執行引擎)**。它運行於 Bun 之上，透過事件驅動架構解決長效型 AI 系統常見的上下文爆炸與目標飄移問題，使 Agent 能在複雜的長期任務中保持穩定的認知與執行力。
@@ -57,6 +57,7 @@ bun test
 ### 自進化技能生態 (CodeSkill)
 - Agent 可在執行期動態撰寫 TypeScript 技能，具備版本控制、成功率追蹤與自動退版能力，形成「創造-測試-除錯-修復」的自我修復閉環。
 - 泛型化環境 SDK，可無縫適配 Minecraft、Line Bot、爬蟲等任意外部領域。
+- **Novalink 整合**：內建專屬 Minecraft 端的 WebSocket RPC 伺服器，提供低延遲通訊並將物理運算卸載至後端。
 
 ### 工程基礎設施
 - **事件驅動**：全非同步 EventBus 架構，Agent 呼叫工具後掛起、完成後喚醒，全程無阻塞。

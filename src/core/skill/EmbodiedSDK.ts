@@ -20,7 +20,7 @@ declare module "supernova-embodied-sdk" {
     interface CodeSkillContext<TEnv = any> {
         state: StateRegistry;
         eventBus: IEventBus;
-        env: TEnv;
+        body: TEnv;
     }
 
     abstract class BaseSkill<TEnv = any> {
@@ -28,7 +28,7 @@ declare module "supernova-embodied-sdk" {
         public abstract readonly description: string;
         protected readonly state: StateRegistry;
         protected readonly eventBus: IEventBus;
-        protected readonly env: TEnv;
+        protected readonly body: TEnv;
         constructor(context: CodeSkillContext<TEnv>);
         public abstract execute(args?: any): Promise<any>;
     }

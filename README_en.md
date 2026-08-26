@@ -5,7 +5,7 @@
 [![TypeScript](https://img.shields.io/badge/Language-TypeScript-blue.svg)](https://www.typescriptlang.org/)
 [![Runtime](https://img.shields.io/badge/Runtime-Bun-black.svg)](https://bun.sh/)
 [![Architecture](https://img.shields.io/badge/Architecture-Event--Driven-orange.svg)](#core-features)
-[![Stage](https://img.shields.io/badge/Stage-v0.2.2-green.svg)](CHANGELOG_en.md)
+[![Stage](https://img.shields.io/badge/Stage-v0.2.3-green.svg)](CHANGELOG_en.md)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
 SuperNova is an **Agent Runtime** focusing on performance and state management. Running on Bun, it leverages an event-driven architecture to solve common issues in long-running AI systems — such as context explosion and goal drift — enabling Agents to maintain stable cognition and execution during complex, long-term tasks.
@@ -60,6 +60,7 @@ bun test
 ### Self-Evolving Skill Ecosystem (CodeSkill)
 - Agents can dynamically write TypeScript skills at runtime, with built-in version control, success rate tracking, and auto-rollback — forming a complete "create-test-debug-fix" self-healing loop.
 - Generic environment SDK that seamlessly adapts to Minecraft, Line Bot, web crawlers, or any external domain.
+- **Novalink Integration**: Dedicated WebSocket RPC server for Minecraft, providing low-latency communication and offloading physical computations to the backend.
 
 ### Engineering Infrastructure
 - **Event-Driven**: Fully asynchronous EventBus architecture — Agents suspend after tool calls and wake on completion, entirely non-blocking.
