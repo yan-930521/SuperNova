@@ -1,0 +1,13 @@
+{
+  "itemGroup.novalink": "Example Mod Tab",
+  "block.novalink.example_block": "Example Block",
+  "item.novalink.example_item": "Example Item",
+
+  "novalink.configuration.title": "NovaLink Configs",
+  "novalink.configuration.section.novalink.common.toml": "NovaLink Configs",
+  "novalink.configuration.section.novalink.common.toml.title": "NovaLink Configs",
+  "novalink.configuration.items": "Item List",
+  "novalink.configuration.logDirtBlock": "Log Dirt Block",
+  "novalink.configuration.magicNumberIntroduction": "Magic Number Text",
+  "novalink.configuration.magicNumber": "Magic Number"
+}
