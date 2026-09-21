@@ -2,7 +2,11 @@
   "compilerOptions": {
     "paths": {
       "@core/*": ["./src/core/*"],
-      "@underworld/*": ["./src/package/underworld/*"]
+      "@underworld/*": ["./src/package/underworld/*"],
+      "@supernova/common/*": ["./packages/common/src/*"],
+      "@supernova/events/*": ["./packages/events/src/*"],
+      "@supernova/storage/*": ["./packages/storage/src/*"],
+      "@supernova/runtime/*": ["./packages/runtime/src/*"]
     },
     "module": "esnext",
     "moduleResolution": "bundler",
