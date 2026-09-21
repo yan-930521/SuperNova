@@ -1,6 +1,6 @@
-import { ILifecycle } from '../lifecycle/ILifecycle';
+import { ILifecycle } from '@supernova/runtime/lifecycle/ILifecycle';
 import { BaseTool } from '../tools/BaseTool';
-import { IEventBus } from '../domain/IBus';
+import { IEventBus } from '@supernova/events/IBus';
 import { SkillManager } from '../skill/SkillManager';
 import { ICodeSkillRepository } from '../domain/ICodeSkillRepository';
 

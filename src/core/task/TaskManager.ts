@@ -1,4 +1,4 @@
-import { AgentEvent, HookEvent, IEventBus, PromptSectionIndex, SystemEvent } from '../domain/IBus';
+import { AgentEvent, HookEvent, IEventBus, PromptSectionIndex, SystemEvent } from '@supernova/events/IBus';
 import { CreateTaskPayload, ITask, ITaskManager, TaskStatus } from '../domain/ITask';
 import { DataBlock, MessagePriority } from '../messaging/DataBlock';
 

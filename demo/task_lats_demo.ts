@@ -1,6 +1,10 @@
 import * as fs from 'fs';
 
-import { ConfigLoader } from '../src/core/config/ConfigLoader';
+import { DEFAULT_CONFIG } from '@core/config';
+import { Config, ConfigSchema } from '@core/config/Config';
+import { ConfigLoader } from '@supernova/common/config/ConfigLoader';
+import { LogManager } from '@supernova/common/LogManager';
+
 import { LLMProvider } from '../src/core/infra/llm/LLMProvider';
 import { LATSPlanner } from '../src/core/task/planning/LATSPlanner';
 import { TaskDAGGenerator } from '../src/core/task/planning/TaskDAGGenerator';
@@ -18,7 +22,8 @@ async function runDemo() {
         fs.unlinkSync(configPath);
     }
 
-    const loader = new ConfigLoader();
+    const loader = new ConfigLoader<Config>(DEFAULT_CONFIG, ConfigSchema, LogManager.recorder);
+
     const config = await loader.bootstrap(configPath);
 
     const llmProvider = new LLMProvider(config);

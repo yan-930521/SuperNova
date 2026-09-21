@@ -1,5 +1,5 @@
 import { messaging } from '../../../core';
-import { IEventBus } from '../../../core/domain/IBus';
+import { IEventBus, AgentEvent } from '@supernova/events/IBus';
 import { RpcClient } from '../../novalink/novalink-sdk';
 import { publishSensorEvent } from './helper';
 
@@ -17,7 +17,7 @@ export function setupMobEvents(rpcClient: RpcClient, eventBus: IEventBus, sessio
             priority: messaging.MessagePriority.LOW,
             controlPayload: message
         });
-        eventBus.publish({ type: messaging.AgentEvent.AgentMessage, timestamp: Date.now(), sessionId, payload: block });
+        eventBus.publish({ type: AgentEvent.AgentMessage, timestamp: Date.now(), sessionId, payload: block });
     });
 
     rpcClient.onEvent('entity_hurt', (params: any) => {
@@ -53,7 +53,7 @@ export function setupMobEvents(rpcClient: RpcClient, eventBus: IEventBus, sessio
             messaging.MessagePriority.URGENT
         );
         eventBus.publish({
-            type: messaging.AgentEvent.EmotionTriggered,
+            type: AgentEvent.EmotionTriggered,
             timestamp: Date.now(),
             sessionId: sessionId,
             payload: { impacts: { distress: 80, fear: 50, anxiety: 50 } }

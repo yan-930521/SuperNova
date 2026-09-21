@@ -10,15 +10,16 @@ import { CodeSkillContext } from '@core/skill/BaseSkill';
 import { SkillManager } from '@core/skill/SkillManager';
 import { BaseTool } from '@core/tools/BaseTool';
 import {
-    CreateCodeSkillTool, DeleteCodeSkillTool, ExecuteCodeSkillTool, ReadCodeSkillTool, RollbackCodeSkillTool, TestCodeSkillTool
+    CreateCodeSkillTool, DeleteCodeSkillTool, ExecuteCodeSkillTool, ReadCodeSkillTool,
+    RollbackCodeSkillTool, TestCodeSkillTool
 } from '@core/tools/CodeSkillTools';
 
-import { MobManager } from '../MobManager';
 import { setupAgentEvents } from '../events/agentEvents';
 import { setupMobEvents } from '../events/mobEvents';
+import { MobManager } from '../MobManager';
 
-export class AvatarEnv extends BaseEmbodiedEnv {
-    public readonly envId = 'novalink-avatar-env';
+export class BodyEnv extends BaseEmbodiedEnv {
+    public readonly envId = 'novalink-body-env';
 
     private mobManager!: MobManager;
     private workspaceManager!: IWorkspaceManager;
@@ -80,7 +81,7 @@ export class AvatarEnv extends BaseEmbodiedEnv {
 
     public async start(): Promise<void> {
         if (this.registeredAgents.size === 0) {
-            console.warn('[AvatarEnv] start() called but no agent bound yet.');
+            console.warn('[BodyEnv] start() called but no agent bound yet.');
             return;
         }
 

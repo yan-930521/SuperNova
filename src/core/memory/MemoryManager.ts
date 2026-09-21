@@ -1,20 +1,20 @@
-import { ConsoleTransport } from '@core/infra/transports';
+import { ConsoleTransport } from '@supernova/common/transports';
 import { PromptTemplate } from '@langchain/core/prompts';
 
 import { Config } from '../config/Config';
 import {
     AgentEvent, HookEvent, IEvent, IEventBus, PromptSectionIndex, SystemEvent
-} from '../domain/IBus';
+} from '@supernova/events/IBus';
 import { GraphEdge, GraphNode, IGraphRepository } from '../domain/IGraphRepository';
 import { IDataBlockRepository } from '../domain/IRepository';
 import { LLMProvider } from '../infra/llm/LLMProvider';
-import { LogManager } from '../infra/LogManager';
-import { ILifecycle } from '../lifecycle/ILifecycle';
+import { LogManager } from '@supernova/common/LogManager';
+import { ILifecycle } from '@supernova/runtime/lifecycle/ILifecycle';
 import { DataBlock } from '../messaging/DataBlock';
 import {
     GRAPH_EXTRACTOR_PROMPT, GRAPH_EXTRACTOR_TYPE, SESSION_SUMMARY_PROMPT
 } from '../prompts/memory.prompt';
-import { IdGenerator } from '../utils/IdGenerator';
+import { IdGenerator } from '@supernova/common/IdGenerator';
 
 /**
  * 記憶萃取引擎 (Memory Manager)

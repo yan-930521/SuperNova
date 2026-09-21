@@ -1,7 +1,7 @@
-import { describe, it, expect } from 'bun:test';
-import { EventBus } from '../EventBus';
-import { IEventBus } from '../../domain/IBus';
-import { IEvent } from '../../domain/IBus';
+import { describe, expect, it } from 'bun:test';
+
+import { IEvent } from '@core/domain';
+import { EventBus } from '@supernova/events/EventBus';
 
 describe('EventBus High-Level Features Test', () => {
   it('should support sessionId isolation and filtering', async () => {

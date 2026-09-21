@@ -1,5 +1,5 @@
 import { messaging } from '../../../core';
-import { IEventBus } from '../../../core/domain/IBus';
+import { IEventBus, AgentEvent } from '@supernova/events/IBus';
 
 /**
  * 輔助函數：發布 Sensor 變動事件
@@ -22,5 +22,5 @@ export function publishSensorEvent(
         priority,
         controlPayload
     });
-    eventBus.publish({ type: messaging.AgentEvent.AgentMessage, timestamp: Date.now(), sessionId, payload: block });
+    eventBus.publish({ type: AgentEvent.AgentMessage, timestamp: Date.now(), sessionId, payload: block });
 }

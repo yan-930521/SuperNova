@@ -1,7 +1,7 @@
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 
 import { CreateTaskPayload } from '../../domain/ITask';
-import { LogManager } from '../../infra';
+import { LogManager } from '@supernova/common/LogManager';
 import { LLMProvider } from '../../infra/llm/LLMProvider';
 import { DAGSchema, TASK_PROMPTS } from '../../prompts/task.prompt';
 

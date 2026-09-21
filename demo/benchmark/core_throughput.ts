@@ -1,9 +1,9 @@
 import { bench, run } from 'mitata';
 
-import { AgentEvent } from '../../src/core/domain/IBus';
+import { AgentEvent } from '@supernova/events/IBus';
 import { DataBlock, MessagePriority } from '../../src/core/messaging/DataBlock';
-import { EventBus } from '../../src/core/messaging/EventBus';
-import { LRUCache } from '../../src/core/utils/LRUCache';
+import { EventBus } from '@supernova/events/EventBus';
+import { LRUCache } from '@supernova/common/LRUCache';
 
 console.log("🚀 SuperNova Core Throughput Benchmark");
 console.log("=======================================\n");

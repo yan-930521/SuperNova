@@ -98,7 +98,7 @@ agent:
  # 保留最近 n 筆不壓縮，避免 LLM 忘記剛執行的細節，僅在 save_tokens = true 時啟用
  uncompressed_tail: 5
  # 最大上下文窗口
- max_context_window: 128000
+ max_context_window: 500
  # 是否開啟對話時間感知插針
  enable_temporal_injection: true
  # 是否開啟記憶圖譜背景萃取功能

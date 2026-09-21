@@ -1,6 +1,6 @@
 import { Config } from '../config/Config';
 import { IDataBlockRepository } from '../domain/IRepository';
-import { HookEvent, IEventBus, PromptSectionIndex } from '../domain/IBus';
+import { HookEvent, IEventBus, PromptSectionIndex } from '@supernova/events/IBus';
 import { PromptLoader } from '../utils/PromptLoader';
 import { AgentOptions, AgentType, BaseAgent } from './BaseAgent';
 

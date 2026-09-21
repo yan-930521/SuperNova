@@ -7,7 +7,7 @@ import {
     ListFilesTool, ReadBlobTool, ReadFileTool, RunBashTool, WriteFileTool
 } from '../../tools/WorkspaceTools';
 import { Config } from '../../config/Config';
-import { ILifecycle } from '../../lifecycle/ILifecycle';
+import { ILifecycle } from '@supernova/runtime/lifecycle/ILifecycle';
 import { IStorageDriver } from '../../domain/IStorageDriver';
 import { IWorkspaceManager, WorkspaceType } from '../../domain/IWorkspaceManager';
 import { GitLocalStorageDriver } from '../storage/GitLocalStorageDriver';

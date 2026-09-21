@@ -8,6 +8,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-08-28
+### Added
+- **String Array RBAC System**:
+  - **Fine-Grained Tool Permission Interception**: Deprecated the difficult-to-extend BitField implementation in favor of a String Array based `AgentPermissions` system. The core `BaseTool.execute` now actively validates against `ToolContext.agentPermissions` when binding LangChain tools. If the `requiredPermission` is missing, it actively intercepts at the LLM level and returns `Permission Denied`, effectively preventing unauthorized tool invocations.
+  - **Two-Stage Privilege Gate**: Decoupled global features from individual Agent privileges. Background core systems (like `MemoryManager`) now operate on a two-stage check: First, it verifies if the global `FeaturesConfig` toggle is active. If so, it uses the EventBus (`BeforeAgentStep` Hook) to dynamically intercept and check if the specific Agent holds privileges like `MANAGE_GRAPH_MEMORY` or `TRIGGER_DAILY_SUM` before injecting memories or summaries, massively boosting security.
+- **Global Feature Toggles**:
+  - **Feature Decoupling**: Extracted flags such as `enable_graph_memory`, `enable_daily_summary`, `enable_payload_offload`, and `enable_temporal_injection` from `AgentConfig` into a pristine global `FeaturesConfig` section. This provides clearer semantics and allows administrators to toggle system-wide intensive background tasks with a single switch.
+
+### Changed
+- **Application Lifecycle Management (App Facade & Graceful Shutdown)**:
+  - Encapsulated a new `SuperNovaApp` Facade class, completely decoupling the CLI execution loop, RuntimeKernel initialization, and EventBus subscriptions. Introduced consistent `SIGINT/SIGTERM` Signal Traps to ensure that all active Sessions and DB I/O operations land safely and asynchronously during terminal interruptions (Graceful Shutdown).
+- **Dynamic Privilege Cache Invalidation**:
+  - Fixed a stealthy bug where an Agent's underlying ReactAgent closure wouldn't update if new privileges were granted dynamically during execution. Rewrote `BaseAgent.generateToolsSignature` to include the `permissions` array into the signature calculation. Any mutation to the permission array now instantly invalidates the old ReactAgent instance, forcing a recompile and binding of the latest permissions.
+
 ## [0.2.3] - 2026-08-26
 ### Added
 - **Virtual Environment Communication & SDK Upgrade**:

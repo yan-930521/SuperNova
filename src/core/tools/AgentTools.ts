@@ -1,11 +1,11 @@
 import { z } from 'zod';
 
 import { AgentType } from '../agent/BaseAgent';
-import { AgentEvent, SystemEvent } from '../domain/IBus';
+import { AgentEvent, SystemEvent } from '@supernova/events/IBus';
 import { ITaskManager } from '../domain/ITask';
 import { WorkspaceType } from '../domain/IWorkspaceManager';
 import { DataBlock, MessagePriority } from '../messaging/DataBlock';
-import { IdGenerator } from '../utils/IdGenerator';
+import { IdGenerator } from '@supernova/common/IdGenerator';
 import { BaseTool, ToolContext } from './BaseTool';
 
 import type { AgentManager } from '../agent/AgentManager';

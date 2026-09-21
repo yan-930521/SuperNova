@@ -1,7 +1,7 @@
 import * as path from 'path';
 
 import { Config } from '../config/Config';
-import { HookEvent, IEventBus, PromptSectionIndex } from '../domain/IBus';
+import { HookEvent, IEventBus, PromptSectionIndex } from '@supernova/events/IBus';
 import { IDataBlockRepository } from '../domain/IRepository';
 import { EMBODIED_SDK_DECLARATION } from '../skill/EmbodiedSDK';
 import { PromptLoader } from '../utils/PromptLoader';

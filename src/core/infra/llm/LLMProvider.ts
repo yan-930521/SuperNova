@@ -1,10 +1,10 @@
+import { ILifecycle } from '@core/lifecycle';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { ChatOpenAI, OpenAIEmbeddings } from '@langchain/openai';
+import { LogManager } from '@supernova/common/LogManager';
+import { ConsoleTransport } from '@supernova/common/transports';
 
 import { Config } from '../../config/Config';
-import { ILifecycle } from '../../lifecycle/ILifecycle';
-import { LogManager } from '../LogManager';
-import { ConsoleTransport } from '../transports';
 
 /**
  * 集中管理與快取 LangChain LLM 實例的提供者

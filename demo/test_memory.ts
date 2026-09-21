@@ -2,7 +2,11 @@ import { config as dotenvConfig } from 'dotenv';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { ConfigLoader } from '../src/core/config/ConfigLoader';
+import { DEFAULT_CONFIG } from '@core/config';
+import { Config, ConfigSchema } from '@core/config/Config';
+import { ConfigLoader } from '@supernova/common/config/ConfigLoader';
+import { LogManager } from '@supernova/common/LogManager';
+
 import {
     FileSystemDataBlockRepository
 } from '../src/core/infra/repositories/FileSystemDataBlockRepository';
@@ -25,7 +29,8 @@ async function main() {
         fs.unlinkSync(configPath);
     }
 
-    const loader = new ConfigLoader();
+    const loader = new ConfigLoader<Config>(DEFAULT_CONFIG, ConfigSchema, LogManager.recorder);
+
     const config = await loader.bootstrap(configPath);
     
 

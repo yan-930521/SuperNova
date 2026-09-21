@@ -1,14 +1,14 @@
-import { ConsoleTransport } from '@core/infra/transports';
+import { ConsoleTransport } from '@supernova/common/transports';
 
 import { Config } from '../config/Config';
-import { HookEvent, IEvent, IEventBus, PromptSectionIndex } from '../domain/IBus';
+import { HookEvent, IEvent, IEventBus, PromptSectionIndex } from '@supernova/events/IBus';
 import { ICodeSkillRepository } from '../domain/ICodeSkillRepository';
 import { IAgentStateRepository, IDataBlockRepository } from '../domain/IRepository';
 import { ITaskManager, ITaskPlanningService } from '../domain/ITask';
 import { IWorkspaceManager } from '../domain/IWorkspaceManager';
 import { LLMProvider } from '../infra/llm/LLMProvider';
-import { LogManager } from '../infra/LogManager';
-import { ILifecycle } from '../lifecycle/ILifecycle';
+import { LogManager } from '@supernova/common/LogManager';
+import { ILifecycle } from '@supernova/runtime/lifecycle/ILifecycle';
 import { BaseTool } from '../tools/BaseTool';
 import { ToolRegistry } from '../tools/ToolRegistry';
 import { AgentOptions, AgentType, BaseAgent } from './BaseAgent';

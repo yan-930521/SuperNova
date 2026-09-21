@@ -1,7 +1,8 @@
 import { fs as virtualFs } from 'memfs';
 import * as path from 'path';
 
-import { LogManager } from '../LogManager';
+import { LogManager } from '@supernova/common/LogManager';
+
 import { IStorageDriver } from '../../domain/IStorageDriver';
 import { WorkspaceType } from '../../domain/IWorkspaceManager';
 

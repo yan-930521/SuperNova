@@ -1,5 +1,5 @@
 import { StateRegistry } from '../agent/StateRegistry';
-import { IEventBus } from '../domain/IBus';
+import { IEventBus } from '@supernova/events/IBus';
 
 export interface CodeSkillContext<TEnv = any> {
     state: StateRegistry;

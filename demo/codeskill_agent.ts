@@ -1,5 +1,5 @@
 import { DEFAULT_CONFIG } from '../src/core/config/DefaultConfig';
-import { EventBus } from '../src/core/messaging/EventBus';
+import { EventBus } from '@supernova/events/EventBus';
 import { AgentManager } from '../src/core/agent/AgentManager';
 import { EmbodiedAgent } from '../src/core/agent/EmbodiedAgent';
 import { AgentType } from '../src/core/agent/BaseAgent';

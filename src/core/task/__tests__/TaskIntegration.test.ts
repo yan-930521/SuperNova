@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 
-import { SystemEvent } from '../../domain/IBus';
+import { SystemEvent } from '@supernova/events/IBus';
 import { TaskStatus } from '../../domain/ITask';
-import { EventBus } from '../../messaging/EventBus';
+import { EventBus } from '@supernova/events/EventBus';
 import { TaskManager } from '../TaskManager';
 
 describe('Task System Integration', () => {

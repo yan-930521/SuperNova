@@ -1,6 +1,6 @@
 import { ICodeSkillRepository } from '../domain/ICodeSkillRepository';
-import { LogManager } from '../infra/LogManager';
-import { LRUCache } from '../utils/LRUCache';
+import { LogManager } from '@supernova/common/LogManager';
+import { LRUCache } from '@supernova/common/LRUCache';
 import { BaseSkill, CodeSkillContext, ObservationSkill } from './BaseSkill';
 
 export class SkillManager {
@@ -11,7 +11,7 @@ export class SkillManager {
         private codeSkillRepo: ICodeSkillRepository,
         private getCodeSkillContext: (agentId: string) => CodeSkillContext
     ) {
-        this.skillCache = new LRUCache<string, BaseSkill<any>>(100, undefined, (key, skill) => {
+        this.skillCache = new LRUCache<string, BaseSkill<any>>(100, undefined, (key: string, skill: BaseSkill<any>) => {
             if (skill instanceof ObservationSkill) {
                 skill.stopSensoryLoop();
                 this.logger.info(`[SkillManager] Background skill evicted and stopped: ${key}`);

@@ -1,3 +1,3 @@
 export * from './DataBlock';
-export * from './EventBus';
-export * from '../domain/IBus';
+export * from '@supernova/events/EventBus';
+export * from '@supernova/events/IBus';

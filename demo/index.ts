@@ -1,24 +1,20 @@
-import { config as dotenvConfig } from 'dotenv';
 import * as fs from 'fs';
 import * as readline from 'readline';
 
-import { AgentManager } from '../src/core/agent/AgentManager';
-import { AgentType } from '../src/core/agent/BaseAgent';
-import { ConfigLoader } from '../src/core/config/ConfigLoader';
-import { RuntimeKernel } from '../src/core/lifecycle/RuntimeKernel';
-import { DataBlock } from '../src/core/messaging/DataBlock';
-import { EventBus } from '../src/core/messaging/EventBus';
-import { IEventBus } from '../src/core/domain/IBus';
-import { AgentEvent, IEvent, SystemEvent } from '../src/core/domain/IBus';
-import { SessionManager } from '../src/core/session/SessionManager';
-
-dotenvConfig();
+import { SuperNovaApp } from '../src/core/app/SuperNovaApp';
+import { LogManager } from '@supernova/common/LogManager';
+import { ConsoleTransport } from '@supernova/common/transports/ConsoleTransport';
 
 async function main() {
-    console.log('=============================================');
-    console.log('   SuperNova v0.1.0 Interactive Demo');
-    console.log('=============================================');
-    console.log('Initializing system...');
+    const logger = new LogManager({ type: 'SYSTEM', name: 'DemoApp' }).addTransport(new ConsoleTransport('INFO'));
+    
+    logger.info('=============================================');
+    logger.info('   SuperNova v0.1.0 Interactive Demo');
+    logger.info('=============================================');
+    logger.info('Initializing system...');
+
+    // 1. 初始化應用程式外觀層 (Facade)
+    const app = new SuperNovaApp();
 
     // 每次執行 demo 前刪除舊的 config.yaml，強制使用預設值
     const configPath = './config.yaml';
@@ -26,50 +22,27 @@ async function main() {
         fs.unlinkSync(configPath);
     }
 
-    const loader = new ConfigLoader();
-    const config = await loader.bootstrap(configPath);
-    const kernel = new RuntimeKernel(config);
+    // 啟動內核
+    await app.start(configPath);
 
-    // 1. 透過內核啟動所有系統組件 (IoC, Repo, Managers)
-    await kernel.initialize();
-    await kernel.start();
-
-    // 從 Kernel 的 IoC 容器中取出我們需要的服務
-    const container = kernel.getContainer();
-    const eventBus = container.resolve<EventBus>('EventBus');
-    const agentManager = container.resolve<AgentManager>('AgentManager');
-    const sessionManager = container.resolve<SessionManager>('SessionManager');
-
-    const MainAgentId = 'demo-mainagent';
+    const mainAgentId = 'demo-mainagent';
     const sessionId = 'demo-session';
 
-    // 2. 初始化會話 (Session)
-    try {
-        await sessionManager.loadSession(sessionId);
-        console.log(`[系統] 載入既有會話: ${sessionId}`);
-    } catch (e: any) {
-        if (e.message && e.message.includes('Session not found')) {
-            await sessionManager.createSession(MainAgentId, sessionId, 'PERSISTENT');
-            await sessionManager.saveSession(sessionId);
-            console.log(`[系統] 成功建立新會話: ${sessionId}`);
-        } else {
-            console.error(`[系統] 讀取既有會話失敗，可能是檔案損毀，為避免覆寫已中斷啟動。錯誤: ${e.message}`);
-            process.exit(1);
-        }
-    }
+    // 2. 初始化會話 (自動處理重載或創建)
+    await app.initializeSession(sessionId, mainAgentId);
 
-    // 4. 設定終端機對話
+    // 3. 設定終端機對話
     const rl = readline.createInterface({
         input: process.stdin,
         output: process.stdout
     });
 
-    const ask = () => {
+    const promptUser = () => {
         rl.question('\nYou: ', (input) => {
             const text = input.trim();
             if (text === 'exit') {
-                console.log('系統關閉中...');
-                kernel.stop().then(() => {
+                logger.info('System shutting down...');
+                app.stop().then(() => {
                     rl.close();
                     process.exit(0);
                 });
@@ -77,61 +50,37 @@ async function main() {
             }
 
             if (text === '/day') {
-                console.log('[系統] 手動觸發換日優化與總結 (SessionOptimization)...');
-                eventBus.publish({
-                    type: SystemEvent.SessionOptimization,
-                    timestamp: Date.now(),
-                    sessionId: sessionId,
-                    payload: { sessionId, targetDate: new Date().toLocaleDateString('en-CA') }
-                });
-                setTimeout(ask, 1000);
+                logger.info('Manually triggering SessionOptimization...');
+                app.triggerSessionOptimization(sessionId);
+                setTimeout(promptUser, 1000);
                 return;
             }
 
             if (!text) {
-                ask();
+                promptUser();
                 return;
             }
 
-            // 發送訊息給MainAgent (指名 targetId)
-            const messageBlock = new DataBlock({
-                sessionId: sessionId,
-                senderId: 'USER',
-                targetId: MainAgentId,
-                type: 'human',
-                intent: 'USER_INPUT',
-                controlPayload: text,
-                metadata: {
-                    senderName: "Yan"
-                }
-            });
-
-            // 透過標準的 AgentMessage 頻道廣播
-            eventBus.publish({
-                type: AgentEvent.AgentMessage,
-                timestamp: Date.now(),
-                sessionId: sessionId,
-                payload: messageBlock
-            });
+            // 發送訊息給 Agent
+            app.sendMessage(sessionId, text, mainAgentId, "User");
         });
     };
 
-    // 3. 訂閱全局 AgentMessage 來接收MainAgent的回覆
-    eventBus.subscribe(AgentEvent.AgentMessage, (event: IEvent<AgentEvent.AgentMessage>) => {
-        const dataBlock = event.payload;
-        if (Array.isArray(dataBlock)) {
-            dataBlock.forEach((d) => {
-                console.log(`\n[${d.senderId} -> ${d.targetId || 'NONE'}]:\n${d.toMarkdown()}`);
-            })
-        } else {
-            console.log(`\n[${dataBlock.senderId} -> ${dataBlock.targetId || 'NONE'}]:\n${dataBlock.toMarkdown()}`);
-        }
-
-        setTimeout(ask, 5000);
+    // 4. 註冊回調事件
+    app.onMessage((dataBlock) => {
+        console.log(`\n[${dataBlock.senderId} -> ${dataBlock.targetId || 'NONE'}]:\n${dataBlock.toMarkdown()}`);
     });
 
-    console.log(`\n[系統] ${MainAgentId} 已上線！輸入 "exit" 即可安全離開。`);
-    ask();
+    // 只有當指定的 Agent 轉為閒置狀態時，才重新顯示輸入提示字元
+    app.onAgentIdle((agentId) => {
+        if (agentId === mainAgentId) {
+            promptUser();
+        }
+    });
+
+    logger.info(`${mainAgentId} is online! Type "exit" to safely shutdown.`);
+    // 首次啟動提示
+    promptUser();
 }
 
 main().catch(err => {

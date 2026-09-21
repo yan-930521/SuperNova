@@ -1,4 +1,4 @@
 export * from './GraphValidator';
-export * from './IdGenerator';
+export * from '@supernova/common/IdGenerator';
 export * from './PromptLoader';
-export * from './LRUCache';
+export * from '@supernova/common/LRUCache';

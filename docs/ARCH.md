@@ -21,6 +21,7 @@ related_docs:
 ## 1. 代理層與執行層 (Agent & Execution Layer)
 *   [Agent 系統設計 (docs/architecture/agent/agent.md)](./architecture/agent/agent.md)：引入**雙腦意識架構 (Dual-Brain Consciousness)**。包含 `MainAgent` 作為具備 OCC 情緒引擎 (Emotion Engine) 的情感感知中樞，以及 `TaskAgent` 作為專注 IDE 邏輯與任務執行的左腦，和 `EmbodiedAgent` 作為專注 3D 空間與 CLI 操作的右腦。包含 `BaseAgent` 基礎設施、**PromptSectionIndex 渲染機制**、意識投影 (Consciousness Projection)、時間感知插針 (Temporal Injection) 與生命週期管理。
 *   [工具系統設計 (`docs/architecture/agent/tool.md`)](./architecture/agent/tool.md)：定義 `BaseTool` 抽象基底、強型別參數驗證 (Zod) 與執行上下文 (ToolContext)。包含全域工具註冊表 (ToolRegistry)、無狀態工具設計與內建工具列表 (`SendMessageTool`, `ToggleProjectionTool`, `ReadBlobTool`, `ReadFileTool`, `WriteFileTool`, `ListFilesTool`, `RunBashTool`)，以及「工具負責做事，大腦負責記憶與廣播」的職責分離機制。
+*   [Agent 權限系統 (`docs/architecture/core/permissions.md`)](./architecture/core/permissions.md)：實作基於 BitField 的高顆粒度權限控制 (RBAC)。支援零信任架構，將可見性 (allowedTools) 與執行權限解耦。具備透過自然語言與 `SendMessageTool` 向上層主管動態請求授權的 HITL 工作流。
 *   [CodeSkill 與具身狀態管理 (`docs/architecture/embodied/codeskill.md`)](./architecture/embodied/codeskill.md)：定義 `EmbodiedAgent` 的動態自身狀態樹 (Dynamic State Registry) 以及具備嚴格型別繼承 (`ObservationSkill`, `ActionSkill`) 的自進化技能庫架構。內建基於 `LRUCache` 的快取管理與自動失效 (Cache Invalidation) 機制，確保程式碼修改後能立即生效，並利用 `onEvict` 鉤子優雅關閉背景迴圈，達成完整的自我修復閉環 (Self-Healing Loop)。支援透過 SDK 暴露與動態載入實現 Agent 編程自迭代。
 
 ## 2. 調度與事件層 (Scheduling & Event Layer)
@@ -36,6 +37,7 @@ related_docs:
 
 ## 4. 系統基礎建設 (Infrastructure)
 *   [基礎建設與配置 (`docs/architecture/core/base.md`)](./architecture/core/base.md)：包含配置管理 (`Config`, `ConfigLoader`, `DefaultConfig`)、**RuntimeKernel (依賴注入中樞)**、`ComponentContainer` (IoC 容器)、`ILifecycle` 生命週期介面、系統日誌 (`LogManager` 雙軌架構)、持久化儲存 (`IRepository`, `JsonFileRepository`)、WorkspaceManager (雙層工作區拓撲與 StorageDriver 動態配置)，以及工具類別 (`GraphValidator`, `IdGenerator`)。
+*   [應用層外觀 (`docs/architecture/core/app.md`)](./architecture/core/app.md)：引入 `SuperNovaApp` 作為統一的外觀模式 (Facade)，解耦系統內核與外部介面 (CLI/Web UI)，並負責統一的生命週期管理與事件訂閱抽象。
 *   **Prompt 與 Schema 集中化管理**：所有 LLM 互動相關的提示詞 (System Prompts) 與 Zod 結構化輸出 (Structured Output) 定義，皆統一提取至 `src/core/prompts/` 目錄 (如 `task.prompt.ts`, `memory.prompt.ts` 等)，由 `PromptLoader` 負責初始化與載入，實現與演算法邏輯的徹底解耦。
 
 ---
@@ -57,7 +59,6 @@ related_docs:
 
 | 規劃文件 | 概述 |
 | :--- | :--- |
-| [零信任安全架構](./todo/security.md) | Prompt 注入防護、HITL 權限閘道 |
 | [Agent 進階功能](./todo/agent_advanced.md) | PDCA 交互流程、高階擴展模型、跨會話事件訂閱 |
 | [工具系統進階](./todo/tool_advanced.md) | 沙盒隔離、工具權限控制、重試機制、環境動作工具 |
 | [EventBus 進階](./todo/event_bus_advanced.md) | TTL 監控、工具 API、事件優先級/重播/背壓 |

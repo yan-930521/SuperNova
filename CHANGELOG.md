@@ -8,6 +8,20 @@
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-08-28
+### Added (新增功能與基礎設施)
+- **字串陣列權限控制系統 (String Array RBAC System)**：
+  - **細粒度工具權限攔截**：放棄了原本難以動態擴充的 BitField 實作，全面改為字串陣列 (String Array) 形式的 `AgentPermissions`。系統在底層 `BaseTool.execute` 綁定 LangChain 工具時，會主動比對 `ToolContext.agentPermissions`，若缺少 `requiredPermission` 則立刻在 LLM 層面攔截並回傳 `Permission Denied`，有效防堵越權工具呼叫。
+  - **兩段式特權閘道 (Two-Stage Privilege Gate)**：將全域功能與 Agent 個別特權解耦。背景核心系統（如 `MemoryManager`）在運作時，會先檢查全域 `FeaturesConfig` 是否開啟，接著再透過事件匯流排 (`BeforeAgentStep` Hook) 攔截並動態檢查該 Agent 是否擁有 `MANAGE_GRAPH_MEMORY` 或 `TRIGGER_DAILY_SUM` 特權，才決定是否注入記憶與總結，大幅提升安全性。
+- **全域特徵開關 (Global Feature Toggles)**：
+  - **功能解耦**：將原本糾纏於 `AgentConfig` 內的 `enable_graph_memory`, `enable_daily_summary`, `enable_payload_offload`, `enable_temporal_injection` 抽離至全新的 `FeaturesConfig` 全域區塊。不僅語義更清晰，也讓管理者能一鍵開啟或關閉全系統層級的耗能背景任務。
+
+### Changed (效能與架構優化)
+- **應用程式生命週期管理 (App Facade & Graceful Shutdown)**：
+  - 封裝了全新的 `SuperNovaApp` Facade 類別，將 CLI 的執行迴圈 (Loop)、RuntimeKernel 初始化、EventBus 訂閱徹底解耦。提供了一致性的 `SIGINT/SIGTERM` 捕捉器 (Signal Traps)，確保在終端機強制中斷時，所有的 Session 與 DB 寫入都能安全地非同步落地 (Graceful Shutdown)。
+- **動態特權快取失效 (Dynamic Privilege Cache Invalidation)**：
+  - 修正了 Agent 在執行過程中若被動態賦予新權限，其底層 ReactAgent 閉包 (Closure) 不會更新的隱蔽 Bug。將 `BaseAgent.generateToolsSignature` 改寫為將 `permissions` 一併加入簽章字串 (`signature`) 計算，一旦權限陣列更動，將立即作廢 (Invalidate) 舊的 ReactAgent 實體，強制重新編譯 (Recompile) 並綁定最新權限。
+
 ## [0.2.3] - 2026-08-26
 ### Added (新增功能與基礎設施)
 - **虛擬環境通訊與 SDK 升級 (Virtual Environment Communication & SDK Upgrade)**：

@@ -1,5 +1,6 @@
-import { infra, lifecycle } from '../../core';
-import { IEventBus } from '../../core/domain/IBus';
+import { LogManager } from '@supernova/common/LogManager';
+import { ILifecycle } from '@supernova/runtime/lifecycle/ILifecycle';
+import { IEventBus } from '@supernova/events/IBus';
 import { RpcClient, MobController } from '../novalink/novalink-sdk';
 
 export interface MobContext {
@@ -9,10 +10,10 @@ export interface MobContext {
     eventBus: IEventBus;
 }
 
-export class MobManager implements lifecycle.ILifecycle {
+export class MobManager implements ILifecycle {
     private bots: Map<string, MobContext> = new Map();
     private eventBus: IEventBus;
-    private logger = infra.LogManager.recorder;
+    private logger = LogManager.recorder;
     public rpcClient: RpcClient;
 
     constructor(eventBus: IEventBus) {

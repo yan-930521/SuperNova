@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 
 import { Config } from '../config';
-import { AgentEvent, IEventBus } from '../domain/IBus';
+import { AgentEvent, IEventBus } from '@supernova/events/IBus';
 import { DataBlock } from '../messaging/DataBlock';
 
 /**

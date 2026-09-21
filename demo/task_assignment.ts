@@ -1,13 +1,16 @@
 import { config as dotenvConfig } from 'dotenv';
 import * as fs from 'fs';
 
+import { DEFAULT_CONFIG } from '@core/config';
+import { Config, ConfigSchema } from '@core/config/Config';
+import { ConfigLoader } from '@supernova/common/config/ConfigLoader';
+import { LogManager } from '@supernova/common/LogManager';
+import { EventBus } from '@supernova/events/EventBus';
+import { AgentEvent, IEvent, SystemEvent } from '@supernova/events/IBus';
+
 import { AgentManager } from '../src/core/agent/AgentManager';
 import { AgentType } from '../src/core/agent/BaseAgent';
-import { ConfigLoader } from '../src/core/config/ConfigLoader';
-import { AgentEvent, IEvent, SystemEvent } from '../src/core/domain/IBus';
 import { RuntimeKernel } from '../src/core/lifecycle/RuntimeKernel';
-import { DataBlock, MessagePriority } from '../src/core/messaging/DataBlock';
-import { EventBus } from '../src/core/messaging/EventBus';
 import { SessionManager } from '../src/core/session/SessionManager';
 import { TaskManager } from '../src/core/task/TaskManager';
 
@@ -24,7 +27,8 @@ async function main() {
         fs.unlinkSync(configPath);
     }
 
-    const loader = new ConfigLoader();
+    const loader = new ConfigLoader<Config>(DEFAULT_CONFIG, ConfigSchema, LogManager.recorder);
+
     const config = await loader.bootstrap(configPath);
     const kernel = new RuntimeKernel(config);
 

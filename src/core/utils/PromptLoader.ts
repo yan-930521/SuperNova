@@ -2,8 +2,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { Config } from '../../core/config/Config';
-import { LogManager } from '../../core/infra/LogManager';
-import { LRUCache } from './LRUCache';
+import { LogManager } from '@supernova/common/LogManager';
+import { LRUCache } from '@supernova/common/LRUCache';
 
 /**
  * Prompt 加載器

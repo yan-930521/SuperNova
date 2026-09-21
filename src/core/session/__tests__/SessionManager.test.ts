@@ -7,7 +7,7 @@ import { FileSystemSessionRepository } from '../../infra/repositories/FileSystem
 import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
 import * as path from 'path';
-import { EventBus } from '../../messaging/EventBus';
+import { EventBus } from '@supernova/events/EventBus';
 
 describe('SessionManager Recovery and Freeze Test', () => {
   it('should suspend ACTIVE sessions on stop() and recover them on start()', async () => {

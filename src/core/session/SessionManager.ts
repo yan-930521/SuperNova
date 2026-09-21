@@ -2,16 +2,16 @@ import { AgentManager } from '../agent/AgentManager';
 import { AgentState, AgentType } from '../agent/BaseAgent';
 import { ProjectionHandler } from '../agent/ProjectionHandler';
 import { Config } from '../config/Config';
-import { AgentEvent, IEvent, IEventBus, SystemEvent } from '../domain/IBus';
+import { AgentEvent, IEvent, IEventBus, SystemEvent } from '@supernova/events/IBus';
 import {
     IAgentStateRepository, IDataBlockRepository, ISessionRepository
 } from '../domain/IRepository';
 import { IWorkspaceManager, WorkspaceType } from '../domain/IWorkspaceManager';
-import { LogManager } from '../infra/LogManager';
-import { ConsoleTransport } from '../infra/transports';
-import { ILifecycle } from '../lifecycle/ILifecycle';
+import { LogManager } from '@supernova/common/LogManager';
+import { ConsoleTransport } from '@supernova/common/transports';
+import { ILifecycle } from '@supernova/runtime/lifecycle/ILifecycle';
 import { DataBlock, MessagePriority } from '../messaging/DataBlock';
-import { IdGenerator } from '../utils/IdGenerator';
+import { IdGenerator } from '@supernova/common/IdGenerator';
 import { Session, SessionState } from './Session';
 
 /**
@@ -39,8 +39,8 @@ export class SessionManager implements ILifecycle {
     public async initialize(): Promise<void> {
         this.logger.info('Initializing session manager...');
         try {
-            if (this.sessionRepo.initialize) {
-                await this.sessionRepo.initialize();
+            if ((this.sessionRepo as unknown as ILifecycle).initialize) {
+                await (this.sessionRepo as unknown as ILifecycle).initialize!();
             }
 
             // 統一監聽全局的 AgentMessage 進行派發與存檔

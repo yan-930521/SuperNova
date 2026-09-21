@@ -3,8 +3,8 @@ import {
 } from '@langchain/core/messages';
 
 import { ToolControlPayload } from '../tools/BaseTool';
-import { LogManager } from '../infra';
-import { IdGenerator } from '../utils/IdGenerator';
+import { LogManager } from '@supernova/common/LogManager';
+import { IdGenerator } from '@supernova/common/IdGenerator';
 
 /**
  * 定義巨型資料指標 (Data Pointer)

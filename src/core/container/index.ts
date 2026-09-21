@@ -1,1 +1,1 @@
-export * from './ComponentContainer';
+export * from '@supernova/runtime/container/ComponentContainer';

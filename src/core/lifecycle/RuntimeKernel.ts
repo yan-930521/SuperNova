@@ -1,13 +1,14 @@
 import * as path from 'path';
 
-import { ConsoleTransport } from '@core/infra/transports';
+import { ComponentContainer } from '@core/container';
+import { EventBus, SystemEvent } from '@core/messaging';
+import { LogManager } from '@supernova/common/LogManager';
+import { ConsoleTransport } from '@supernova/common/transports';
+import { ILifecycle } from '@supernova/runtime/lifecycle/ILifecycle';
 
 import { AgentManager } from '../agent/AgentManager';
 import { Config } from '../config/Config';
-import { ComponentContainer } from '../container/ComponentContainer';
-import { SystemEvent } from '../domain/IBus';
 import { LLMProvider } from '../infra/llm/LLMProvider';
-import { LogManager } from '../infra/LogManager';
 import {
     FileSystemAgentStateRepository
 } from '../infra/repositories/FileSystemAgentStateRepository';
@@ -17,12 +18,10 @@ import { FileSystemSessionRepository } from '../infra/repositories/FileSystemSes
 import { JsonGraphRepository } from '../infra/repositories/JsonGraphRepository';
 import { WorkspaceManager } from '../infra/workspace/WorkspaceManager';
 import { MemoryManager } from '../memory/MemoryManager';
-import { EventBus } from '../messaging/EventBus';
 import { SessionManager } from '../session/SessionManager';
-import { TaskManager } from '../task/TaskManager';
 import { TaskPlanningService } from '../task/planning/TaskPlanningService';
+import { TaskManager } from '../task/TaskManager';
 import { PromptLoader } from '../utils/PromptLoader';
-import { ILifecycle } from './ILifecycle';
 
 /**
  * SuperNova 運行時內核 (Runtime Kernel)

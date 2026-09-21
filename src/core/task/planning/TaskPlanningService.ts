@@ -1,4 +1,4 @@
-import { AgentEvent, IEventBus } from '../../domain/IBus';
+import { AgentEvent, IEventBus } from '@supernova/events/IBus';
 import { ITaskManager, ITaskPlanningService } from '../../domain/ITask';
 import { LLMProvider } from '../../infra/llm/LLMProvider';
 import { DataBlock, MessagePriority } from '../../messaging/DataBlock';

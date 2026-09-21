@@ -8,10 +8,10 @@ import { Config } from '../config/Config';
 import { IWorkspaceManager } from '../domain/IWorkspaceManager';
 import { RuntimeKernel } from '../lifecycle/RuntimeKernel';
 import { DataBlock } from '../messaging/DataBlock';
-import { AgentEvent, IEventBus } from '../domain/IBus';
+import { AgentEvent, IEventBus } from '@supernova/events/IBus';
 import { SessionState } from '../session';
 import { SessionManager } from '../session/SessionManager';
-import { IdGenerator } from '../utils/IdGenerator';
+import { IdGenerator } from '@supernova/common/IdGenerator';
 
 describe('System Integration & Inbox Dispatch Test', () => {
     let kernel: RuntimeKernel;

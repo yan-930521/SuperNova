@@ -1,10 +1,11 @@
 import * as readline from 'readline';
 
 import { EmbodiedAgent } from '@core/agent';
-import { AgentEvent, IEvent } from '@core/domain/IBus';
+import { AgentEvent, IEvent } from '@supernova/events/IBus';
+import { EventBus } from '@supernova/events/EventBus';
 import { ICodeSkillRepository } from '@core/domain/ICodeSkillRepository';
-import { LogManager } from '@core/infra';
-import { ConsoleTransport } from '@core/infra/transports';
+import { LogManager } from '@supernova/common/LogManager';
+import { ConsoleTransport } from '@supernova/common/transports/ConsoleTransport';
 import { CodeSkillContext, ObservationSkill } from '@core/skill/BaseSkill';
 import { SkillManager } from '@core/skill/SkillManager';
 
@@ -18,7 +19,7 @@ import { seedSkills } from './wrapper/SkillSeeder';
 
 export class UnderworldApplication {
     private kernel!: lifecycle.RuntimeKernel;
-    private eventBus!: messaging.EventBus;
+    private eventBus!: EventBus;
     private agentManager!: agent.AgentManager;
     private sessionManager!: session.SessionManager;
     private codeSkillRepo!: ICodeSkillRepository;
@@ -41,7 +42,7 @@ export class UnderworldApplication {
         await this.kernel.start();
 
         const container = this.kernel.getContainer();
-        this.eventBus = container.resolve<messaging.EventBus>('EventBus');
+        this.eventBus = container.resolve<EventBus>('EventBus');
         this.agentManager = container.resolve<agent.AgentManager>('AgentManager');
         this.sessionManager = container.resolve<session.SessionManager>('SessionManager');
         this.codeSkillRepo = container.resolve<ICodeSkillRepository>('ICodeSkillRepository');
@@ -135,7 +136,7 @@ export class UnderworldApplication {
 
                 // 透過標準的 AgentMessage 頻道廣播
                 this.eventBus.publish({
-                    type: messaging.AgentEvent.AgentMessage,
+                    type: AgentEvent.AgentMessage,
                     timestamp: Date.now(),
                     sessionId: this.sessionId,
                     payload: messageBlock

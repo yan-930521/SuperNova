@@ -1,7 +1,7 @@
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 
 import { LLMProvider } from '../../infra/llm/LLMProvider';
-import { LogManager } from '../../infra/LogManager';
+import { LogManager } from '@supernova/common/LogManager';
 import { ExpansionSchemaHolistic, ExpansionSchemaStepwise, ReflectionSchemaHolistic, ReflectionSchemaStepwise, TASK_PROMPTS } from '../../prompts/task.prompt';
 import { LATSNode } from './LATSNode';
 

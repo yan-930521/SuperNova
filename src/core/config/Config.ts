@@ -91,11 +91,3 @@ export type LLMConfig = Readonly<Omit<z.infer<typeof LLMConfigSchema>, 'presets'
 export type StorageConfig = Readonly<z.infer<typeof StorageConfigSchema>>;
 export type SecurityConfig = Readonly<z.infer<typeof SecurityConfigSchema>>;
 export type Config = Readonly<Omit<z.infer<typeof ConfigSchema>, 'llm'> & { llm: LLMConfig }>;
-
-export type DeepPartial<T> = {
-    [P in keyof T]?: T[P] extends (infer U)[]
-    ? DeepPartial<U>[]
-    : T[P] extends object
-    ? DeepPartial<T[P]>
-    : T[P];
-};

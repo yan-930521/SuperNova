@@ -1,3 +1,3 @@
 export * from './Config';
-export * from './ConfigLoader';
+export * from '@supernova/common/config/ConfigLoader';
 export * from './DefaultConfig';

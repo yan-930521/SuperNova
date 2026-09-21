@@ -1,4 +1,4 @@
-import { ILifecycle } from '../lifecycle/ILifecycle';
+import { ILifecycle } from '@supernova/runtime/lifecycle/ILifecycle';
 
 export type TaskStatus = 'PENDING' | 'READY' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' | 'CANCELED';
 

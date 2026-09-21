@@ -2,8 +2,8 @@ import { EmbodiedAgent } from '@core/agent';
 import { ICodeSkillRepository } from '@core/domain/ICodeSkillRepository';
 import { ITaskManager, ITaskPlanningService } from '@core/domain/ITask';
 import { IWorkspaceManager } from '@core/domain/IWorkspaceManager';
-import { LogManager } from '@core/infra';
-import { ConsoleTransport } from '@core/infra/transports';
+import { LogManager } from '@supernova/common/LogManager';
+import { ConsoleTransport } from '@supernova/common/transports/ConsoleTransport';
 
 import {
     AssignTaskTool, SendMessageTool, SpawnAgentTool, ToggleProjectionTool, UpdateTaskStatusTool
