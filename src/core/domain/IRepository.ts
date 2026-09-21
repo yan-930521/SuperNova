@@ -1,4 +1,4 @@
-import { ILifecycle } from '../lifecycle/ILifecycle';
+import { ILifecycle } from '@supernova/runtime/lifecycle/ILifecycle';
 import { BaseAgentData } from '../agent/BaseAgent';
 import { DataBlock } from '../messaging/DataBlock';
 // --- 專屬儲存庫介面定義 ---

@@ -1,92 +1,27 @@
-import { existsSync, mkdirSync } from 'fs';
-import * as fs from 'fs/promises';
-import * as path from 'path';
-
-import { BaseAgentData } from '../../agent/BaseAgent';
 import { Config } from '../../config/Config';
 import { IAgentStateRepository } from '../../domain/IRepository';
-import { LogManager } from '../LogManager';
-import { ConsoleTransport } from '../transports';
+import { BaseAgentData } from '../../agent/BaseAgent';
+import { BaseJsonRepository } from '@supernova/storage/base/BaseJsonRepository';
+import path from 'path';
 
-/**
- * FileSystemAgentStateRepository
- * 基於本地檔案系統的 Agent 狀態快照儲存庫實現。
- * 保存於 `workspace/session/{sessionId}/agents/{agentId}/`
- */
-export class FileSystemAgentStateRepository implements IAgentStateRepository {
-    private readonly logger = new LogManager({ type: 'SYSTEM', name: 'AgentStateRepository' }).addTransport(new ConsoleTransport('DEBUG'));
-
-    constructor(
-        private readonly config: Config,
-        private readonly baseDir: string
-    ) {
+export class FileSystemAgentStateRepository extends BaseJsonRepository<BaseAgentData> implements IAgentStateRepository {
+    constructor(private readonly config: Config, baseDir: string) {
+        super(baseDir);
     }
 
-    // --- ILifecycle 實作 ---
     public async initialize(): Promise<void> { }
     public async start(): Promise<void> { }
     public async stop(): Promise<void> { }
 
-    /**
-     * 保存 Agent 的狀態快照資料
-     */
-    public async saveAgentState(
-        sessionId: string,
-        agentId: string,
-        state: BaseAgentData
-    ): Promise<void> {
-        const filePath = this.getFileName(sessionId, agentId);
-
-        try {
-            const data = JSON.stringify(state, null, 2);
-            await fs.writeFile(filePath, data, 'utf-8');
-            this.logger.debug(`State saved successfully to ${filePath}`);
-        } catch (err: any) {
-            this.logger.error(`Failed to save state to ${filePath}: ${err.message}`);
-            throw err;
-        }
+    protected getFilePath(sessionId: string, agentId: string): string {
+        return path.join(this['baseDir'], sessionId, 'agents', agentId, 'state.json');
     }
 
-    /**
-     * 讀取並還原 Agent 的狀態快照資料
-     */
-    public async loadAgentState(
-        sessionId: string,
-        agentId: string
-    ): Promise<BaseAgentData | null> {
-        const filePath = this.getFileName(sessionId, agentId);
-
-        if (!existsSync(filePath)) {
-            this.logger.debug(`State file not found: ${filePath}`);
-            return null;
-        }
-        try {
-            const content = await fs.readFile(filePath, 'utf-8');
-            return JSON.parse(content) as BaseAgentData;
-        } catch (err: any) {
-            this.logger.error(`Failed to load state from ${filePath}: ${err.message}`);
-            throw err;
-        }
+    public async saveAgentState(sessionId: string, agentId: string, state: BaseAgentData): Promise<void> {
+        await this.writeJson(this.getFilePath(sessionId, agentId), state);
     }
 
-    // --- 內部輔助方法 ---
-    private getDirName(
-        sessionId: string,
-        agentId: string
-    ): string {
-        const targetId = agentId;
-        const agentDir = path.join(this.baseDir, sessionId, this.config.storage.agent_dir, targetId);
-        if (!existsSync(agentDir)) {
-            mkdirSync(agentDir, { recursive: true });
-        }
-        return agentDir;
-    }
-
-    private getFileName(
-        sessionId: string,
-        agentId: string
-    ): string {
-        const targetDir = this.getDirName(sessionId, agentId);
-        return path.join(targetDir, this.config.storage.agent_state_file);
+    public async loadAgentState(sessionId: string, agentId: string): Promise<BaseAgentData | null> {
+        return await this.readJson(this.getFilePath(sessionId, agentId));
     }
 }

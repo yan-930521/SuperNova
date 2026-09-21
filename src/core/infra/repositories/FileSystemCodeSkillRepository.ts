@@ -4,22 +4,29 @@ import * as path from 'path';
 
 import { Config } from '../../config/Config';
 import { CodeSkillEntity, ICodeSkillRepository } from '../../domain/ICodeSkillRepository';
-import { IdGenerator } from '../../utils/IdGenerator';
-import { LRUCache } from '../../utils/LRUCache';
+import { IdGenerator } from '@supernova/common/IdGenerator';
+import { LRUCache } from '@supernova/common/LRUCache';
+import { BaseJsonRepository } from '@supernova/storage/base/BaseJsonRepository';
 
 /**
  * 基於本地檔案系統的 CodeSkill 倉儲實作。
- * 支援 LRU 快取，檔案存放在 `workspace/session/{sessionId}/agents/{agentId}/skills` 
+ * 使用 BaseJsonRepository 來管理 index 檔案，並手動處理 .ts 程式碼檔。
  */
-export class FileSystemCodeSkillRepository implements ICodeSkillRepository {
+export class FileSystemCodeSkillRepository extends BaseJsonRepository<Record<string, CodeSkillEntity>> implements ICodeSkillRepository {
     // 記憶體快取：以 `${sessionId}:${agentId}` 為 Key
     private readonly cache: LRUCache<string, Record<string, CodeSkillEntity>>;
 
     constructor(
         private readonly config: Config,
-        private readonly baseDir: string
+        baseDir: string
     ) {
+        super(baseDir);
         this.cache = new LRUCache<string, Record<string, CodeSkillEntity>>(100);
+    }
+
+    protected getFilePath(sessionId: string, agentId: string): string {
+        const agentDir = path.join(this.baseDir, sessionId, this.config.storage.agent_dir, agentId, this.config.storage.code_skill_dir);
+        return path.join(agentDir, this.config.storage.code_skill_file);
     }
 
     private getCacheKey(sessionId: string, agentId: string): string {
@@ -30,28 +37,19 @@ export class FileSystemCodeSkillRepository implements ICodeSkillRepository {
         const cacheKey = this.getCacheKey(sessionId, agentId);
         const cached = this.cache.get(cacheKey);
         if (cached) {
-            return { ...cached }; // 回傳拷貝，避免參照污染
+            return { ...cached }; 
         }
 
-        try {
-            const indexFile = this.getIndexFileName(sessionId, agentId);
-            if (!existsSync(indexFile)) return {};
-
-            const rawIndex = await fs.readFile(indexFile, 'utf-8');
-            const data = JSON.parse(rawIndex);
-            this.cache.set(cacheKey, data);
-            return { ...data };
-        } catch (e) {
-            return {};
-        }
+        const data = await this.readJson(this.getFilePath(sessionId, agentId));
+        const indexData = data || {};
+        this.cache.set(cacheKey, indexData);
+        return { ...indexData };
     }
 
     private async saveIndex(sessionId: string, agentId: string, indexData: Record<string, CodeSkillEntity>): Promise<void> {
         const cacheKey = this.getCacheKey(sessionId, agentId);
         this.cache.set(cacheKey, { ...indexData });
-
-        const indexFile = this.getIndexFileName(sessionId, agentId);
-        await fs.writeFile(indexFile, JSON.stringify(indexData, null, 2), 'utf-8');
+        await this.writeJson(this.getFilePath(sessionId, agentId), indexData);
     }
 
     public async getSkill(sessionId: string, agentId: string, skillName: string): Promise<CodeSkillEntity | null> {
@@ -140,18 +138,11 @@ export class FileSystemCodeSkillRepository implements ICodeSkillRepository {
 
     // --- 內部輔助方法 ---
     private getDirName(sessionId: string, agentId: string): string {
-        // 通常放在 workspace/session/{sessionId}/agents/{agentId}/skills
-        const targetId = agentId;
-        const agentDir = path.join(this.baseDir, sessionId, this.config.storage.agent_dir, targetId, this.config.storage.code_skill_dir);
+        const agentDir = path.join(this.baseDir, sessionId, this.config.storage.agent_dir, agentId, this.config.storage.code_skill_dir);
         if (!existsSync(agentDir)) {
             mkdirSync(agentDir, { recursive: true });
         }
         return agentDir;
-    }
-
-    private getIndexFileName(sessionId: string, agentId: string): string {
-        const targetDir = this.getDirName(sessionId, agentId);
-        return path.join(targetDir, this.config.storage.code_skill_file);
     }
 
     public async getSkillFilePath(sessionId: string, agentId: string, skillId: string): Promise<string> {
@@ -189,16 +180,14 @@ export class FileSystemCodeSkillRepository implements ICodeSkillRepository {
 
         let targetVersion = versionId;
         
-        // If no version specified, find the one with the highest success rate
         if (!targetVersion) {
             let bestVersion = skill.currentVersionId;
             let bestScore = -1;
 
             for (const [vId, versionData] of Object.entries(skill.versions)) {
-                if (vId === skill.currentVersionId) continue; // Skip current version
+                if (vId === skill.currentVersionId) continue; 
                 
                 const stats = versionData.usageStats;
-                // Score = successRate, with a penalty for low execution count to prefer proven versions
                 const score = stats.executionCount > 0 ? stats.successRate : 0; 
                 
                 if (score > bestScore) {
@@ -228,7 +217,6 @@ export class FileSystemCodeSkillRepository implements ICodeSkillRepository {
 
         delete indexData[skillName];
         await this.saveIndex(sessionId, agentId, indexData);
-        // We do not delete the physical files here, they act as historical backups
     }
 
     public async deleteSkillVersion(sessionId: string, agentId: string, skillName: string, versionId: string): Promise<void> {
