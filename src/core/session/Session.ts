@@ -1,224 +1,275 @@
-import { IEntity } from '../domain/IRepository';
-import { DataBlock, DataBlockData, MessagePriority } from '../messaging/DataBlock';
+import { IdGenerator } from '@supernova/common/IdGenerator';
+import { DataBlock, DataBlockData, MessagePriority } from '../messaging';
+import { ISession, SessionData, SessionParams, SessionState } from './types';
 
 /**
- * SessionState
- * 代表會話目前在生命週期中的狀態。
+ * 會話實體 (Session)
+ * 作為 Agent 協同與溝通的隔離邊界與時間沙盒：
+ * 1. 管理參與成員 (participantIds)
+ * 2. 維護每個 Agent 的收件箱緩衝區 (inboxBuffer)
+ * 3. 判斷是否有可喚醒 Agent 決策的訊息 (hasActionableMessages)
+ * 4. 控制會話生命週期 (ACTIVE -> PAUSED -> CLOSED)
  */
-export enum SessionState {
-  /** 活躍中，Agent/Worker 正在執行 */
-  ACTIVE = 'ACTIVE',
-  /** 系統優雅停機時被主動凍結掛起的狀態 */
-  SUSPENDED = 'SUSPENDED',
-  /** 人機協同掛起中，等待外部審批或使用者反饋 */
-  INTERRUPTED = 'INTERRUPTED',
-  /** 會話任務順利完成 */
-  COMPLETED = 'COMPLETED',
-  /** 遭遇不可恢復錯誤或熔斷而失敗 */
-  FAILED = 'FAILED',
-  /** 已歸檔（長期閒置，記憶體釋放，可隨時重新溫啟動） */
-  ARCHIVED = 'ARCHIVED'
-}
+export class Session implements ISession {
+    /** 會話唯一識別碼 */
+    public readonly id: string;
 
-/**
- * 序列化會話資料介面
- */
-export interface SessionData {
-  id: string;
-  mainAgentId: string;
-  status: SessionState;
-  metadata: Record<string, any>;
-  registeredAgentIds: string[];
-  createdAt: number;
-  updatedAt: number;
-  inboxBuffer: Record<string, any[]>;
-}
+    /** 會話建立時間戳 */
+    public readonly createdAt: number;
 
-/**
- * Session 實體類別
- * 代表一個用戶與 MainAgent 的完整對話生命週期與資料邊界。
- * 內建 InboxBuffer 用於暫存發送給休眠/掛起 Agent 的 DataBlock 訊息。
- */
-export class Session implements IEntity {
-  public readonly id: string;
-  public readonly mainAgentId: string;
-  public status: SessionState;
-  public metadata: Record<string, any>;
-  public readonly registeredAgentIds: Set<string>;
-  public readonly createdAt: number;
-  public updatedAt: number;
-  // 扁平化的 InboxBuffer: agentId -> 該 Agent 所有的暫存訊息
-  private readonly inboxBuffer: Map<string, DataBlock[]> = new Map();
+    /** 最後更新時間戳 */
+    public updatedAt: number;
 
-  constructor(params: {
-    id: string;
-    mainAgentId: string;
-    status?: SessionState;
-    metadata?: Record<string, any>;
-    registeredAgentIds?: string[];
-    createdAt?: number;
-    updatedAt?: number;
-    inboxBuffer?: Record<string, DataBlockData[]>;
-  }) {
-    this.id = params.id;
-    this.mainAgentId = params.mainAgentId;
-    this.status = params.status || SessionState.ACTIVE;
-    this.metadata = params.metadata || {};
-    this.registeredAgentIds = new Set(params.registeredAgentIds || []);
-    this.createdAt = params.createdAt || Date.now();
-    this.updatedAt = params.updatedAt || Date.now();
+    /** 當前會話狀態機 */
+    public status: SessionState;
 
-    if (params.inboxBuffer) {
-      for (const [agentId, blocks] of Object.entries(params.inboxBuffer)) {
-        this.inboxBuffer.set(agentId, blocks.map(b => new DataBlock(b)));
-      }
-    }
-  }
+    /** 關閉原因 (若已關閉) */
+    public closeReason?: string;
 
-  /**
-   * 註冊一個 Agent ID 到會話中，記錄該會話所產生的所有 Agent 軌跡
-   */
-  public registerAgentId(agentId: string): void {
-    if (!this.registeredAgentIds.has(agentId)) {
-      this.registeredAgentIds.add(agentId);
-      this.touch();
-    }
-  }
+    /** 會話自訂元資料 */
+    public metadata: Record<string, any>;
 
-  /**
-   * 暫存訊息 (DataBlock) 至特定 Agent 的收件箱
-   */
-  public pushToInbox(agentId: string, block: DataBlock): void {
-    if (!this.inboxBuffer.has(agentId)) {
-      this.inboxBuffer.set(agentId, []);
-    }
-    this.inboxBuffer.get(agentId)!.push(block);
-    this.touch();
-  }
+    /** 參與此會話的 Agent 或實體 ID 集合 */
+    public readonly participantIds: Set<string>;
 
-  /**
-   * 取得某個 Agent (大腦) 目前正在投影控制的軀殼 ID
-   */
-  public getProjectedBodyId(controllerId: string): string | null {
-    if (this.metadata.projections && this.metadata.projections[controllerId]) {
-      return this.metadata.projections[controllerId];
-    }
-    return null;
-  }
+    /** 各 Agent 專屬的收件箱隊列 (agentId -> DataBlock[]) */
+    private readonly inboxBuffer: Map<string, DataBlock[]>;
 
-  /**
-   * 設定或清除某個 Agent (大腦) 的投影目標軀殼 ID
-   */
-  public setProjectedBodyId(controllerId: string, bodyId: string | null): void {
-    if (!this.metadata.projections) {
-      this.metadata.projections = {};
-    }
-    if (bodyId) {
-      this.metadata.projections[controllerId] = bodyId;
-    } else {
-      delete this.metadata.projections[controllerId];
-    }
-    this.touch();
-  }
+    /**
+     * 建立或反序列化會話實體
+     * @param params 初始化參數
+     */
+    constructor(params: SessionParams = {}) {
+        const now = Date.now();
+        this.id = params.id ?? IdGenerator.session();
+        this.createdAt = params.createdAt ?? now;
+        this.updatedAt = params.updatedAt ?? now;
+        this.status = params.status ?? SessionState.ACTIVE;
+        this.closeReason = params.closeReason;
+        this.metadata = params.metadata ? { ...params.metadata } : {};
+        this.participantIds = new Set(params.participantIds ?? []);
+        this.inboxBuffer = new Map<string, DataBlock[]>();
 
-  /**
-   * 檢查特定 Agent 的 Inbox 是否有待處理的訊息 (用於喚醒判定)
-   */
-  public hasPendingMessages(agentId: string): boolean {
-    const blocks = this.inboxBuffer.get(agentId);
-    return blocks !== undefined && blocks.length > 0;
-  }
-
-  /**
-   * 全域唯讀檢查 (Peek)：判斷指定 Agent 的 Inbox 中是否含有具備行動價值的訊息
-   * ( priority > LOW 或是 累積未處理的噪音訊息達到 forceWakeup 閾值 )
-   */
-  public hasAnyActionableMessages(agentId: string, forceWakeupThreshold: number): boolean {
-    const blocks = this.inboxBuffer.get(agentId);
-    if (!blocks || blocks.length === 0) return false;
-    
-    // 如果累積夠多，不管什麼優先級都該喚醒
-    if (blocks.length >= forceWakeupThreshold) return true;
-
-    // 否則檢查是否有 High/Normal 優先級的訊息
-    for (const b of blocks) {
-      if (b.priority > MessagePriority.LOW) return true;
-    }
-    return false;
-  }
-
-  /**
-   * 拉取特定 Agent 收件箱中所有的暫存訊息 (提取後從緩衝區移除)
-   */
-  public popAllFromInbox(agentId: string): DataBlock[] {
-    const blocks = this.inboxBuffer.get(agentId) || [];
-    this.inboxBuffer.delete(agentId);
-    if (blocks.length > 0) {
-      this.touch();
-    }
-    return blocks;
-  }
-
-  /**
-   * 獲取特定 Agent 收件箱的暫存訊息總數量
-   */
-  public getInboxSize(agentId: string): number {
-    const blocks = this.inboxBuffer.get(agentId);
-    return blocks ? blocks.length : 0;
-  }
-
-  /**
-   * 更新最後活躍時間
-   */
-  public touch(): void {
-    this.updatedAt = Date.now();
-  }
-
-  /**
-   * 序列化會話資料
-   */
-  public toJSON(): SessionData {
-    const inboxObj: Record<string, any[]> = {};
-    for (const [agentId, blocks] of this.inboxBuffer.entries()) {
-      inboxObj[agentId] = blocks.map(b => ({
-        sessionId: b.sessionId,
-        threadId: b.threadId,
-        senderId: b.senderId,
-        targetId: b.targetId,
-        type: b.type,
-        intent: b.intent,
-        priority: b.priority,
-        timestamp: b.timestamp,
-        controlPayload: b.controlPayload,
-        dataPointers: b.dataPointers
-      }));
+        // 若有傳入既有的收件箱緩衝區資料，進行還原
+        if (params.inboxBuffer) {
+            for (const [agentId, blocks] of Object.entries(params.inboxBuffer)) {
+                const hydratedBlocks: DataBlock[] = blocks.map((b) => {
+                    if (b instanceof DataBlock) {
+                        return b;
+                    }
+                    return DataBlock.fromJSON(b as DataBlockData);
+                });
+                this.inboxBuffer.set(agentId, hydratedBlocks);
+                this.participantIds.add(agentId);
+            }
+        }
     }
 
-    return {
-      id: this.id,
-      mainAgentId: this.mainAgentId,
-      status: this.status,
-      metadata: this.metadata,
-      registeredAgentIds: Array.from(this.registeredAgentIds),
-      createdAt: this.createdAt,
-      updatedAt: this.updatedAt,
-      inboxBuffer: inboxObj
-    };
-  }
+    /**
+     * 註冊參與者加入此會話
+     * @param agentId 參與者 ID
+     */
+    public registerParticipant(agentId: string): void {
+        if (!this.participantIds.has(agentId)) {
+            this.participantIds.add(agentId);
+            this.touch();
+        }
+    }
 
-  /**
-   * 從 JSON 資料還原 Session 實例
-   */
-  public static fromJSON(data: SessionData): Session {
-    return new Session({
-      id: data.id,
-      mainAgentId: data.mainAgentId,
-      status: data.status,
-      metadata: data.metadata,
-      registeredAgentIds: data.registeredAgentIds,
-      createdAt: data.createdAt,
-      updatedAt: data.updatedAt,
-      inboxBuffer: data.inboxBuffer
-    });
-  }
+    /**
+     * 移除參與者
+     * @param agentId 參與者 ID
+     * @returns 是否成功移除
+     */
+    public removeParticipant(agentId: string): boolean {
+        const removed = this.participantIds.delete(agentId);
+        if (removed) {
+            this.touch();
+        }
+        return removed;
+    }
+
+    /**
+     * 檢查特定 Agent 是否為此會話成員
+     * @param agentId 參與者 ID
+     */
+    public hasParticipant(agentId: string): boolean {
+        return this.participantIds.has(agentId);
+    }
+
+    /**
+     * 將 DataBlock 推送至特定 Agent 的收件箱
+     * 邊界防禦：若會話已關閉，將拒絕新訊息以確保狀態一致性
+     * @param agentId 目標 Agent ID
+     * @param block 訊息封裝物件
+     */
+    public pushToInbox(agentId: string, block: DataBlock): void {
+        if (this.status === SessionState.CLOSED) {
+            throw new Error(`Cannot push message to closed session: ${this.id}`);
+        }
+
+        // 自動將該目標納入參與者清單
+        this.registerParticipant(agentId);
+
+        let queue = this.inboxBuffer.get(agentId);
+        if (!queue) {
+            queue = [];
+            this.inboxBuffer.set(agentId, queue);
+        }
+
+        queue.push(block);
+        this.touch();
+    }
+
+    /**
+     * 提取特定 Agent 收件箱中的所有訊息，並清空該收件箱
+     * @param agentId Agent ID
+     * @returns 該 Agent 目前累積的所有 DataBlock 陣列
+     */
+    public popInbox(agentId: string): DataBlock[] {
+        const queue = this.inboxBuffer.get(agentId);
+        if (!queue || queue.length === 0) {
+            return [];
+        }
+
+        const messages = [...queue];
+        this.inboxBuffer.delete(agentId);
+        this.touch();
+        return messages;
+    }
+
+    /**
+     * 預覽特定 Agent 收件箱內容而不取出
+     * @param agentId Agent ID
+     * @returns 唯讀的 DataBlock 陣列
+     */
+    public peekInbox(agentId: string): ReadonlyArray<DataBlock> {
+        const queue = this.inboxBuffer.get(agentId);
+        return queue ? [...queue] : [];
+    }
+
+    /**
+     * 檢查特定 Agent 是否有未處理的訊息
+     * @param agentId Agent ID
+     */
+    public hasPendingMessages(agentId: string): boolean {
+        return this.getInboxSize(agentId) > 0;
+    }
+
+    /**
+     * 評估是否具備可喚醒 Agent 進行思考推理的行動訊息條件
+     * 喚醒判定策略：
+     * 1. 會話必須處於活躍中 (ACTIVE)，PAUSED 或 CLOSED 不得喚醒
+     * 2. 收件箱訊息數量達到強制喚醒門檻 (forceWakeupThreshold，預設 5)
+     * 3. 收件箱中包含任一 HIGH 或 URGENT 優先級之重要/緊急訊息
+     * @param agentId Agent ID
+     * @param forceWakeupThreshold 強制喚醒數量門檻 (預設 5)
+     */
+    public hasActionableMessages(agentId: string, forceWakeupThreshold: number = 5): boolean {
+        // 若會話被暫停或關閉，凍結自主喚醒
+        if (this.status !== SessionState.ACTIVE) {
+            return false;
+        }
+
+        const queue = this.inboxBuffer.get(agentId);
+        if (!queue || queue.length === 0) {
+            return false;
+        }
+
+        // 條件一：訊息積壓量達到門檻
+        if (queue.length >= forceWakeupThreshold) {
+            return true;
+        }
+
+        // 條件二：存在任一高優先級或緊急中斷訊息
+        const hasHighPriority = queue.some((b) => b.priority >= MessagePriority.HIGH);
+        return hasHighPriority;
+    }
+
+    /**
+     * 取得特定 Agent 當前收件箱的訊息數量
+     * @param agentId Agent ID
+     */
+    public getInboxSize(agentId: string): number {
+        return this.inboxBuffer.get(agentId)?.length ?? 0;
+    }
+
+    /**
+     * 暫停會話 (例如人機互動輸入等待或調試中)
+     */
+    public pause(): void {
+        if (this.status === SessionState.CLOSED) {
+            throw new Error(`Cannot pause closed session: ${this.id}`);
+        }
+        this.status = SessionState.PAUSED;
+        this.touch();
+    }
+
+    /**
+     * 恢復會話為活躍狀態
+     */
+    public resume(): void {
+        if (this.status === SessionState.CLOSED) {
+            throw new Error(`Cannot resume closed session: ${this.id}`);
+        }
+        this.status = SessionState.ACTIVE;
+        this.touch();
+    }
+
+    /**
+     * 關閉會話
+     * @param reason 關閉原因描述
+     */
+    public close(reason?: string): void {
+        this.status = SessionState.CLOSED;
+        if (reason) {
+            this.closeReason = reason;
+        }
+        this.touch();
+    }
+
+    /**
+     * 更新最後活動時間戳
+     */
+    public touch(): void {
+        this.updatedAt = Date.now();
+    }
+
+    /**
+     * 序列化為純物件結構，便於儲存庫進行持久化
+     */
+    public toJSON(): SessionData {
+        const serializedInbox: Record<string, DataBlockData[]> = {};
+        for (const [agentId, blocks] of this.inboxBuffer.entries()) {
+            serializedInbox[agentId] = blocks.map((b) => b.toJSON());
+        }
+
+        return {
+            id: this.id,
+            status: this.status,
+            closeReason: this.closeReason,
+            metadata: { ...this.metadata },
+            participantIds: Array.from(this.participantIds),
+            createdAt: this.createdAt,
+            updatedAt: this.updatedAt,
+            inboxBuffer: serializedInbox,
+        };
+    }
+
+    /**
+     * 從序列化資料結構反序列化建立 Session 實體
+     * @param data 會話純物件資料
+     */
+    public static fromJSON(data: SessionData): Session {
+        return new Session({
+            id: data.id,
+            status: data.status,
+            closeReason: data.closeReason,
+            metadata: data.metadata,
+            participantIds: data.participantIds,
+            createdAt: data.createdAt,
+            updatedAt: data.updatedAt,
+            inboxBuffer: data.inboxBuffer,
+        });
+    }
 }

@@ -4,9 +4,13 @@
       "@core/*": ["./src/core/*"],
       "@underworld/*": ["./src/package/underworld/*"],
       "@supernova/common/*": ["./packages/common/src/*"],
+      "@supernova/common": ["./packages/common/src/index.ts"],
       "@supernova/events/*": ["./packages/events/src/*"],
+      "@supernova/events": ["./packages/events/src/index.ts"],
       "@supernova/storage/*": ["./packages/storage/src/*"],
-      "@supernova/runtime/*": ["./packages/runtime/src/*"]
+      "@supernova/storage": ["./packages/storage/src/index.ts"],
+      "@supernova/runtime/*": ["./packages/runtime/src/*"],
+      "@supernova/runtime": ["./packages/runtime/src/index.ts"]
     },
     "module": "esnext",
     "moduleResolution": "bundler",
@@ -17,5 +21,5 @@
     "forceConsistentCasingInFileNames": true,
     "types": ["bun"]
   },
-  "exclude": ["web", "./node_modules"]
+  "exclude": [".dev/web", "./node_modules", "./src/package"]
 }

@@ -1,81 +1,90 @@
-# SuperNova Project Roadmap
+# SuperNova Development Roadmap
 
-This document outlines the recent core milestones and future development vision of SuperNova (an Agent Runtime based on TS/Bun).
-
-## v0.1.0 - Foundation & Memory System (Completed)
-
-The core infrastructure and the "Graph-Vector Hybrid Memory System" of SuperNova have been completed, laying a solid foundation for subsequent autonomous evolution.
-
-### Technical Highlights
-1. **Graph & Episodic Memory System**
-   - **Graph Memory**: Automatically extracts atomic Entities and Relations via LLM, combining OpenAI Embeddings and Vectra local vector database for storage.
-   - **Episodic Memory**: Through a daily summary mechanism, messy conversations are automatically condensed into an "AI Diary", preserving the interaction atmosphere and user's implicit rules.
-   - **Dynamic Context Injection**: Implemented the `BeforeAgentStep` lifecycle Hook to automatically search for highly relevant graph memories and recent diaries, seamlessly injecting them into the agent's brain.
-2. **Architecture & Config**
-   - **Zod-based Config Engine**: Uses Zod Schemas for strong type validation and dynamic overrides, fully supporting YAML format config generation and reading, providing excellent error-proofing and configuration flexibility.
-   - **Two-Tier Workspace Isolation**: Implemented "Persistent" and "Volatile" workspace tiers, ensuring each Session has an isolated experimental sandbox.
-   - **Asynchronous EventBus**: Completely abandoned direct Method Calls. All lifecycles and state transitions flow through the EventBus, providing deadlock prevention and high decoupling.
-3. **Performance & Reliability**
-   - **Compaction Fast-Fail**: Introduced the `isOffloaded` marker to achieve $O(1)$ fast-fail checking during background history compaction, significantly reducing OOM pressure.
-   - **LRUCache Infrastructure**: Introduced generic LRUCache and incremental caching mechanisms to eliminate infinite memory growth caused by high-frequency event broadcasting and history retrieval.
-   - **History Safety Cap**: Enforced defensive JSONL file read slicing to prevent malicious giant files from paralyzing memory.
-4. **Agent & Session State**
-   - **Stateless & Projection**: Introduced Projection State at the Session level and upgraded Agents to a stateless execution model, greatly improving concurrency handling and state isolation.
-   - **Transparent ReAct Loop**: Fully captures LLM thought processes (Thoughts) and tool execution states, establishing a highly observable interaction foundation (`demo/v0.1.0.ts`).
+This document outlines key milestones, architectural progress, and future evolutionary goals of the SuperNova AI Agent Runtime.
 
 ---
 
-## v0.2.0 - Virtual Embodied AI & Autonomous Evolution (Completed)
+## Current Version Progress: v2.0.0 - Composable Agent Core & Micro-Kernel Architecture (Completed)
 
-After ensuring the stability of the v0.1.0 infrastructure, we have moved towards "Code-based Autonomous Evolution" and "Fine-grained Manipulation", completing the core implementation:
+SuperNova has established the "Everything is an Organ" composable architecture, completely replacing class hierarchies with the pure host container `UniversalAgent` and achieving full modularization of core infrastructure:
 
-- **Virtual Embodied AI (Completed)**
-  - Focus on fine-grained manipulation and perception in virtual environments, achieving Code-based self-correction and autonomous evolution capabilities.
-  - **Multi-Agent Environment Abstraction**: Introduced the `BaseEmbodiedEnv` abstraction, elevating virtual environments (e.g., MinecraftEnv) to system-level singletons managed by `RuntimeKernel`. Fully supports multi-agent and multi-session concurrent logins, creating a true multi-agent coexisting universe.
-  - **Session-level Execution Isolation**: `SkillManager` implements a compound key mechanism (`${sessionId}:${agentId}:${skillId}`) to guarantee physical cache isolation, preventing script contamination across parallel universes in a shared environment.
-  - **Generic Env SDK**: Completely decoupled Minecraft-specific dependencies. Extracted SDK declarations to a standalone `SuperNovaBot.d.ts` for dynamic injection, and utilized generics (`<TEnv>`) to connect with environments, enabling seamless adaptation to Line Bots, web crawlers, or any domain.
+### Technical Highlights
+1. **Composable Universal Agent**
+   - **Minimal Host Container**: `UniversalAgent` is under 400 lines of code with zero business logic, dedicated purely to state machine coordination and the standard step loop (BeforeStep → BuildPrompt → CollectTools → CallModel → AfterStep).
+   - **Organ Interface & Lifecycle (`IAgentModule`)**: Modules possess isolated execution priorities (`priority`), dependency verification (`requires`), and conflict assertions (`conflicts`).
+   - **Dynamic Prompt Engine**: Strict hierarchical index (`PromptSectionIndex` 1~10) facilitating dual-key sorting and dynamic assembly of modular prompt sections.
+2. **Messaging & Session Subsystem**
+   - **Two-Tier Offload**: Real-time disk write threshold for incoming messages (2KB) + deep sliding window compaction threshold for older history (512B). Large payloads are automatically offloaded to independent Blob files referenced by URI.
+   - **Session Recovery**: Suspends active sessions to disk as `SUSPENDED` upon shutdown; automatically restores and unfreezes them back to `ACTIVE` in batch upon `SessionManager.start()`.
+   - **Inbox Buffer Memory Release & Persistence Sync**: Thoroughly frees keys from memory Map upon `popInbox` and immediately persists changes, preventing duplicate message processing on recovery.
+3. **Micro-Kernel Infrastructure (@supernova/runtime & @supernova/events)**
+   - **Unified Lifecycle Management**: 5-stage state machine, service container pool, deduplication protection, and reverse-order graceful shutdown.
+   - **Strongly-Typed Generic EventBus**: Completely decouples cross-subsystem interactions covering system, session, agent, and step hook chains.
+   - **Strict Typing Configuration**: Deprecates Zod `.passthrough()`, manually asserting strict types on LLM parameters (`reasoning`, `parallel_tool_calls`, `service_tier`).
+4. **Complete Architecture Documentation**: Rebuilt global system overview (`ARCH.md`) and 20+ modular specification documents in `docs/`.
 
-- **New CodeSkill Self-Evolving Ecosystem (Agent-Evolvable Code) (Completed)**
-  - Unlike traditional Prompt Skills on the market, CodeSkill is essentially **real code** and is designed to allow Agents to **self-optimize, refactor, or even create new ones from scratch** during execution.
-  - The foundation is strictly categorized into `Observation`, `Action`, etc., ensuring that every Skill written by the Agent has bounded responsibilities.
-  - **Technical Highlights**:
-    - **Dynamic Versioning & Indirection Storage**: Implemented an indirection storage mechanism where the underlying `IdGenerator` automatically generates a `skillver_xxx` suffix for physical files, preventing new code from directly overwriting and destroying older versions.
-    - **Skill Caching & Lifecycle Management**: Introduced `LRUCache` in the core `SkillManager` to centralize the management of both `ActionSkill` and `ObservationSkill` instances. Added an `onEvict` hook to ensure evicted background skills can gracefully terminate internal loops.
-    - **Self-Healing & Auto-Rollback**: When a new skill fails, the Agent not only records the loss rate but can also use `rollback_code_skill` to revert to a stable version. An automatic cache invalidation mechanism (`invalidateCache`) is integrated into all script-mutating tools, completely resolving the infinite self-healing loop vulnerability.
-    - **Metrics & Read-only Maintenance**: Built-in tools like `read_code_skill`, `list_skill_versions`, and `delete_code_skill` allow the Agent to proactively read old source code, view historical success rates, and clean up redundant skills to save Tokens.
-    - **Hardened Sandbox & WASM**: To address security risks, future plans include enforcing dynamically generated CodeSkills to execute within a WebAssembly (WASM) container.
-- **Materialized Task System (Completed)**
-  - Added the Task system, allowing the main brain and developers to clearly see the execution progress of each step.
-  - **Technical Highlights**:
-    - **LATS Strategy Search Engine**: Combines MCTS (Monte Carlo Tree Search) and UCB1 algorithm to perform deep and broad strategy search and reflection before generating the DAG, finding the optimal solution path. Recently introduced `Promise.all` parallel evaluation to drastically reduce latency, and implemented a precise step-by-step reasoning mode through dynamic Schema extraction.
-    - **Asynchronous Event Scheduling**: `TaskManager` and `StrategizeAndPlanTool` are fully integrated with EventBus, unleashing the Agent's multi-tasking concurrency capabilities through background execution and Event Injection.
-    - **Task Dashboard Injection**: Through the `BeforeAgentStep` lifecycle Hook, a dedicated task dashboard (global tree view or personal task list) is dynamically injected based on the Agent's role (Creator vs. Assignee), achieving high contextual awareness.
-    - **Orchestration Loop**: Separated the responsibilities of `SpawnAgentTool` and `AssignTaskTool`, combined with `UpdateTaskStatusTool` and `TaskManager`'s background event broadcasting, to achieve a fully automated loop from assignment, execution, reporting to dependency unlocking.
+---
 
-- **Advanced Workspace Collaboration**
-  - **Step-level Caching**: Every critical step of a task is forcibly linked with the current Git Workspace system for isolated caching, ensuring a clean rollback and inspection at any time.
-  - **Multi-Agent Conflict Resolution**: Lays the foundation for future multi-tasking concurrency, utilizing the advantages of Git tree branches to automatically handle Merge conflicts and state merging when multiple Sub-Agents operate on files simultaneously.
+## Future Milestones
 
-- **Configurable Tool Delegation (Completed)**
-  - Tool resources are no longer mindlessly mounted globally. Except for high-risk tools that require strict control, the `MainAgent` can flexibly and accurately "Delegate" specific toolsets to Sub-Agents when creating or waking them up based on task requirements.
-  - **Technical Highlights**:
-    - Changed ToolRegistry to a stateless object directly managed by AgentManager, no longer relying on global singletons, achieving complete inversion of control of lifecycles.
-    - Supports `SpawnAgentTool` to generate disposable agents (`isTemp: true`), which are automatically isolated securely and have their memory released by the system upon task completion.
+```mermaid
+flowchart LR
+    M1["v2.1.0\nCognitive Organs\n(Memory & Emotion)"] --> M2["v2.2.0\nPlanning & Coordination\n(Planner & Supervisor)"]
+    M2 --> M3["v2.3.0\nEmbodiment & Projection\n(Embodiment & Projection)"]
+```
 
-- **Domain-Driven Refactoring (Completed)**
-  - Preventively completed the directory refactoring of Clean Architecture to address the code complexity brought by multi-agents.
-  - **Technical Highlights**:
-    - Extracted a pure `domain` layer, completely decoupling core interfaces like all IRepository and IEventBus.
-    - Flattened the underlying `infra` folders into `llm`, `repositories`, `storage`, `workspace`, solving the original dependency hell up to 5 layers deep.
-    - Centrally manage brain config files in `prompts/`, providing a cleaner injection pipeline for Sub-Agents with different responsibilities.
+### v2.1.0 - Cognitive & Psychological Organs - In Progress (50%)
+- **Long-Term Graph & Vector Memory Organ (`MemoryModule`, priority: 20)** [✅ Completed]:
+  - **Knowledge Graph Memory (Graph Memory)**: Employs a low-cost `EXTRACTION` preset to asynchronously extract entities and relation triplets (Subject-Predicate-Object) in the background, persisting to `nodes.json` and `edges.json`.
+  - **Semantic Vector Search & Subgraph Expansion**: Combines OpenAI Embeddings with local Vectra vector store for similarity retrieval and multi-hop subgraph context injection (`searchGraphContext`) into `PromptSectionIndex.MEMORY_CONTEXT (3)` before thinking.
+  - **Active Recall Tool (`recall_memory`)**: Standard Tool enabling models to actively query long-term facts, entity attributes, and user preferences during reasoning.
+  - **End-to-End Demo Script**: Overhauled `demo/test_memory.ts`, validating extraction, vectorization, subgraph retrieval, and tool recall across 5 phases.
+- **Cognitive Emotion & Psychology Organ (`EmotionModule`, priority: 30)** [🔄 Pending]:
+  - **OCC Emotion Model & VAD Vector**: Maintains Valence, Arousal, Dominance, and internal Stress levels.
+  - **Exponential Emotional Decay**: Naturally decays extreme emotional fluctuations towards the baseline temperament over time.
+  - **Multimodal Synchronization**: Broadcasts emotion change events via EventBus for UI expression and TTS voice modulation.
 
-## v0.2.3 - Novalink Communication & Environment Lightweighting (Completed)
+### v2.2.0 - Tree Search Planning & Multi-Agent Coordination (Orchestration & Planning)
+- **Goal Decomposition & Planning Organ (`PlannerModule`, priority: 40)**:
+  - **LATS (Language Agent Tree Search)**: Implements Monte Carlo tree search, candidate rollout, numerical self-evaluation, and back-tracking pruning.
+  - **Dynamic State Injection**: Injects current execution checklist into `PromptSectionIndex.PLANNER_STATE (6)`.
+- **Supervisory & Authorization Organ (`SupervisorModule`, priority: 40)**:
+  - **Dynamic Privilege Review**: Audits high-risk operations of subordinate worker agents and issues one-time capability tokens.
+  - **Subtask Delegation**: Dynamically matches capable worker agents based on task tags and validates delivery quality.
+- **Task Worker Organ (`TaskWorkerModule`, priority: 60)**:
+  - **TaskDAG Node Execution**: Focuses on executing concrete engineering nodes and reporting progress and artifacts to the dispatcher.
 
-To resolve the performance bottlenecks caused by traditional polling mechanisms, we completed a comprehensive upgrade of the environment control layer:
+### v2.3.0 - Embodied Multimodality & Consciousness Projection (Embodiment & Projection)
+- **Embodied Perception & Sandbox Organ (`EmbodimentModule`, priority: 70)**:
+  - **Physical & Virtual Sandbox Adapters**: Interfaces with external physical sensors, desktop OS, or Minecraft game sandboxes.
+  - **Environment Perception Injection**: Injects nearby entity coordinates and state changes into `PromptSectionIndex.ENVIRONMENT (7)`.
+- **Consciousness Projection & Organ Borrowing Channel (`ProjectionModule`, priority: 50)**:
+  - **Mind Mirroring**: Projects core personality and tone across sessions to lightweight edge nodes.
+  - **Asymmetric Organ Borrowing**: Edge nodes borrow long-term memory and high-tier reasoning capabilities from the core agent on demand.
 
-- **Novalink Bidirectional Communication (Pure WebSocket & JSON-RPC)**:
-  - Deprecated the `mineflayer` framework in favor of a single WebSocket connection, enabling ultra-low latency event streaming and command dispatching.
-  - Removed `mineflayer-pathfinder`, migrating physical navigation computation to the Java server backend, which drastically reduces CPU and memory overhead on the Node.js Runtime.
-- **Interface Abstraction & Type Safety Isolation (Interface Abstraction & Type Isolation)**:
-  - Introduced the `IBody` interface, entirely replacing dependencies on specific bot implementations. Standardized parameter naming conventions to reduce LLM hallucinations during type inference.
-  - Implemented an LLM-specific type declaration file (`NovaLink.d.ts`), stripping unnecessary `import/export` module syntax to ensure context purity when dynamically injected into Prompts.
+---
+
+## Historical Milestones Archive
+
+<details>
+<summary><b>Click to expand historical milestones (v0.1.0 - v0.2.4)</b></summary>
+
+### v0.1.0 - Foundation & Memory System (Completed)
+- **Hybrid Graph-Vector Memory**: Long-term graph memory, episodic daily summaries, and dynamic context injection.
+- **Underlying Infrastructure & Config**: Zod dynamic configuration engine, workspace isolation sandbox, asynchronous EventBus.
+- **Performance & Robustness**: History compression short-circuit (`isOffloaded`), universal LRUCache, safe history slicing protection.
+
+### v0.2.0 - Embodied Agent Self-Evolving CodeSkill Ecosystem (Completed)
+- **Embodied AI**: `BaseEmbodiedEnv` multi-agent environment abstraction, session-level skill cache isolation, generic external SDKs.
+- **CodeSkill Self-Evolution**: Dynamic versioning and indirection pointer storage, LRU cache eviction hooks (`onEvict`), self-healing invalidation and rollback.
+- **Task System**: LATS planning search engine, async task scheduling, dynamic task dashboard injection.
+
+### v0.2.3 - Novalink Bi-Directional Communication (Completed)
+- **Novalink**: Single WebSocket connection with JSON-RPC 2.0 full-duplex communication; offloaded physics to backend.
+- **Type Declaration Isolation**: Pure `NovaLink.d.ts` without module syntax, minimizing hallucinations in LLMs.
+
+### v0.2.4 - String Array RBAC & Global Feature Flags (Completed)
+- **Fine-Grained Permissions**: String-based `AgentPermissions`, two-stage privilege verification in tools.
+- **App Facade & Graceful Shutdown**: `SuperNovaApp` facade class unifying lifecycle and SIGINT/SIGTERM handling.
+
+</details>

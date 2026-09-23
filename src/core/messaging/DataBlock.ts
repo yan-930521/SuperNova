@@ -1,101 +1,58 @@
-import {
-    AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
-} from '@langchain/core/messages';
-
-import { ToolControlPayload } from '../tools/BaseTool';
-import { LogManager } from '@supernova/common/LogManager';
+import { AIMessage, BaseMessage, HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { IdGenerator } from '@supernova/common/IdGenerator';
+import { LogManager } from '@supernova/common/LogManager';
+import { IDataBlock } from '@supernova/events/IBus';
 
-/**
- * 定義巨型資料指標 (Data Pointer)
- * 實現「控制面與資料面分離」的核心，避免 EventBus 遭遇記憶體溢出
- */
-export interface IDataPointer {
-    /** 指標類型：實體檔案、虛擬檔案、外部快取 (如 Redis)、URL */
-    type: 'FILE' | 'VFS' | 'CACHE' | 'URL';
-    /** 資源定位符 (例如：vfs://agent-123/temp/data.html) */
-    uri: string;
-    /** 可選：資料的 MIME Type 或附帶的輕量級 Metadata */
-    metadata?: Record<string, any>;
-}
-
-/**
- * DataBlockRole
- * 定義投遞給 LLM 時的 Message 角色類型
- */
-export type DataBlockRole = 'human' | 'ai' | 'system' | 'tool';
-
-/**
- * 訊息優先度
- * 影響 SessionManager 排程與是否觸發分身併發 (Clone Mode)
- */
-export enum MessagePriority {
-    URGENT = 100, // 緊急中斷 (如 User 停止指令、遭受攻擊)
-    HIGH = 50,    // 高優先 (直接 @提及、任務回報)
-    NORMAL = 0,   // 一般對話或環境訊息
-    LOW = -50     // 背景雜訊
-}
-
-/**
- * 序列化資料訊息塊介面
- */
-export interface DataBlockData {
-    id: string;
-    sessionId: string;
-    threadId: string | null;
-    senderId: string;
-    targetId: string | null;
-    type: DataBlockRole;
-    intent: string;
-    priority: MessagePriority;
-    timestamp: number;
-    controlPayload: any;
-    dataPointers: IDataPointer[];
-    metadata?: Record<string, any>;
-}
+import {
+    DataBlockData, DataBlockParams, DataBlockRole, IDataPointer, MessagePriority
+} from './types';
 
 /**
  * 系統內所有節點傳遞資訊與狀態的通用載體 (DataBlock)
- * 同時代表系統級的非同步 Message 封裝，支持直接轉換為 LangChain Message。
+ * 遵循控制面與資料面分離原則：
+ * 1. 攜帶完整會話路由與優先級元資料 (sessionId, senderId, targetId, priority, intent)
+ * 2. 支援巨型資料指標 (IDataPointer) 隔離，防禦記憶體溢出 (OOM)
+ * 3. 支援結構化 Markdown 渲染與無縫轉譯為 LangChain BaseMessage
  */
-export class DataBlock<TControlPayload = Record<string, any>> {
+export class DataBlock<TControlPayload = any> implements IDataBlock {
     /** 全局唯一識別碼 */
     public readonly id: string;
+
     /** 所屬會話 ID (Session ID) */
     public readonly sessionId: string;
+
     /** 可選：執行緒 ID (Thread ID) */
     public readonly threadId: string | null;
-    /** 發送此 DataBlock 的 Agent 或 Worker ID */
+
+    /** 發送此 DataBlock 的實體 ID (例如 User, AgentId, WorkerId) */
     public readonly senderId: string;
-    /** 接收此 DataBlock 的目標 ID。若為 null，則代表向上回報 or 廣播 */
+
+    /** 接收此 DataBlock 的目標 ID。若為 null 則代表向上回報或公頻廣播 */
     public readonly targetId: string | null;
 
-    /** 
-     * 角色類型 (Enum)：決定投遞給 LLM 時的 Message 角色
-     */
+    /** 角色類型：決定投遞給 LLM 時的 Message 角色 */
     public readonly type: DataBlockRole;
 
-    /** 
-     * 訊息意圖 (字串標籤，如 'USER_INPUT', 'SENSOR_INPUT' 等)
-     */
+    /** 訊息意圖標籤 (例如 'USER_INPUT', 'TASK_RESULT', 'ENVIRONMENT_PERCEPTION') */
     public readonly intent: string;
 
-    /**
-     * 訊息優先度 (影響排程與併發觸發)
-     */
+    /** 訊息優先度 (影響收件箱排程與是否強制即時喚醒) */
     public readonly priority: MessagePriority;
 
     /** 建立時間戳 */
     public readonly timestamp: number;
 
-    /** 核心控制 Payload (任意 JSON 結構或字串) */
+    /** 核心控制負載 (任意 JSON 結構或純字串) */
     public readonly controlPayload: TControlPayload;
 
-    /** 資料指標陣列 (巨型資料隔離) */
+    /** 資料指標陣列 (巨型資料檔案/VFS隔離) */
     public readonly dataPointers: IDataPointer[];
 
-    /** 內部附加屬性儲存 (Metadata) */
+    /** 內部附加元資料儲存區 */
     public metadata: Record<string, any>;
+
+    /** 快取 LangChain 轉譯實例，避免重複序列化與記憶體分配 */
+    private readonly messageCache = new Map<string, BaseMessage>();
 
     /** 持久化標記：是否已經將過大的 Payload 卸載為指標 (Offloaded) */
     public get isOffloaded(): boolean {
@@ -105,7 +62,7 @@ export class DataBlock<TControlPayload = Record<string, any>> {
         this.metadata.isOffloaded = value;
     }
 
-    /** 記憶體內的瞬態標記，用於標示是否已經通過壓縮檢查，避免重複掃描 */
+    /** 記憶體內的瞬態標記，標示是否已通過壓縮檢查 */
     public get isCompacted(): boolean {
         return this.metadata.isCompacted ?? false;
     }
@@ -121,67 +78,49 @@ export class DataBlock<TControlPayload = Record<string, any>> {
         this.metadata.isExtracted = value;
     }
 
-    constructor(params: {
-        id?: string;
-        sessionId: string;
-        threadId?: string | null;
-        senderId: string;
-        targetId?: string | null;
-        type?: DataBlockRole;
-        intent?: string;
-        priority?: MessagePriority;
-        timestamp?: number;
-        controlPayload?: TControlPayload;
-        dataPointers?: IDataPointer[];
-        metadata?: Record<string, any>;
-        isOffloaded?: boolean; // Backward compatibility for old JSON payloads
-    }) {
+    constructor(params: DataBlockParams<TControlPayload>) {
         this.id = params.id || IdGenerator.dataBlock();
         this.sessionId = params.sessionId;
         this.threadId = params.threadId || null;
         this.senderId = params.senderId;
         this.targetId = params.targetId || null;
-        this.type = params.type || 'system' as DataBlockRole;
+        this.type = params.type || 'system';
         this.intent = params.intent || 'GENERAL';
         this.priority = params.priority ?? MessagePriority.NORMAL;
         this.timestamp = params.timestamp || Date.now();
-        this.controlPayload = params.controlPayload || ({} as TControlPayload);
+        this.controlPayload = params.controlPayload !== undefined ? params.controlPayload : ({} as TControlPayload);
         this.dataPointers = params.dataPointers || [];
-        
-        // 確保支援舊版直接在 Root 放 isOffloaded 的結構
         this.metadata = params.metadata || {};
-        if (params.isOffloaded !== undefined && this.metadata.isOffloaded === undefined) {
-            this.metadata.isOffloaded = params.isOffloaded;
-        }
     }
 
     /**
-     * 驗證 DataBlock 是否超過大小限制
-     * 若 controlPayload 經過 JSON.stringify 後超過 thresholdLength，回傳 false 並拋出警告
+     * 驗證 DataBlock 是否超過安全大小限制 (防禦性檢測)
+     * @param thresholdLength 允許的最大字元長度 (預設 100KB)
      */
     public validateSize(thresholdLength: number = 100 * 1024): boolean {
         try {
-            const payloadStr = typeof this.controlPayload === 'string' 
-                ? this.controlPayload 
+            const payloadStr = typeof this.controlPayload === 'string'
+                ? this.controlPayload
                 : (JSON.stringify(this.controlPayload) || '');
-            const payloadSize = payloadStr.length; // 簡化成讀取字串長度，避免 UTF-8 計算負擔
 
-            if (payloadSize >= thresholdLength) {
-                LogManager.recorder.warn(`[WARNING] DataBlock ${this.id} payload size (approx ${payloadSize} chars) exceeds limit of ${thresholdLength} chars!`);
-                return false; // 過大，無效
+            if (payloadStr.length >= thresholdLength) {
+                LogManager.recorder.warn(
+                    `DataBlock [${this.id}] payload size (${payloadStr.length} chars) exceeds threshold [${thresholdLength}].`
+                );
+                return false;
             }
-            return true; // 大小合格
+            return true;
         } catch (error) {
-            LogManager.recorder.warn(`[WARNING] DataBlock ${this.id} payload could not be stringified for size validation: ${error}`);
+            LogManager.recorder.warn(`Failed to stringify DataBlock [${this.id}] for size check: ${String(error)}`);
             return false;
         }
     }
 
     /**
-     * 遞迴走訪 Payload，允許對過大的字串進行非同步處理與替換
-     * @param payload 原始 Payload
-     * @param thresholdLength 觸發替換的字元長度閥值
-     * @param replacer 非同步替換函式，傳入過大字串，回傳替換後的新物件或字串
+     * 遞迴走訪 Payload，對過大字串進行非同步處理與替換 (例如卸載為 Blob 檔案)
+     * @param payload 原始資料節點
+     * @param thresholdLength 觸發卸載的長度閥值
+     * @param replacer 替換處理器
      */
     public static async traverseAndReplaceLargeStrings(
         payload: any,
@@ -194,7 +133,7 @@ export class DataBlock<TControlPayload = Record<string, any>> {
             if (node === null || node === undefined) return node;
 
             if (typeof node === 'string') {
-                if (node.length >= thresholdLength) { // 簡化成讀取字串長度，避免頻繁呼叫 Buffer.byteLength
+                if (node.length >= thresholdLength) {
                     hasChanges = true;
                     return await replacer(node);
                 }
@@ -225,12 +164,12 @@ export class DataBlock<TControlPayload = Record<string, any>> {
     }
 
     /**
-     * 將 DataBlock 的屬性與負載格式化轉換為結構化的 Markdown 文本。
-     * - 若 type !== 'system'：直接回傳 controlPayload 中的純文字內容（text/content/stdout），不附加任何系統裝飾。
-     * - 若 type === 'system' || type === 'tool'：回傳精美的結構化 Markdown 系統事件回報。
+     * 將 DataBlock 的屬性與負載格式化為結構化 Markdown 文本
+     * - non-system (human/ai)：若為字串直接輸出純文字，避免對話受到多餘系統排版干擾
+     * - system / tool：輸出帶有時間、意圖與狀態的結構化區塊
      */
     public toMarkdown(saveTokens: boolean = false): string {
-        if ((this.type !== 'system') && (this.type !== 'tool')) {
+        if (this.type !== 'system' && this.type !== 'tool') {
             if (typeof this.controlPayload === 'string') {
                 return this.controlPayload;
             }
@@ -240,30 +179,29 @@ export class DataBlock<TControlPayload = Record<string, any>> {
         const lines: string[] = [];
         const dateStr = new Date(this.timestamp).toISOString();
 
-        if (this.type === "system") {
+        if (this.type === 'system') {
             if (saveTokens) {
                 lines.push(`[SYS: ${this.intent.toUpperCase()}]`);
-                if (this.priority > MessagePriority.NORMAL) lines.push(`(!URGENT!)`);
+                if (this.priority > MessagePriority.NORMAL) lines.push('(!URGENT!)');
             } else {
                 lines.push(`### [EVENT: ${this.intent.toUpperCase()}]`);
                 lines.push(`- **Sender**: \`${this.senderId}\``);
                 if (this.priority > MessagePriority.NORMAL) {
-                    lines.push(`- **Priority**: \`URGENT / HIGH\``);
+                    lines.push('- **Priority**: `URGENT / HIGH`');
                 }
                 lines.push(`- **Time**: \`${dateStr}\``);
             }
 
             if (this.controlPayload && Object.keys(this.controlPayload).length > 0) {
-                if (!saveTokens) lines.push(`\n**Payload**:`);
+                if (!saveTokens) lines.push('\n**Payload**:');
                 lines.push('```json');
                 lines.push(JSON.stringify(this.controlPayload, null, saveTokens ? 0 : 2));
                 lines.push('```');
             }
-        }
-        else if (this.type === "tool") {
-            const payload = this.controlPayload as ToolControlPayload;
+        } else if (this.type === 'tool') {
+            const payload = (this.controlPayload || {}) as Record<string, any>;
             const toolName = payload.toolName || 'UNKNOWN_TOOL';
-            const isError = this.intent === 'TOOL_ERROR' || payload.error;
+            const isError = this.intent === 'TOOL_ERROR' || Boolean(payload.error);
             const statusIcon = isError ? 'ERROR' : 'SUCCESS';
 
             if (saveTokens) {
@@ -275,19 +213,19 @@ export class DataBlock<TControlPayload = Record<string, any>> {
             }
 
             if (payload.args && Object.keys(payload.args).length > 0) {
-                if (!saveTokens) lines.push(`\n**Arguments**:`);
+                if (!saveTokens) lines.push('\n**Arguments**:');
                 lines.push('```json');
                 lines.push(JSON.stringify(payload.args, null, saveTokens ? 0 : 2));
                 lines.push('```');
             }
 
             if (isError && payload.error) {
-                if (!saveTokens) lines.push(`\n**Error Details**:`);
+                if (!saveTokens) lines.push('\n**Error Details**:');
                 lines.push('```text');
                 lines.push(String(payload.error));
                 lines.push('```');
             } else if (payload.result !== undefined) {
-                if (!saveTokens) lines.push(`\n**Result**:`);
+                if (!saveTokens) lines.push('\n**Result**:');
                 const resultStr = typeof payload.result === 'object'
                     ? JSON.stringify(payload.result, null, saveTokens ? 0 : 2)
                     : String(payload.result);
@@ -296,8 +234,9 @@ export class DataBlock<TControlPayload = Record<string, any>> {
             }
         }
 
+        // 附加巨型資料指標連結
         if (this.dataPointers && this.dataPointers.length > 0) {
-            if (!saveTokens) lines.push(`\n**Data Pointers**:`);
+            if (!saveTokens) lines.push('\n**Data Pointers**:');
             for (const ptr of this.dataPointers) {
                 const metadataStr = ptr.metadata ? ` (metadata: ${JSON.stringify(ptr.metadata)})` : '';
                 if (saveTokens) {
@@ -311,44 +250,41 @@ export class DataBlock<TControlPayload = Record<string, any>> {
         return lines.join('\n');
     }
 
-    private _messageCache = new Map<string, BaseMessage>();
-
     /**
-     * 將 DataBlock 轉換為 LangChain 規格的 BaseMessage 物件。
-     * 自動進行角色對齊與 LangChain 強型別物件實例化。
-     * @param readerId 當前讀取這則訊息的 Agent ID (用於判斷是否為自身發送)
-     * @param saveTokens 是否啟用省 token 模式
+     * 將 DataBlock 轉換為 LangChain 規格的 BaseMessage 物件
+     * @param readerId 當前讀取這則訊息的 Agent ID (用於角色識別與視角對齊)
+     * @param saveTokens 是否啟用緊湊省 Token 模式
      */
     public toMessage(readerId?: string, saveTokens: boolean = false): BaseMessage {
         const cacheKey = `${readerId || 'none'}:${saveTokens}`;
-        if (this._messageCache.has(cacheKey)) {
-            return this._messageCache.get(cacheKey)!;
+        if (this.messageCache.has(cacheKey)) {
+            return this.messageCache.get(cacheKey)!;
         }
 
         const content = this.toMarkdown(saveTokens);
-
         let msg: BaseMessage;
+
         if (this.type === 'system' || this.type === 'tool') {
             msg = new SystemMessage({ content });
         } else if (this.type === 'human') {
             msg = new HumanMessage({ content: `[Message from ${this.senderId}]:\n${content}` });
         } else if (this.type === 'ai') {
-            // 如果這則 AI 訊息不是讀取者自己發的，代表是來自其他 Agent，轉換為 SystemMessage 傳遞
+            // 若 AI 訊息是由第三方 Agent 發出，對讀取者而言應呈現為系統投遞的他者訊息
             if (readerId && this.senderId !== readerId) {
                 msg = new SystemMessage({ content: `[Message from ${this.senderId}]:\n${content}` });
             } else {
                 msg = new AIMessage({ content });
             }
         } else {
-            throw new Error(`[DataBlock] Unsupported message type for LangChain conversion: ${this.type}`);
+            throw new Error(`Unsupported message role type for LangChain conversion: [${this.type}]`);
         }
 
-        this._messageCache.set(cacheKey, msg);
+        this.messageCache.set(cacheKey, msg);
         return msg;
     }
 
     /**
-     * 序列化 DataBlock 數據
+     * 序列化 DataBlock 數據為純物件
      */
     public toJSON(): DataBlockData {
         return {
@@ -363,12 +299,12 @@ export class DataBlock<TControlPayload = Record<string, any>> {
             timestamp: this.timestamp,
             controlPayload: this.controlPayload,
             dataPointers: this.dataPointers,
-            metadata: this.metadata
+            metadata: this.metadata,
         };
     }
 
     /**
-     * 從序列化數據還原 DataBlock 實例
+     * 從序列化數據重建 DataBlock 實例
      */
     public static fromJSON(data: DataBlockData): DataBlock {
         return new DataBlock(data);

@@ -2,137 +2,430 @@ import { config as dotenvConfig } from 'dotenv';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { DEFAULT_CONFIG } from '@core/config';
-import { Config, ConfigSchema } from '@core/config/Config';
-import { ConfigLoader } from '@supernova/common/config/ConfigLoader';
+import { LLMProvider, LLMSectionSchema } from '@supernova/common/llm';
 import { LogManager } from '@supernova/common/LogManager';
+import { ConsoleTransport } from '@supernova/common/transports';
+import { EventBus } from '@supernova/events/EventBus';
+import { ConfigManager, Kernel } from '@supernova/runtime';
 
 import {
-    FileSystemDataBlockRepository
-} from '../src/core/infra/repositories/FileSystemDataBlockRepository';
-import { JsonGraphRepository } from '../src/core/infra/repositories/JsonGraphRepository';
-import { RuntimeKernel } from '../src/core/lifecycle/RuntimeKernel';
-import { MemoryManager } from '../src/core/memory/MemoryManager';
-import { DataBlock, MessagePriority } from '../src/core/messaging/DataBlock';
+    AgentManager, FileSystemProfileRepository, HistoryModule, JsonGraphRepository, MemoryModule,
+    ProfileModule
+} from '../src/core';
+import {
+    AgentConfig, AgentSectionSchema, DEFAULT_AGENT_CONFIG, DEFAULT_STORAGE_CONFIG, StorageConfig,
+    StorageSectionSchema
+} from '../src/core/config';
+import { FileSystemDataBlockRepository, MessageRouter } from '../src/core/messaging';
+import { FileSystemSessionRepository, SessionManager } from '../src/core/session';
 
 dotenvConfig();
 
+/**
+ * SuperNova V2 - 知識圖譜記憶與向量語意檢索展示程序 (Memory & Knowledge Graph Demo)
+ *
+ * 完整展示：
+ * 1. 現代化微內核 (Kernel) 與多模型預設工廠 (LLMProvider)
+ * 2. 長期記憶器官 (MemoryModule) 對話自動語意抽取與三元組生成
+ * 3. 實體節點 (Nodes)、關係邊 (Edges) 與 Vectra 本地向量索引庫之持久化
+ * 4. 向量相似度搜尋與一階/多階子圖拓撲展開 (searchGraphContext)
+ * 5. 模型推理時主動回想工具 (recall_memory) 之調用與格式化輸出
+ */
 async function main() {
-    console.log('=============================================');
-    console.log('   SuperNova v0.1.0 - Memory & Embedding Demo');
-    console.log('=============================================');
-    console.log('Initializing system...');
+    const logger = new LogManager({ type: 'SYSTEM', name: 'MemoryDemo' }).addTransport(
+        new ConsoleTransport('INFO')
+    );
 
-    // 每次執行 demo 前刪除舊的 config.yaml，強制使用預設值
+    console.log('================================================================');
+    console.log('       SuperNova V2 - Knowledge Graph Memory & Vector Demo       ');
+    console.log('================================================================');
+    logger.info('Initializing runtime environment and memory subsystems...');
+
+    // 1. 初始化核心基礎設施
+    const kernel = new Kernel();
+    const eventBus = new EventBus();
+    const configManager = new ConfigManager();
+
+    // 2. 註冊配置區段 (Storage, Agent, LLM)
+    configManager.registerSection('storage', StorageSectionSchema, {
+        ...DEFAULT_STORAGE_CONFIG,
+        base_dir: './workspace',
+        session_dir: 'sessions',
+        profile_version: 'self',
+    });
+
+    configManager.registerSection('agent', AgentSectionSchema, {
+        ...DEFAULT_AGENT_CONFIG,
+    });
+
+    configManager.registerSection('llm', LLMSectionSchema, {
+        default_preset: 'DEFAULT',
+        embedding_model: 'text-embedding-3-small',
+        embedding_provider: 'openai',
+        presets: {
+            DEFAULT: {
+                provider: 'openai',
+                modelName: 'gpt-5.6-luna',
+                temperature: 0.2,
+            },
+            extraction: {
+                provider: 'openai',
+                modelName: 'gpt-5.6-luna',
+                temperature: 0.1,
+                maxTokens: 8192,
+                reasoning: {
+                    effort: "none"
+                },
+                parallel_tool_calls: true,
+                service_tier: "flex"
+            },
+        },
+    });
+
+    // 載入配置 (若 config.yaml 存在則載入，否則自動生成)
     const configPath = './config.yaml';
-    if (fs.existsSync(configPath)) {
-        fs.unlinkSync(configPath);
-    }
+    await configManager.load({
+        filePath: configPath,
+        generateIfMissing: true,
+    });
 
-    const loader = new ConfigLoader<Config>(DEFAULT_CONFIG, ConfigSchema, LogManager.recorder);
+    const storageConfig = configManager.get<StorageConfig>('storage');
+    const agentConfig = configManager.get<AgentConfig>('agent');
 
-    const config = await loader.bootstrap(configPath);
-    
+    // 3. 初始化 LLMProvider 與外部持久化倉儲單例
+    const llmProvider = new LLMProvider(configManager);
 
+    const sessionRepo = new FileSystemSessionRepository({ storage: storageConfig });
+    const dataBlockRepo = new FileSystemDataBlockRepository({
+        storage: storageConfig,
+        agent: agentConfig,
+    });
+    const profileRepo = new FileSystemProfileRepository({ storage: storageConfig });
+    const graphRepo = new JsonGraphRepository({ storage: storageConfig });
 
-    const kernel = new RuntimeKernel(config);
+    // 4. 註冊微內核服務與核心外掛
+    kernel.registerService('events', eventBus);
+    kernel.registerService('llm', llmProvider);
+    kernel.registerService('config', configManager);
+
+    const sessionManager = new SessionManager({
+        eventBus,
+        repository: sessionRepo,
+    });
+    const agentManager = new AgentManager();
+    const messageRouter = new MessageRouter({
+        eventBus,
+        sessionManager,
+        agentManager,
+        agent: agentConfig,
+    });
+
+    await kernel.use(sessionManager);
+    await kernel.use(agentManager);
+    await kernel.use(messageRouter);
 
     // 啟動內核
-    await kernel.initialize();
-    await kernel.start();
+    await kernel.boot();
+    logger.info('Runtime Kernel booted successfully.');
 
-    const container = kernel.getContainer();
-    const memoryManager = container.resolve<MemoryManager>('MemoryManager');
-    const dataBlockRepo = container.resolve<FileSystemDataBlockRepository>('DataBlockRepository');
-    const graphRepo = container.resolve<JsonGraphRepository>('GraphRepository');
+    // 5. 建立專屬展示 Session 與 Agent
+    const SESSION_ID = `test-memory-${Date.now()}`;
+    const AGENT_ID = 'nova-brain';
 
-    // 建立一個全新的測試 Session
-    const SESSION_ID = 'test-memory-session-' + Date.now();
-    const AGENT_ID = 'main';
+    const session = sessionManager.createSession({
+        id: SESSION_ID,
+    });
+    session.registerParticipant(AGENT_ID);
+    session.registerParticipant('user');
 
-    console.log(`\n[Test] Created new session: ${SESSION_ID}`);
+    const agent = agentManager.createAgent(AGENT_ID, {
+        sessionId: session.id,
+        presetName: 'DEFAULT',
+    });
 
-    // 清理舊資料夾 (防萬一)
-    const sessionDir = path.join(process.cwd(), config.storage.base_dir, config.storage.session_dir, SESSION_ID);
-    if (fs.existsSync(sessionDir)) {
-        fs.rmSync(sessionDir, { recursive: true, force: true });
+    // 依序掛載 ProfileModule, HistoryModule 與 MemoryModule 器官
+    const profileModule = ProfileModule.load('main_agent', { storage: storageConfig }, false, {
+        sessionId: session.id,
+        repository: profileRepo,
+    });
+    await agent.attachModule(profileModule);
+
+    const historyModule = new HistoryModule({
+        repository: dataBlockRepo,
+        sessionId: session.id,
+        agent: agentConfig,
+    });
+    await agent.attachModule(historyModule);
+
+    const memoryModule = new MemoryModule({
+        repository: graphRepo,
+        sessionId: session.id,
+        extractionPresetName: 'extraction',
+        topK: 3,
+        subgraphDepth: 1,
+    });
+    await agent.attachModule(memoryModule);
+
+    console.log(`\n✨ Session & Agent Initialized:`);
+    console.log(`   Session ID: ${session.id}`);
+    console.log(`   Agent ID:   ${agent.id}`);
+    console.log(`   Attached Modules: profile, history, memory`);
+
+    // ─────────────────────────────────────────────────────────────
+    // Phase 1: 注入對話文本並執行圖譜記憶萃取
+    // ─────────────────────────────────────────────────────────────
+    console.log('\n================================================================');
+    console.log('  Phase 1: Knowledge Graph Memory Extraction (實體三元組萃取)    ');
+    console.log('================================================================');
+
+    const simulatedConversation = [
+        'User: 你好，我是 Yan。我正在開發 SuperNova，這是一個以 TypeScript 和 Bun 為核心的自主多代理人作業系統。',
+        'Agent: 你好 Yan！SuperNova 聽起來是個架構嚴謹的高併發系統，Bun 和 TypeScript 提供了絕佳的效能與型別安全！',
+        'User: 沒錯！我非常注重架構與型別安全，因此在 SuperNova 裡全面導入 Zod 與嚴格型別，我個人非常討厭沒有型別檢查的語言（例如原生 Python）。',
+    ].join('\n');
+
+    console.log('Simulated Conversation Input:');
+    console.log('----------------------------------------------------------------');
+    console.log(simulatedConversation);
+    console.log('----------------------------------------------------------------');
+
+    console.log('\n[Triggering] Extracting entities and relations via LLM & Vectra embeddings...');
+    const startTime = Date.now();
+    await memoryModule.extractMemory(simulatedConversation, session.id);
+    const durationMs = Date.now() - startTime;
+    console.log(`✔️  Extraction & Embedding completed in ${durationMs}ms!`);
+
+    // ─────────────────────────────────────────────────────────────
+    // Phase 2: 驗證圖譜持久化與知識拓撲結構
+    // ─────────────────────────────────────────────────────────────
+    console.log('\n================================================================');
+    console.log('  Phase 2: Graph Persistence & Topology Inspection (圖譜結構檢查) ');
+    console.log('================================================================');
+
+    const nodes = await graphRepo.listNodes(session.id);
+    const edges = await graphRepo.listEdges(session.id);
+
+    console.log(`\n📌 Extracted Knowledge Nodes (${nodes.length}):`);
+    for (const node of nodes) {
+        console.log(`  - [${node.label.padEnd(12)}] ${node.id.padEnd(20)} : ${node.memory}`);
     }
 
-    console.log('\n[Test] Injecting simulated conversation...');
+    console.log(`\n🔗 Extracted Relational Edges (${edges.length}):`);
+    for (const edge of edges) {
+        console.log(`  - (${edge.sourceId}) --[${edge.relation}]--> (${edge.targetId})`);
+    }
 
-    // 模擬一段對話
-    const chatLog = [
-        { role: 'human', text: '你好，我叫 Yan，我最近在開發一個叫做 SuperNova 的 AI 專案，使用的語言是 TypeScript。' },
-        { role: 'ai', text: '你好 Yan！聽起來很酷。SuperNova 是一個什麼樣的專案呢？' },
-        { role: 'human', text: '它是一個高併發的 Agent 運行時系統，底層使用 Bun 引擎，支援多代理人協作。我還幫它加上了記憶體防 OOM 機制。' },
-        { role: 'ai', text: '這技術棧非常現代化！Bun 的效能極佳，而且支援原生的 TypeScript，確實非常適合用來打造底層系統。' },
-        { role: 'human', text: '對了，我非常討厭用 Python 寫後端，我覺得型別不夠安全。' }
+    const sessionGraphDir = path.join(
+        storageConfig.base_dir,
+        storageConfig.session_dir,
+        session.id,
+        storageConfig.graph_dir
+    );
+    console.log(`\n📁 Graph Storage Directory: ${sessionGraphDir}`);
+    console.log(`   - Nodes File:       ${storageConfig.graph_nodes_file} (${fs.existsSync(path.join(sessionGraphDir, storageConfig.graph_nodes_file)) ? 'EXISTS' : 'NOT FOUND'})`);
+    console.log(`   - Edges File:       ${storageConfig.graph_edges_file} (${fs.existsSync(path.join(sessionGraphDir, storageConfig.graph_edges_file)) ? 'EXISTS' : 'NOT FOUND'})`);
+    console.log(`   - Vectra Vector DB: index/ (${fs.existsSync(path.join(sessionGraphDir, 'index')) ? 'EXISTS' : 'NOT FOUND'})`);
+
+    // ─────────────────────────────────────────────────────────────
+    // Phase 3: 語意向量檢索與子圖拓撲展開 (Vector Subgraph Search)
+    // ─────────────────────────────────────────────────────────────
+    console.log('\n================================================================');
+    console.log('  Phase 3: Semantic Vector Search & Subgraph Retrieval (語意檢索) ');
+    console.log('================================================================');
+
+    const testQueries = [
+        'Yan 討厭什麼？',
+        'SuperNova 的技術架構與核心語言是什麼？',
     ];
 
-    const blocks: DataBlock<any>[] = [];
-    for (let i = 0; i < chatLog.length; i++) {
-        const msg = chatLog[i];
-        blocks.push(new DataBlock({
-            sessionId: SESSION_ID,
-            senderId: msg.role === 'human' ? 'user' : AGENT_ID,
-            targetId: msg.role === 'human' ? AGENT_ID : 'user',
-            type: msg.role as any,
-            priority: MessagePriority.NORMAL,
-            controlPayload: msg.text
-        }));
-    }
+    const embeddings = llmProvider.getEmbeddings();
 
-    // 寫入 DataBlockRepo
-    await dataBlockRepo.saveForAgent(SESSION_ID, AGENT_ID, blocks);
-    console.log(`[Test] Saved ${blocks.length} messages to DataBlockRepository.`);
+    for (const query of testQueries) {
+        console.log(`\n🔎 Query: "${query}"`);
+        const queryVector = await embeddings.embedQuery(query);
+        const searchResult = await graphRepo.searchGraphContext(session.id, queryVector, 3, 1);
 
-    console.log('\n[Test] Triggering Graph Memory Extraction (Phase 1: Extraction & Embeddings)...');
-    console.log('This will call OpenAI API. Please wait...');
-    
-    // 手動觸發 MemoryManager 的圖譜萃取
-    const startTime = Date.now();
-    await memoryManager.extractAndSaveSessionMemory(SESSION_ID, AGENT_ID);
-    const duration = Date.now() - startTime;
-    
-    console.log(`\n[Test] Extraction Completed in ${duration}ms!`);
-
-    console.log('\n[Test] Validating Graph Repository output:');
-    
-    // 讀取並打印結果
-    // 因為 GraphRepository 有快取，而且我們剛寫進去，我們可以直接用內建方法查
-    // 這裡我們直接掃 GraphRepo 的快取或檔案來看 Nodes & Edges
-    const nodesFile = path.join(sessionDir, config.storage.graph_dir, config.storage.graph_nodes_file);
-    const edgesFile = path.join(sessionDir, config.storage.graph_dir, config.storage.graph_edges_file);
-
-    if (fs.existsSync(nodesFile)) {
-        const nodesData = JSON.parse(fs.readFileSync(nodesFile, 'utf-8'));
-        console.log(`\n📌 Successfully extracted ${nodesData.length} Knowledge Nodes:`);
-        for (const node of nodesData) {
-            const embedStr = node.embedding && node.embedding.length > 0 
-                ? `[Vector Array: ${node.embedding.length} dims]` 
-                : '[NO EMBEDDING]';
-            console.log(`  - Entity: ${node.id.padEnd(25)} | Memory: ${node.memory.padEnd(20)} | Vector: ${embedStr}`);
+        console.log(`   Retrieved ${searchResult.nodes.length} nodes, ${searchResult.edges.length} edges:`);
+        for (const n of searchResult.nodes) {
+            console.log(`     * Node: [${n.label}] ${n.id} -> ${n.memory}`);
         }
-    } else {
-        console.log('⚠️ Nodes file not found! Extraction may have failed.');
-    }
-
-    if (fs.existsSync(edgesFile)) {
-        const edgesData = JSON.parse(fs.readFileSync(edgesFile, 'utf-8'));
-        console.log(`\n🔗 Successfully extracted ${edgesData.length} Relational Edges:`);
-        for (const edge of edgesData) {
-            console.log(`  - ${edge.sourceId} --[${edge.relation}]--> ${edge.targetId}`);
+        for (const e of searchResult.edges) {
+            console.log(`     * Edge: (${e.sourceId}) -[${e.relation}]-> (${e.targetId})`);
         }
-    } else {
-        console.log('⚠️ Edges file not found!');
     }
 
-    console.log('\n[Test] Shutting down kernel...');
+    // ─────────────────────────────────────────────────────────────
+    // Phase 4: Agent 主動召回工具驗證 (recall_memory Tool)
+    // ─────────────────────────────────────────────────────────────
+    console.log('\n================================================================');
+    console.log('  Phase 4: Agent recall_memory Tool Invocation (工具回想驗證)     ');
+    console.log('================================================================');
+
+    const tools = memoryModule.getTools();
+    const recallTool = tools.find((t) => t.name === 'recall_memory');
+
+    if (recallTool) {
+        console.log(`Tool registered: ${recallTool.name} - ${recallTool.description}`);
+        const toolQuery = 'Yan 與 SuperNova 的相關資訊';
+        console.log(`\n🤖 Simulating Agent invoking recall_memory({ query: "${toolQuery}" })...`);
+
+        const toolResult = await recallTool.func({ query: toolQuery, limit: 3 });
+        console.log('\n[Tool Markdown Output]:');
+        console.log('----------------------------------------------------------------');
+        console.log(toolResult);
+        console.log('----------------------------------------------------------------');
+    } else {
+        console.log('⚠️ recall_memory tool not found in MemoryModule!');
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Phase 5: 優雅停機
+    // ─────────────────────────────────────────────────────────────
+    console.log('\n================================================================');
+    console.log('  Phase 5: Graceful Shutdown (優雅停機)                         ');
+    console.log('================================================================');
+    logger.info('Stopping runtime kernel and closing resources...');
     await kernel.stop();
+    logger.info('SuperNova memory demo completed successfully.');
     process.exit(0);
 }
 
-main().catch(err => {
-    console.error(err);
+main().catch((err) => {
+    console.error('❌ Demo encountered an unhandled error:', err);
     process.exit(1);
 });
+
+
+/*
+================================================================
+       SuperNova V2 - Knowledge Graph Memory & Vector Demo       
+================================================================
+
+.
+.
+.
+
+✨ Session & Agent Initialized:
+   Session ID: test-memory-1790177120479
+   Agent ID:   nova-brain
+   Attached Modules: profile, history, memory
+
+================================================================
+  Phase 1: Knowledge Graph Memory Extraction (實體三元組萃取)    
+================================================================
+Simulated Conversation Input:
+----------------------------------------------------------------
+User: 你好，我是 Yan。我正在開發 SuperNova，這是一個以 TypeScript 和 Bun 為核心的自主多代理人作業系統。
+Agent: 你好 Yan！SuperNova 聽起來是個架構嚴謹的高併發系統，Bun 和 TypeScript 提供了絕佳的效能與型別安全！
+User: 沒錯！我非常注重架構與型別安全，因此在 SuperNova 裡全面導入 Zod 與嚴格型別，我個人非常討厭沒有型別檢查的語言（例如原生 Python）。
+----------------------------------------------------------------
+
+[Triggering] Extracting entities and relations via LLM & Vectra embeddings...
+[15:25:20] [DEBUG] [SYSTEM] [LLMProvider] Cached new BaseChatModel instance for preset [extraction]
+✔️  Extraction & Embedding completed in 32312ms!
+
+================================================================
+  Phase 2: Graph Persistence & Topology Inspection (圖譜結構檢查) 
+================================================================
+
+📌 Extracted Knowledge Nodes (9):
+  - [PERSON      ] User                 : 名為 Yan 的使用者，正在開發 SuperNova，重視架構與型別安全。
+  - [PERSON      ] Yan                  : 使用者自稱的名字。
+  - [TECHNOLOGY  ] SuperNova            : 以 TypeScript 和 Bun 為核心的自主多代理人作業系統。
+  - [TECHNOLOGY  ] TypeScript           : SuperNova 使用的具型別檢查程式語言。
+  - [TECHNOLOGY  ] Bun                  : SuperNova 使用的 JavaScript 執行環境與工具鏈。
+  - [TECHNOLOGY  ] Zod                  : SuperNova 中用於資料驗證與型別安全的函式庫。
+  - [TECHNOLOGY  ] Python               : 使用者不喜歡缺乏型別檢查的原生 Python。
+  - [CONCEPT     ] 型別安全                 : 使用者在 SuperNova 架構中重視的軟體工程特性。
+  - [CONCEPT     ] 自主多代理人作業系統           : SuperNova 所屬的系統類型。
+
+🔗 Extracted Relational Edges (9):
+  - (User) --[is_named]--> (Yan)
+  - (User) --[is_developing]--> (SuperNova)
+  - (SuperNova) --[uses]--> (TypeScript)
+  - (SuperNova) --[uses]--> (Bun)
+  - (SuperNova) --[is_a]--> (自主多代理人作業系統)
+  - (User) --[values]--> (型別安全)
+  - (SuperNova) --[uses]--> (Zod)
+  - (SuperNova) --[implements]--> (型別安全)
+  - (User) --[dislikes]--> (Python)
+
+📁 Graph Storage Directory: workspace\sessions\test-memory-1790177120479\graph
+   - Nodes File:       nodes.json (EXISTS)
+   - Edges File:       edges.json (EXISTS)
+   - Vectra Vector DB: index/ (EXISTS)
+
+================================================================
+  Phase 3: Semantic Vector Search & Subgraph Retrieval (語意檢索) 
+================================================================
+
+🔎 Query: "Yan 討厭什麼？"
+   Retrieved 9 nodes, 9 edges:
+     * Node: [PERSON] Yan -> 使用者自稱的名字。
+     * Node: [PERSON] User -> 名為 Yan 的使用者，正在開發 SuperNova，重視架構與型別安全。
+     * Node: [TECHNOLOGY] SuperNova -> 以 TypeScript 和 Bun 為核心的自主多代理人作業系統。
+     * Node: [CONCEPT] 型別安全 -> 使用者在 SuperNova 架構中重視的軟體工程特性。
+     * Node: [TECHNOLOGY] Python -> 使用者不喜歡缺乏型別檢查的原生 Python。
+     * Node: [TECHNOLOGY] TypeScript -> SuperNova 使用的具型別檢查程式語言。
+     * Node: [TECHNOLOGY] Bun -> SuperNova 使用的 JavaScript 執行環境與工具鏈。
+     * Node: [CONCEPT] 自主多代理人作業系統 -> SuperNova 所屬的系統類型。
+     * Node: [TECHNOLOGY] Zod -> SuperNova 中用於資料驗證與型別安全的函式庫。
+     * Edge: (User) -[is_named]-> (Yan)
+     * Edge: (User) -[is_developing]-> (SuperNova)
+     * Edge: (User) -[values]-> (型別安全)
+     * Edge: (User) -[dislikes]-> (Python)
+     * Edge: (SuperNova) -[uses]-> (TypeScript)
+     * Edge: (SuperNova) -[uses]-> (Bun)
+     * Edge: (SuperNova) -[is_a]-> (自主多代理人作業系統)
+     * Edge: (SuperNova) -[uses]-> (Zod)
+     * Edge: (SuperNova) -[implements]-> (型別安全)
+
+🔎 Query: "SuperNova 的技術架構與核心語言是什麼？"
+   Retrieved 9 nodes, 9 edges:
+     * Node: [TECHNOLOGY] SuperNova -> 以 TypeScript 和 Bun 為核心的自主多代理人作業系統。
+     * Node: [PERSON] User -> 名為 Yan 的使用者，正在開發 SuperNova，重視架構與型別安全。
+     * Node: [TECHNOLOGY] TypeScript -> SuperNova 使用的具型別檢查程式語言。
+     * Node: [TECHNOLOGY] Bun -> SuperNova 使用的 JavaScript 執行環境與工具鏈。
+     * Node: [CONCEPT] 自主多代理人作業系統 -> SuperNova 所屬的系統類型。
+     * Node: [TECHNOLOGY] Zod -> SuperNova 中用於資料驗證與型別安全的函式庫。
+     * Node: [CONCEPT] 型別安全 -> 使用者在 SuperNova 架構中重視的軟體工程特性。
+     * Node: [PERSON] Yan -> 使用者自稱的名字。
+     * Node: [TECHNOLOGY] Python -> 使用者不喜歡缺乏型別檢查的原生 Python。
+     * Edge: (User) -[is_developing]-> (SuperNova)
+     * Edge: (SuperNova) -[uses]-> (TypeScript)
+     * Edge: (SuperNova) -[uses]-> (Bun)
+     * Edge: (SuperNova) -[is_a]-> (自主多代理人作業系統)
+     * Edge: (SuperNova) -[uses]-> (Zod)
+     * Edge: (SuperNova) -[implements]-> (型別安全)
+     * Edge: (User) -[values]-> (型別安全)
+     * Edge: (User) -[is_named]-> (Yan)
+     * Edge: (User) -[dislikes]-> (Python)
+
+================================================================
+  Phase 4: Agent recall_memory Tool Invocation (工具回想驗證)     
+================================================================
+Tool registered: recall_memory - Search long-term memory and knowledge graph for facts, user preferences, and historical entities.
+
+🤖 Simulating Agent invoking recall_memory({ query: "Yan 與 SuperNova 的相關資訊" })...
+
+[Tool Markdown Output]:
+----------------------------------------------------------------
+# Long-Term Knowledge Graph Memory
+## Relevant Entities:
+- [PERSON] User: 名為 Yan 的使用者，正在開發 SuperNova，重視架構與型別安全。
+- [PERSON] Yan: 使用者自稱的名字。
+- [TECHNOLOGY] SuperNova: 以 TypeScript 和 Bun 為核心的自主多代理人作業系統。
+- [CONCEPT] 型別安全: 使用者在 SuperNova 架構中重視的軟體工程特性。
+- [TECHNOLOGY] Python: 使用者不喜歡缺乏型別檢查的原生 Python。
+- [CONCEPT] 自主多代理人作業系統: SuperNova 所屬的系統類型。
+- [TECHNOLOGY] Bun: SuperNova 使用的 JavaScript 執行環境與工具鏈。
+## Semantic Relations:
+- (User) -[is_named]-> (Yan)
+- (User) -[is_developing]-> (SuperNova)
+- (User) -[values]-> (型別安全)
+- (User) -[dislikes]-> (Python)
+- (SuperNova) -[is_a]-> (自主多代理人作業系統)
+- (SuperNova) -[uses]-> (Bun)
+----------------------------------------------------------------
+
+*/

@@ -1,6 +1,6 @@
 {
     "name": "supernova",
-    "version": "0.2.4",
+    "version": "2.1.0",
     "description": "SuperNova AI Agent Runtime",
     "main": "./demo/index.ts",
     "scripts": {

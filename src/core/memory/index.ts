@@ -1,1 +1,2 @@
-export * from './MemoryManager';
+export * from './types';
+export * from './JsonGraphRepository';

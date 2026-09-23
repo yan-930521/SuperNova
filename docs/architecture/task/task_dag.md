@@ -1,48 +1,69 @@
 ---
-title: 任務排程與有向無環圖 (TaskDAG)
-status: APPROVED
-last_updated: 2026-08-09
-related_codes:
-  - ../../../src/core/task/TaskManager.ts
-  - ../../../src/core/domain/ITask.ts
+title: 有向無環任務圖 (TaskDAG)
+version: 2.0.0
+status: ACTIVE
+last_updated: 2026-09-23
 ---
 
-# 任務排程與有向無環圖 (TaskDAG)
+# 有向無環任務圖 (TaskDAG)
 
-## 1. 核心概念
+任務拓撲圖 (`src/core/task/TaskDAG.ts`) 是 SuperNova 用於表示複雜多步驟、多代理協同任務相依關係的有向無環圖 (Directed Acyclic Graph) 核心資料結構。
 
-SuperNova 使用 **有向無環圖 (DAG, Directed Acyclic Graph)** 作為任務執行的基礎架構。每一個複雜任務都會被分解為多個子任務節點 (Task Nodes)，並且透過 `dependencies` 陣列定義節點間的前後依賴關係。
+---
 
-這套機制的管理核心是 `TaskManager`，它運行在背景，負責整個 Session 生命週期內的任務狀態機演進。
+## 1. 核心結構與節點狀態機
 
-## 2. 任務狀態機 (Task State Machine)
+```mermaid
+stateDiagram-v2
+    [*] --> PENDING: 建立任務節點
+    PENDING --> READY: 所有前置相依節點均 COMPLETED
+    READY --> RUNNING: 被調度器派發給 Agent 執行
+    RUNNING --> COMPLETED: 成果驗收成功
+    RUNNING --> FAILED: 執行出錯且超過最大重試
+    FAILED --> READY: 人工重置或回溯調度
+    PENDING --> BLOCKED: 前置依賴節點 FAILED
+    COMPLETED --> [*]
+```
 
-每一個 `ITask` 具備以下狀態，由 `TaskManager.refreshTaskStates()` 負責推進：
+### 1.1 節點資料模型 (`TaskNode`)
+```typescript
+export interface TaskNode {
+    /** 節點唯一識別碼 */
+    readonly id: string;
+    /** 任務標題 */
+    title: string;
+    /** 詳細任務目標與規格描述 */
+    description: string;
+    /** 當前執行狀態 */
+    status: TaskStatus;
+    /** 依賴的前置節點 ID 清單 */
+    dependencies: string[];
+    /** 輸入參數或上下文參照 */
+    inputPayload: Record<string, any>;
+    /** 執行產出結果 */
+    outputPayload?: Record<string, any>;
+    /** 已重試次數 */
+    retryCount: number;
+    /** 最大允許重試次數 */
+    maxRetries: number;
+    /** 指定或已分派之代理人 ID */
+    assignedAgentId?: string;
+}
+```
 
-- `PENDING`：任務已建立，但其前置依賴任務 (Dependencies) 尚未全部完成。
-- `READY`：任務的所有前置依賴均已標記為 `COMPLETED`。此狀態的任務可以隨時被指派給 Agent 執行。
-- `IN_PROGRESS`：任務已被指派給 Agent，正在執行中。
-- `COMPLETED`：任務成功執行完畢，結果已回報。
-- `FAILED`：任務執行失敗，或遭遇不可預期的錯誤。
-- `CANCELED`：任務被取消，通常是因為其前置依賴任務失敗所觸發的級聯取消。
+---
 
-## 3. LATS (Language Agent Tree Search) 前置規劃引擎
+## 2. 拓撲排序與環路檢測演算法
 
-在任務進入 DAG 系統前，系統支援透過 `StrategizeAndPlanTool` 工具結合 LATS 演算法進行前置規劃：
+在新增節點或相依邊（`addDependency(fromId, toId)`）時，引擎基於 Kahn 演算法即時檢測拓撲合法性：
+1. **入度統計 (In-Degree Calculation)**：統計各節點未完成的前置相依數量。
+2. **死結與環路防護**：若在依賴圖中檢測到環（Cycle），立即拒絕變更並拋出異常，防止任務調度產生永久死鎖。
+3. **就緒節點提取 (`getReadyNodes`)**：快速篩選所有狀態為 `PENDING` 且所有依賴均已處於 `COMPLETED` 的節點，流轉為 `READY` 並提交給調度器。
 
-1. **策略搜尋 (Strategy Search)**：使用 UCB1 演算法在自然語言層面進行多路徑搜尋與反思。
-2. **非同步執行**：由於 MCTS 搜尋耗時較長，工具呼叫後會立即回傳給 Agent。
-3. **事件回報**：背景運算完成後，系統會透過 EventBus 廣播 `BACKGROUND_TASK_COMPLETED` 訊息，告知 Agent 最終生成的具體任務圖。
+---
 
-## 4. 防死鎖與級聯取消 (Cascading Cancellation)
+## 3. 動態圖演進 (Dynamic Graph Evolution)
 
-### 4.1 依賴解鎖
-當任一節點狀態變更為 `COMPLETED` 時，`TaskManager` 會自動檢查其所有下游任務 (Downstream Tasks)。若某個下游任務的所有依賴皆已滿足，狀態會自動從 `PENDING` 轉為 `READY`。
-
-### 4.2 級聯取消
-若任一節點狀態變更為 `FAILED` 或 `CANCELED`，為了避免下游任務無限期死鎖在 `PENDING` 狀態，`TaskManager` 會觸發級聯取消 (Cascading Cancellation)，將所有直接或間接依賴該節點的任務狀態標記為 `CANCELED`，並記錄取消原因。
-
-## 5. 無縫整合調度閉環
-
-DAG 系統僅負責「任務節點間的關聯與狀態演進」，並不直接負責 Agent 的生殺大權。
-當狀態變為 `READY` 時，任務會透過前述的 **Task Dispatch & Orchestration Loop** 進入調度階段。具體可參閱 [`task_dispatch.md`](./task_dispatch.md)。
+TaskDAG 支援在執行期根據代理人的思考反饋進行動態擴展：
+- 允許在運行過程中動態插入子節點（Subtask Insertion）。
+- 支援標記部分節點為 `SKIPPED`，並自動觸發下游相依節點的就緒條件更新。

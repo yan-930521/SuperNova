@@ -1,8 +1,7 @@
-import { DEFAULT_CONFIG } from '@core/config/DefaultConfig';
-import { GlobalEventMap, IEvent, IEventBus } from '@supernova/events/IBus';
 import { LogManager } from '@supernova/common/LogManager';
-import { ConsoleTransport } from '@supernova/common/transports';
 import { LRUCache } from '@supernova/common/LRUCache';
+import { ConsoleTransport } from '@supernova/common/transports';
+import { GlobalEventMap, IEvent, IEventBus } from '@supernova/events/IBus';
 
 interface ICallbackRegistration {
     handler: (event: IEvent<any>) => void | Promise<void>;
@@ -24,7 +23,7 @@ export class EventBus implements IEventBus {
     private readonly targetCache: LRUCache<string, ICallbackRegistration[]>;
 
     constructor(config?: any) {
-        const lruSize = config?.cache?.event_bus_lru_size ?? DEFAULT_CONFIG.cache.event_bus_lru_size ?? 500;
+        const lruSize = config?.cache?.event_bus_lru_size ?? 500;
         this.targetCache = new LRUCache<string, ICallbackRegistration[]>(lruSize);
     }
 
@@ -91,10 +90,25 @@ export class EventBus implements IEventBus {
     }
 
     /**
-     * 訂閱事件 (支持回標函數及通配符)
+     * 訂閱事件 (支持泛型強型別推導、回標函數及通配符)
      */
+    public subscribe<T extends Extract<keyof GlobalEventMap, string>>(
+        type: T,
+        handler: (event: IEvent<T>) => void | Promise<void>,
+        options?: { sessionId?: string }
+    ): void;
+    public subscribe(
+        type: '*',
+        handler: (event: IEvent<string>) => void | Promise<void>,
+        options?: { sessionId?: string }
+    ): void;
     public subscribe(
         type: string,
+        handler: (event: IEvent<any>) => void | Promise<void>,
+        options?: { sessionId?: string }
+    ): void;
+    public subscribe(
+        type: any,
         handler: (event: IEvent<any>) => void | Promise<void>,
         options?: { sessionId?: string }
     ): void {
@@ -112,8 +126,16 @@ export class EventBus implements IEventBus {
     /**
      * 取消訂閱
      */
+    public unsubscribe<T extends Extract<keyof GlobalEventMap, string>>(
+        type: T,
+        handler: (event: IEvent<T>) => void | Promise<void>
+    ): void;
     public unsubscribe(
         type: string,
+        handler: (event: IEvent<any>) => void | Promise<void>
+    ): void;
+    public unsubscribe(
+        type: any,
         handler: (event: IEvent<any>) => void | Promise<void>
     ): void {
         const entry = this.handlerIndex.get(handler);

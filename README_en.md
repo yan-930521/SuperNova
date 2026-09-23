@@ -4,76 +4,85 @@
 
 [![TypeScript](https://img.shields.io/badge/Language-TypeScript-blue.svg)](https://www.typescriptlang.org/)
 [![Runtime](https://img.shields.io/badge/Runtime-Bun-black.svg)](https://bun.sh/)
-[![Architecture](https://img.shields.io/badge/Architecture-Event--Driven-orange.svg)](#core-features)
-[![Stage](https://img.shields.io/badge/Stage-v0.2.3-green.svg)](CHANGELOG_en.md)
+[![Architecture](https://img.shields.io/badge/Architecture-Composable_Organs-orange.svg)](docs/ARCH.md)
+[![Stage](https://img.shields.io/badge/Stage-v2.1.0--dev-green.svg)](CHANGELOG_en.md)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
-SuperNova is an **Agent Runtime** focusing on performance and state management. Running on Bun, it leverages an event-driven architecture to solve common issues in long-running AI systems — such as context explosion and goal drift — enabling Agents to maintain stable cognition and execution during complex, long-term tasks.
+SuperNova is an **Autonomous Multi-Agent Runtime** focused on high performance, high extensibility, state isolation, and long-term cognitive evolution. Built on top of [Bun](https://bun.sh/), it adopts an event-driven architecture, a universal agent container, and highly modular design, empowering agents to maintain robust cognition, memory, and multi-agent synergy across long-horizon complex tasks.
 
-> **Project Predecessor**: [Proj.Nova](https://github.com/yan-930521/Proj.Nova/)
+> **Predecessor**: [Proj.Nova](https://github.com/yan-930521/Proj.Nova/)
 
 > [!WARNING]
-> **Security Warning**: Some tools (e.g., `RunBashTool`) have not yet implemented sandboxing. Run this system **only within isolated VMs or Docker containers**. Do not deploy on production servers containing sensitive data.
-
-> [!NOTE]
-> **About Code Comments & Language**: Inline code comments are written in Traditional Chinese. However, the system architecture, variables, function names, and typings are strictly maintained in English. Comprehensive English documentation is provided to help you grasp the core concepts without language barriers.
+> **Security Notice**: Certain tools (such as terminal execution) operate directly on the system. Please only run this runtime inside isolated environments (VMs or Docker containers) and never deploy to production containing confidential data without sandboxing.
 
 ---
 
 ## Quick Start
 
-**Prerequisites**: [Bun](https://bun.sh/) >= 1.3.14 · [Git](https://git-scm.com/) >= 2.x · OpenAI API Key · Tavily API Key
+**Prerequisites**: [Bun](https://bun.sh/) >= 1.3.14 · [Git](https://git-scm.com/) >= 2.x · OpenAI API Key
 
 ```bash
-# Install dependencies
+# 1. Install dependencies
 bun install
 
-# Configure environment variables
+# 2. Configure environment variables
 cp .env.template .env
-# Edit .env and fill in your OpenAI API Key and Tavily API Key
+# Edit .env and supply your OPENAI_API_KEY
 
-# Run the main demo
+# 3. Run interactive demo (real LLM inference)
 bun run demo
 
-# Type checking and tests
-bun run lint
+# 4. Type checking & unit tests
+bun x tsc --noEmit
 bun test
 ```
 
-> For system configuration, see `config.yaml` in the root directory. For additional demo scripts (task system, memory system, performance benchmarks), see the scripts in `package.json`.
+> For configuration details, refer to `config.yaml` in the root directory. For more demo scripts (memory, task systems, benchmarks), check `scripts` in `package.json`.
 
 ---
 
 ## Core Features
 
-### Multi-Agent Collaboration
-- **Multi-Brain Architecture**: `MainAgent` (decision & scheduling), `TaskAgent` (focused task execution), and `EmbodiedAgent` (environment perception & manipulation) — separation of concerns to prevent Prompt pollution.
-- **Dynamic Context Projection**: The main brain can seamlessly take over a sub-agent's history and toolset to personally handle high-difficulty tasks.
-- **Task DAG Engine**: Automated task scheduling and dependency resolution powered by LATS (Language Agent Tree Search) strategy planning and directed acyclic graphs. (See planner output examples: [Holistic Mode](demo/lats_holistic.txt) and [Step-by-step Mode](demo/lats_step_by_step.txt))
-- **Fine-grained Tool Permissions**: Dynamically assign toolsets based on agent roles, strictly enforcing permission boundaries.
+### Multi-Agent Collaboration System
+- **Universal Agent Container**: A minimal host container (<400 lines of code) replaces inheritance trees. All cognitive and functional capabilities are hot-pluggable organ modules (`IAgentModule`), flexibly assembled into specialized roles based on task requirements.
+- **Task DAG Engine (`TaskDAG` & `PlannerModule`) `[Refactoring]`**: Automated task scheduling, dependency unlocking, and self-reflection based on LATS (Language Agent Tree Search) Monte Carlo tree search and directed acyclic graphs.
+- **Fine-Grained Tools & Dynamic Permissions (`SupervisorModule`) `[Refactoring]`**: Dynamically allocates toolsets according to agent roles; high-risk operations require dynamic authorization and review by supervisory organs.
 
 ### Memory & Context Management
-- **Graph-Vector Hybrid Memory**: Long-term memory auto-extracts entity-relation graphs; episodic memory condenses idle conversations into AI diaries; relevant context is auto-injected before each thinking step.
-- **Sliding Window Compaction**: Conversation history is automatically compressed and offloaded, with Payload Offloading to prevent token overflow and OOM.
-- **State Persistence**: Idle Agents are automatically serialized to disk (Dehydrate) and restored on demand (Rehydrate).
+- **Sliding Window Compaction**: Historical dialogue compression and compaction, paired with two-tier payload offloading to prevent token explosion and OOM.
+- **Hybrid Graph-Vector Memory (`MemoryModule`) `[Completed]`**: Long-term memory automatically distills entity-relation triplets and semantic embeddings powered by `BaseJsonRepository` and local `vectra` vector store. Subgraphs are automatically injected before thinking, complemented by an active `recall_memory` tool.
 
 ### Self-Evolving Skill Ecosystem (CodeSkill)
-- Agents can dynamically write TypeScript skills at runtime, with built-in version control, success rate tracking, and auto-rollback — forming a complete "create-test-debug-fix" self-healing loop.
-- Generic environment SDK that seamlessly adapts to Minecraft, Line Bot, web crawlers, or any external domain.
-- **Novalink Integration**: Dedicated WebSocket RPC server for Minecraft, providing low-latency communication and offloading physical computations to the backend.
+- **CodeSkill Self-Healing Loop `[Refactoring]`**: Agents dynamically author TypeScript skills at runtime, equipped with version control, success rate tracking, and rollback capabilities to form a self-evolving "create-test-debug-repair" loop.
+- **Generic External Environment SDK `[Refactoring]`**: Generic environment abstraction layer seamlessly adapting to Minecraft, Line Bot, web scrapers, or any external domain.
+- **Novalink Bi-Directional Communication `[Refactoring]`**: Bi-directional communication architecture based on WebSocket JSON-RPC 2.0, providing low latency and offloading physics calculations to the backend server.
 
 ### Engineering Infrastructure
-- **Event-Driven**: Fully asynchronous EventBus architecture — Agents suspend after tool calls and wake on completion, entirely non-blocking.
-- **Clean Architecture**: Four-layer decoupling across `domain` / `infra` / `tools` / `prompts`, with IoC container and Zod-based strongly-typed config engine.
-- **Git Worktree Isolation**: Each Session gets an independent branch — operations are traceable and rollback-ready.
+- **Micro-Kernel Architecture & Unified Lifecycle (`@supernova/runtime`)**: Provides 5-stage state transitions, service dependency injection pools, deduplication protection, and reverse-order graceful shutdown guarantees.
+- **Strongly-Typed EventBus (`@supernova/events`)**: Fully asynchronous EventBus supporting generic inference and before/after step hooks. Agents suspend upon tool calls and resume upon completion, ensuring non-blocking operations throughout.
+- **Workspace Isolation Sandbox `[Refactoring]`**: Independent sandbox environments per Session, ensuring operations are traceable and rollable.
 
-> Learn more: [Architecture Blueprint (ARCH.md)](docs/ARCH.md) · [Performance Benchmark](demo/benchmark/BENCHMARK_en.md) · [Roadmap (ROADMAP_en.md)](ROADMAP_en.md) · [Changelog (CHANGELOG_en.md)](CHANGELOG_en.md)
+---
+
+## Architecture Documentation Navigation
+
+Full architecture specifications are organized in the `docs/` directory:
+
+- **Global Architecture & Philosophy**: [System Architecture Blueprint (ARCH.md)](docs/ARCH.md) · [Architecture Philosophy & Patterns (Overview)](docs/architecture/overview.md)
+- **Agent Core & Organs**: [Universal Agent Container](docs/architecture/agent/universal_agent.md) · [Module Interface Specification](docs/architecture/agent/module_interface.md) · [Prompt Engine](docs/architecture/agent/prompt_engine.md) · [Standard Organ Modules](docs/architecture/modules/)
+- **Messaging & Session Subsystem**: [Session Entity](docs/architecture/messaging/session.md) · [Session Manager](docs/architecture/messaging/session_manager.md) · [Message Router](docs/architecture/messaging/message_router.md) · [DataBlock & Payload Offload](docs/architecture/messaging/datablock.md)
+- **Task Orchestration Subsystem**: [TaskDAG](docs/architecture/task/task_dag.md) · [Task Dispatcher](docs/architecture/task/task_dispatcher.md)
+- **Micro-Kernel Infrastructure**: [Micro-Kernel](docs/architecture/kernel/micro_kernel.md) · [EventBus](docs/architecture/kernel/event_bus.md) · [Config System](docs/architecture/kernel/config_system.md) · [LLM Provider](docs/architecture/kernel/llm_provider.md)
+- **Storage & Persistence**: [Repository Pattern](docs/architecture/storage/repository_pattern.md) · [File System Storage](docs/architecture/storage/file_system_storage.md)
+- **API Specs & Contracts**: [Event Catalogue](docs/api/event_catalogue.md) · [Module Contract Guide](docs/api/module_contract.md)
+
+> Reports & Advanced Reading: [Performance Benchmark (BENCHMARK.md)](demo/benchmark/BENCHMARK.md) · [Roadmap (ROADMAP_en.md)](ROADMAP_en.md) · [Changelog (CHANGELOG_en.md)](CHANGELOG_en.md)
 
 ---
 
 ## Contributing
 
-Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) first to understand the development guidelines and submission process.
+Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) to understand development guidelines and pull request workflows.
 
 ## License
 

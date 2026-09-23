@@ -1,79 +1,91 @@
 # SuperNova 專案開發藍圖 (Roadmap)
 
-本文件概述了 SuperNova（基於 TS/Bun 的 Agent Runtime）近期的核心里程碑與未來發展願景。
+本文件概述了 SuperNova（基於 TS/Bun 的自主多代理人執行架構）近期的核心里程碑、現階段架構進展與未來演進願景。
 
-## v0.1.0 - Foundation & Memory System (已完成)
-
-目前已完成 SuperNova 核心基礎設施與「圖向量混合記憶系統」的建置，為後續的自主進化打下穩固根基。
-
-### 核心技術亮點 (Technical Highlights)
-1. **圖向量混合記憶 (Graph & Episodic Memory System)**
-   - **長期記憶 (Graph Memory)**：透過 LLM 自動提煉原子化實體 (Entities) 與關係 (Relations)，結合 OpenAI Embeddings 與 Vectra 本地向量資料庫進行儲存。
-   - **情節記憶 (Episodic Memory)**：透過每日換日機制，將凌亂的對話自動濃縮為「AI 日記」，保留互動氛圍與使用者的潛規則。
-   - **動態上下文檢索 (Dynamic Context Injection)**：實作 `BeforeAgentStep` 生命週期 Hook，自動尋找高關聯圖譜記憶與近期日記，無縫注入大腦。
-2. **底層架構與配置 (Architecture & Config)**
-   - **動態配置引擎 (Zod-based Config Engine)**：採用 Zod Schema 進行強型別校驗與動態覆寫，全面支援 YAML 格式設定檔生成與讀取，提供極佳的防呆與配置彈性。
-   - **工作區隔離 (Two-Tier Workspace Isolation)**：實作「持久層」與「揮發層」兩級工作區，保證 Session 具備隔離的實驗沙盒。
-   - **異步事件驅動 (Asynchronous EventBus)**：完全摒棄直接 Method Call，所有生命週期與狀態切換均走 EventBus，具備防卡死與高度解耦。
-3. **效能與穩健性 (Performance & Reliability)**
-   - **歷史壓縮短路機制 (Compaction Fast-Fail)**：導入 `isOffloaded` 標記，在背景歷史壓縮時達成 $O(1)$ 極速短路檢查，大幅減輕 OOM 壓力。
-   - **快取基礎設施 (LRUCache)**：引入通用 LRUCache 與增量快取機制，消滅高頻事件廣播與歷史打撈造成的記憶體無上限增長。
-   - **歷史檔案安全保護 (History Safety Cap)**：強制實作防禦性 JSONL 檔案讀取切片，防止惡意巨型檔案癱瘓記憶體。
-4. **代理人與會話管理 (Agent & Session State)**
-   - **無狀態執行與意識投影 (Stateless & Projection)**：導入會話層 Projection State，並將 Agent 升級為無狀態執行模式，大幅提升併發處理能力與狀態隔離性。
-   - **透明化 ReAct 迴圈 (Transparent ReAct Loop)**：完整捕獲 LLM 思考過程 (Thoughts) 與工具執行狀態，建立高可觀測性的互動基礎 (`demo/v0.1.0.ts`)。
 ---
 
-## v0.2.0 - 虛擬具身智能與自主進化 (Virtual Embodied AI & Autonomous Evolution) (已完成)
+## 當前版本進展：v2.0.0 - 組合式代理人核心與微內核架構 (已完成)
 
-在確保 v0.1.0 的基礎設施穩定後，我們朝向「基於編碼的自主進化」與「精細操作」方向邁進，並已完成核心建置：
+SuperNova 確立了「一切皆器官 (Everything is an Organ)」的組合式架構體系，徹底以純容器 `UniversalAgent` 取代階層繼承樹，完成了核心基礎設施的全面模組化：
 
-- **虛擬具身智能 (Virtual Embodied AI) (已完成)**
-  - 專注於虛擬環境中的精細操作與感知，達成基於編碼 (Code-based) 的自我修正與自主進化能力。
-  - **多代理人環境抽象層 (Multi-Agent Env Abstraction)**：導入 `BaseEmbodiedEnv` 抽象實作，將虛擬環境 (如 MinecraftEnv) 晉升為系統級單例，統一交由 `RuntimeKernel` 管理生命週期。支援多 Agent 甚至多 Session 同時登入，打造真正的多代理人共存宇宙。
-  - **技能執行會話實體隔離 (Session-level Cache Isolation)**：`SkillManager` 在多代理人共用下實作了 `${sessionId}:${agentId}:${skillId}` 的複合鍵機制，保證物理隔離與快取安全，避免平行宇宙間的腳本污染。
-  - **泛型化外部環境 SDK (Generic Env SDK)**：徹底解耦 Minecraft 專屬依賴。將 SDK 宣告抽離至獨立的 `SuperNovaBot.d.ts` 供動態注入，並利用泛型 (`<TEnv>`) 串接環境，使系統能無縫適配 Line Bot、爬蟲等任何領域。
+### 核心技術亮點 (Technical Highlights)
+1. **組合式代理核心 (Composable Universal Agent)**
+   - **極簡宿主容器**：`UniversalAgent` 純容器程式碼小於 400 行，零業務邏輯，僅專注於狀態機調度與標準推理步驟迴圈 (BeforeStep → BuildPrompt → CollectTools → CallModel → AfterStep)。
+   - **器官介面與生命週期 (`IAgentModule`)**：模組具備獨立優先級 (`priority`)、依賴校驗 (`requires`) 與排斥衝突檢驗 (`conflicts`)。
+   - **動態提示詞組裝引擎**：定義 `PromptSectionIndex` (1~10) 嚴格階層索引，實現跨模組提示詞片段的雙鍵排序自動組裝。
+2. **通訊與會話子系統 (Messaging & Session Subsystem)**
+   - **兩段式大資料卸載 (Two-Tier Offload)**：新訊息落盤門檻 (2KB) + 舊歷史滑動窗口深度壓縮門檻 (512B)，超過門檻自動轉存為獨立 Blob 檔案並以 URI 參照替代。
+   - **會話重啟復原機制 (Session Recovery)**：系統優雅停機時將活躍會話切換為 `SUSPENDED` 落盤，開機時 `SessionManager.start()` 主動批次載入並解凍恢復為 `ACTIVE`。
+   - **收件箱即時釋放與持久化同步**：`popInbox` 取出後徹底自記憶體釋放鍵值，並即刻非同步觸發會話存檔，杜絕重啟重複消費。
+3. **微內核基礎設施 (@supernova/runtime & @supernova/events)**
+   - **合一生命週期管理**：五階段狀態機、服務容器池、實例去重保護與逆序優雅停機 (Reverse Order Shutdown)。
+   - **泛型強型別事件總線**：跨子系統完全解耦，覆蓋系統、會話、代理與步驟 Hook 鏈。
+   - **嚴格型別配置**：徹底淘汰 Zod `.passthrough()`，手動嚴格型別化模型推理參數 (`reasoning`, `parallel_tool_calls`, `service_tier`)。
+4. **完整架構文檔體系**：於 `docs/` 重建涵蓋全域架構總覽 (`ARCH.md`) 與 20+ 篇模組化規格文檔。
 
-- **全新 CodeSkill 自我進化生態系 (Agent-Evolvable Code) (已完成)**
-  - 有別於市面上的傳統 Prompt Skill，CodeSkill 本質上是一段**真實的程式碼**，並且設計成允許 Agent 在執行過程中對其進行**自我優化、重構甚至無中生有新增**。
-  - 基礎嚴格分為 `Observation` (觀察)、`Action` (行動) 等類別，確保 Agent 撰寫出的每一種 Skill 受到邊界限制。
-  - **技術亮點 (Technical Highlights)**：
-    - **動態版號與指標儲存 (CodeSkill Versioning)**：採用指標儲存 (Indirection)，由底層的 `IdGenerator` 自動產生 `skillver_xxx` 作為實體檔案後綴，杜絕新版程式碼直接覆蓋破壞舊版。
-    - **快取與生命週期管理 (Skill Caching & Lifecycle)**：於核心層 `SkillManager` 導入 `LRUCache` 以統一管理 `ActionSkill` 與 `ObservationSkill` 的實例。新增 `onEvict` 鉤子函數 (Hook)，確保被淘汰的背景技能可優雅終止內部迴圈。
-    - **容錯與自我修復閉環 (Self-Healing & Auto-Rollback)**：當新版技能執行失敗，Agent 不僅能紀錄損耗率，更能透過 `rollback_code_skill` 退回穩定版本。並針對所有改動腳本的工具內建了快取自動失效 (`invalidateCache`) 機制，徹底根除更新程式後仍執行舊版的死循環。
-    - **統計指標與唯讀維護**：內建 `read_code_skill`、`list_skill_versions` 與 `delete_code_skill`，讓 Agent 能主動查閱舊碼、檢視歷代勝率並清除冗餘技能以節省 Token。
-    - **底層安全隔離 (Hardened Sandbox & WASM)**：為解決資安風險，計畫未來將動態生成的 CodeSkill 強制限制在 WebAssembly (WASM) 容器中執行。
+---
 
-- **具象化 Task 系統 (已完成)**
-  - 新增 Task 系統，讓主腦與開發者能清楚看見每一步驟的執行進度。
-  - **技術亮點 (Technical Highlights)**：
-    - **LATS 策略搜尋引擎**：結合 MCTS (蒙地卡羅樹狀搜尋) 與 UCB1 演算法，在生成 DAG 之前先進行深度與廣度的策略搜尋與反思，找出最佳解題路徑。近期更導入 `Promise.all` 平行評估機制大幅縮減延遲，並透過動態 Schema 抽離實作了精準的單步 (step-by-step) 推演模式。
-    - **非同步事件排程**：`TaskManager` 與 `StrategizeAndPlanTool` 全面整合 EventBus，以背景執行與事件插針 (Event Injection) 完全解放 Agent 的多工並發能力。
-    - **任務儀表板動態注入 (Task Dashboard Injection)**：透過 `BeforeAgentStep` 生命週期 Hook，根據 Agent 角色（創建者 vs 執行者）動態注入專屬的任務儀表板（全局樹狀圖或專屬任務列表），實現高度情境感知。
-    - **自動化調度閉環 (Orchestration Loop)**：將 `SpawnAgentTool` 與 `AssignTaskTool` 職責分離，搭配 `UpdateTaskStatusTool` 與 `TaskManager` 的背景事件廣播，實現指派、執行、回報到依賴解鎖的全自動閉環。
+## 未來里程碑藍圖 (Future Milestones)
 
-- **進階工作區協同 (Advanced Workspace Collaboration)**
-  - **步驟級暫存 (Step-level Caching)**：任務的每一次關鍵步驟，都強制與目前的 Git Workspace 系統連動進行暫存隔離，確保隨時可乾淨地回溯與檢查。
-  - **多代理人衝突處理 (Multi-Agent Conflict Resolution)**：為未來的多任務並行打下基礎，利用 Git 樹狀分支優勢，自動處理多位 Sub-Agent 同時操作檔案時的 Merge 衝突與狀態合併。
-- **動態工具分配 (Configurable Tool Delegation) (已完成)**
-  - 工具資源不再無腦全域掛載。除了高風險工具需嚴格控管外，`MainAgent` 在建立或喚醒子代理人 (Sub-Agent) 時，可根據任務需求，靈活且精準地「分配 (Delegate)」特定的工具集合給子代理人。
-  - **技術亮點 (Technical Highlights)**：
-    - 將 ToolRegistry 改由 AgentManager 直轄的無狀態物件，不再依賴全域單例，達成完全的生命週期反轉控制。
-    - 支援 SpawnAgentTool 生成免洗代理人 (`isTemp: true`)，此類代理人會在任務完結後自動由系統進行安全隔離與記憶體釋放。
-- **底層領域架構升級 (Domain-Driven Refactoring) (已完成)**
-  - 針對多代理人帶來的程式碼複雜度，預防性地完成了 Clean Architecture 的目錄重構。
-  - **技術亮點 (Technical Highlights)**：
-    - 萃取出純粹的 `domain` 層，將所有 IRepository, IEventBus 等核心介面獨立解耦。
-    - 扁平化底層 `infra` 資料夾為 `llm`, `repositories`, `storage`, `workspace`，解決原先高達 5 層的巢狀依賴地獄。
-    - 集中管理大腦設定檔於 `prompts/`，為不同職責的子代理人提供更整潔的注入管線。
+```mermaid
+flowchart LR
+    M1["v2.1.0\n認知與心理器官\n(Memory & Emotion)"] --> M2["v2.2.0\n長鏈規劃與協同\n(Planner & Supervisor)"]
+    M2 --> M3["v2.3.0\n具身多模態與投影\n(Embodiment & Projection)"]
+```
 
-## v0.2.3 - Novalink 通訊與環境輕量化重構 (已完成)
+### v2.1.0 - 記憶與認知心理器官 (Cognitive Organs) - 進行中 (50%)
+- **長期圖譜與向量記憶器官 (`MemoryModule`, priority: 20)** [已完成]：
+  - **知識圖譜記憶 (Graph Memory)**：以低成本 `EXTRACTION` Preset 在背景非同步抽取實體 (Entities) 與關係三元組 (Subject-Predicate-Object)，並持久化至 `nodes.json` 與 `edges.json`。
+  - **向量語意檢索與子圖拓撲展開**：結合 OpenAI Embeddings 與 Vectra 本地向量索引庫，實現向量相似檢索與一階/多階子圖拓撲召回 (`searchGraphContext`)，於思考前自動注入 `PromptSectionIndex.MEMORY_CONTEXT (3)`。
+  - **主動召回工具 (`recall_memory`)**：提供模型推理思考時主動查詢長程記憶與使用者偏好的標準 Tool。
+  - **端到端實機測試腳本**：重構 `demo/test_memory.ts`，五階段完整驗證抽取、向量化、子圖檢索與工具召回。
+- **認知心理與情緒器官 (`EmotionModule`, priority: 30)** [🔄 待開發]：
+  - **OCC 情感模型與 VAD 向量**：維護 Valence (愉悅度)、Arousal (激動度)、Dominance (主導度) 與內部壓力值。
+  - **半衰期情感衰減**：依據時間流逝自然趨向基礎性格心境。
+  - **多模態同步**：透過 EventBus 廣播情緒變更事件，支援 UI 表情與語音合成音色動態調整。
 
-為了解決傳統輪詢 (Polling) 機制帶來的效能瓶頸，我們完成了環境控制層的全面升級：
 
-- **Novalink 雙向通訊 (Pure WebSocket & JSON-RPC)**：
-  - 放棄 `mineflayer` 框架，全面改用單一 WebSocket 連線，實現極低延遲的事件推播與指令發送。
-  - 將 `mineflayer-pathfinder` 移除，物理導航演算移轉至 Java 伺服器端，大幅減輕 Node.js Runtime 的 CPU 與記憶體消耗。
-- **介面抽象與型別安全隔離 (Interface Abstraction & Type Isolation)**：
-  - 導入 `IBody` 介面，全面取代對特定 Bot 實作的依賴，並統一底層參數命名規範，降低 LLM 型別推斷時的幻覺。
-  - 實作 LLM 專用的型別宣告檔 (`NovaLink.d.ts`)，去除不必要的 `import/export` 模組語法，確保動態注入 Prompt 時的上下文純淨度。
+### v2.2.0 - 樹狀規劃與多代理協同 (Orchestration & Planning)
+- **目標分解與樹狀規劃器官 (`PlannerModule`, priority: 40)**：
+  - **LATS (Language Agent Tree Search)**：實作蒙地卡羅樹狀搜尋、候選路徑展開、數值化自我評估與錯誤回溯剪枝。
+  - **動態進度注入**：將當前執行清單注入 `PromptSectionIndex.PLANNER_STATE (6)`。
+- **多代理監督與授權器官 (`SupervisorModule`, priority: 40)**：
+  - **動態特權審查**：審核下轄 Worker 代理人之高風險操作並簽發一次性 Token。
+  - **子任務動態委派**：依據任務標籤匹配適任 Worker 代理人，並進行成果品質驗收。
+- **任務執行工作者器官 (`TaskWorkerModule`, priority: 60)**：
+  - **TaskDAG 節點對接**：專注執行具體工程節點並向調度器回報進度與產生物件。
+
+### v2.3.0 - 具身多模態與意識投影 (Embodiment & Projection)
+- **具身互動與環境感知器官 (`EmbodimentModule`, priority: 70)**：
+  - **實體與虛擬沙盒適配器**：串接外部物理感測器、數位 OS 桌面或 Minecraft 沙盒環境。
+  - **環境感知注入**：將周遭實體座標與狀態注入 `PromptSectionIndex.ENVIRONMENT (7)`。
+- **意識投影與器官借用通道 (`ProjectionModule`, priority: 50)**：
+  - **心智鏡像 (Mind Mirroring)**：主意識核心跨會話將性格語調投射至邊緣輕量節點。
+  - **非對稱器官借用**：邊緣節點按需借用核心代理人之長期記憶與高階推論能力。
+
+---
+
+## 歷史里程碑回顧 (Archive)
+
+<details>
+<summary><b>點擊展開檢視歷史里程碑 (v0.1.0 - v0.2.3)</b></summary>
+
+### v0.1.0 - Foundation & Memory System (已完成)
+- **圖向量混合記憶**：實作長期記憶 (Graph Memory)、情節記憶 (Episodic Memory) 與動態上下文檢索 (Dynamic Context Injection)。
+- **底層架構與配置**：Zod 動態配置引擎、工作區隔離沙盒、非同步 EventBus。
+- **效能與穩健性**：歷史壓縮短路機制 (`isOffloaded`)、通用 LRUCache、歷史檔案安全切片讀取保護。
+- **代理人與會話管理**：會話層 Projection State、無狀態執行模式、透明化 ReAct 思考循環。
+
+### v0.2.0 - 虛擬具身智能與自主進化 (Virtual Embodied AI & Autonomous Evolution) (已完成)
+- **虛擬具身智能**：`BaseEmbodiedEnv` 多代理環境抽象層、技能執行會話實體隔離、泛型化外部環境 SDK。
+- **CodeSkill 自我進化生態系**：程式碼自我編寫與修復閉環、動態版號與指標儲存、LRU 淘汰鉤子 (`onEvict`)、自我修復快取作廢與自動退版。
+- **具象化 Task 系統**：LATS 策略搜尋引擎、非同步事件排程、任務儀表板動態注入、`SpawnAgentTool` 與 `AssignTaskTool` 自動化調度閉環。
+- **進階工作區協同**：步驟級 Git 暫存隔離、多代理人衝突處理。
+- **動態工具分配**：ToolRegistry 實例化生命週期反轉控制、免洗代理人 (`isTemp: true`) 自動釋放。
+- **底層領域架構升級**：Clean Architecture 目錄重構、萃取純粹 domain 層、扁平化 infra。
+
+### v0.2.3 - Novalink 通訊與環境輕量化重構 (已完成)
+- **Novalink 雙向通訊**：單一 WebSocket 連線搭配 JSON-RPC 2.0，實現全雙工低延遲通訊；物理運算與尋路演算卸載至後端伺服器。
+- **介面抽象與型別安全隔離**：導入 `IBody` 介面，統一命名規範；產出純淨之 `NovaLink.d.ts` 避免動態注入時產生型別幻覺。
+
+</details>

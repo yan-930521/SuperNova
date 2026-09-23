@@ -8,6 +8,62 @@
 
 ## [Unreleased]
 
+### Added (新增功能與器官模組)
+- **長期記憶與語意圖譜器官 (MemoryModule & Knowledge Graph Engine)**：
+  - **器官介面與生命週期整合**：基於 `IAgentModule` (priority: 20, requires: `['profile', 'history']`) 實作長期記憶器官。
+  - **思考前置語意檢索 (`onBeforeRun`)**：提取當前對話關鍵字與問題，調用 Embeddings 生成查詢向量，自動搜尋圖譜並將一階/多階子圖拓撲 Markdown 結構注入 `PromptSectionIndex.MEMORY_CONTEXT (3)`。
+  - **思考後置背景非同步萃取 (`onAfterRun`)**：在對話推理完成後，於背景非同步呼叫 `EXTRACTION` Preset 模型抽取實體三元組 (Subject-Predicate-Object) 並更新圖譜，完全不阻塞即時對話響應。
+  - **主動召回工具 (`recall_memory`)**：提供模型推理過程中主動深度搜尋長期事實、實體屬性與使用者偏好的標準 Tool。
+  - **主動萃取公開介面 (`extractMemory`)**：支援手動輸入對話文本並等待圖譜與向量索引落盤完成。
+- **知識圖譜與本地向量倉儲 (JsonGraphRepository)**：
+  - **BaseJsonRepository 與 Vectra 雙層架構**：繼承 `@supernova/storage` 基礎架構，節點與關係邊分別原子存入 `nodes.json` 與 `edges.json`；向量索引則交由 `vectra` 本地向量庫 (`index/`) 管理。
+  - **高維度向量剔除最佳化**：在節點持久化存入 JSON 前剔除高維度 embedding 陣列，大幅節省磁碟空間與反序列化記憶體開銷。
+  - **圖遍歷與聯合檢索**：支援節點與邊的 CRUD、級聯清理 (Cascade Delete)、向量相似度檢索 (`searchNodesByVector`)、多階子圖展開 (`getSubgraph`) 與聯合檢索 (`searchGraphContext`)。
+- **端到端實機測試展示程序 (`demo/test_memory.ts`)**：
+  - 以全新 V2 架構重寫測試腳本，完整覆蓋實體抽取、圖譜結構檢查、自然語言向量子圖檢索、`recall_memory` 工具調用與逆序優雅停機。
+
+### Changed (架構重構與依賴注入)
+- **倉儲單例與外部依賴注入 (IoC)**：
+  - 重構 `FileSystemProfileRepository` 與 `JsonGraphRepository`，統一在應用程式外部建立單例並透過建構子注入各模組，徹底杜絕模組內私自實例化造成的快取不一致與檔案控制代碼競爭。
+  - 嚴格落實虛擬代理人（Virtual Actor）模型，Agent 人設沙盒隔離持久化至 `sessions/<sessionId>/agents/<agentId>/profile.json`。
+
+
+## [2.0.0] - 2026-09-23
+### Added (新增功能與重大架構重組)
+- **組合式代理核心 (Composable Agent Architecture - UniversalAgent)**：
+  - **純容器與器官解耦**：以輕量級容器 `UniversalAgent`（<400 行代碼）取代階層繼承樹。所有具體能力均作為獨立器官模組 (`IAgentModule`) 進行熱插拔與優先級調度。
+  - **生命週期步驟迴圈 (Standard Step Loop)**：封裝 BeforeStep → BuildPrompt → CollectTools → CallModel → AfterStep 的標準推論管線。
+  - **動態提示詞組裝引擎 (Prompt Engine)**：定義標準語意階層索引 (`PromptSectionIndex` 1~10)，支援模組化雙鍵排序動態組裝。
+- **身分與認知協議器官 (ProfileModule)**：
+  - 支援載入舊版結構化 Profile JSON 人設（特別是夏沫 Xiamo 主意識角色定位）。
+  - 具備 LRU TTL 快取之遞迴提示詞載入器 (`PromptLoader`)。
+  - 支援在 Profile 中建議 `llmPreset`，並於掛載時透過 `agent.setPresetName()` 動態切換底層語言模型規格。
+- **會話歷史器官與兩段式大資料卸載 (HistoryModule & Two-Tier Offload)**：
+  - 新增新訊息即時落盤門檻 (`offload_threshold_new_message`, 2KB) 與舊歷史滑動窗口深度壓縮門檻 (`offload_threshold_compact`, 512B)。
+  - 支援大資料自動轉存為獨立 Blob 文字檔，訊息本體以 `blob://` URI 取代，徹底防止 Token 爆量與記憶體膨脹。
+- **微內核執行期基礎設施 (@supernova/runtime)**：
+  - 實作五階段生命週期狀態機（`INITIALIZING` → `BOOTING` → `RUNNING` → `STOPPING` → `STOPPED`）。
+  - 實作依賴注入服務池 (Service Registry)、去重保護與熱插拔外掛機制。
+  - 支援嚴格按註冊順序相反之「逆序優雅停機 (Reverse Order Shutdown)」。
+- **強型別事件總線 (@supernova/events)**：
+  - 提供支援泛型推導的 `EventBus`，覆蓋系統、會話、代理與步驟 Hook 四大維度事件。
+- **會話重啟復原機制 (Session Recovery)**：
+  - 在 `SessionManager.start()` 階段主動呼叫 `FileSystemSessionRepository.loadAll()`，自動將先前停機掛起之 `SUSPENDED` 會話解凍還原為 `ACTIVE` 並重新載入記憶體池。
+- **全新系統架構規格文檔 (Docs Rebuild)**：
+  - 於 `docs/` 建立涵蓋全域拓撲 (`ARCH.md`)、架構哲學、微內核、通訊、器官模組與 API 清單共 20+ 份標準規格文件。
+
+### Changed (優化與安全性變更)
+- **配置系統嚴格型別化 (Strict Zod Typing)**：
+  - **徹底淘汰 Zod `.passthrough()`**，為語言模型之 `reasoning`、`parallel_tool_calls` 與 `service_tier` 手動宣告嚴格型別。
+  - 覆蓋並更新 `config.yaml`，全面接入真實 `gpt-5.6-luna` 與 `gpt-4o-mini` 模型預設。
+- **收件箱緩衝記憶體釋放與持久化同步 (InboxBuffer Fix)**：
+  - 修正 `Session.popInbox` 原先僅清空陣列之問題，改為直接自 Map 中刪除該鍵 (`this.inboxBuffer.delete(agentId)`)，徹底釋放記憶體。
+  - 在 `MessageRouter.dispatchSessionInbox` 取出訊息後，即刻非同步觸發 `SessionManager.saveSession` 同步落盤，消除系統重啟重複消費訊息之隱患。
+
+### Removed (移除過時功能)
+- 刪除過時的 `coreCapabilitiesModule` 與 Mock 測試支援，全面對接真實環境與模型 API。
+
+
 ## [0.2.4] - 2026-08-28
 ### Added (新增功能與基礎設施)
 - **字串陣列權限控制系統 (String Array RBAC System)**：

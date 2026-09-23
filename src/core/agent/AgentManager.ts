@@ -1,337 +1,150 @@
-import { ConsoleTransport } from '@supernova/common/transports';
-
-import { Config } from '../config/Config';
-import { HookEvent, IEvent, IEventBus, PromptSectionIndex } from '@supernova/events/IBus';
-import { ICodeSkillRepository } from '../domain/ICodeSkillRepository';
-import { IAgentStateRepository, IDataBlockRepository } from '../domain/IRepository';
-import { ITaskManager, ITaskPlanningService } from '../domain/ITask';
-import { IWorkspaceManager } from '../domain/IWorkspaceManager';
-import { LLMProvider } from '../infra/llm/LLMProvider';
+import { ILLMProvider } from '@supernova/common/llm/types';
 import { LogManager } from '@supernova/common/LogManager';
-import { ILifecycle } from '@supernova/runtime/lifecycle/ILifecycle';
-import { BaseTool } from '../tools/BaseTool';
-import { ToolRegistry } from '../tools/ToolRegistry';
-import { AgentOptions, AgentType, BaseAgent } from './BaseAgent';
-import { EmbodiedAgent } from './EmbodiedAgent';
-import { MainAgent } from './MainAgent';
-import { TaskAgent } from './TaskAgent';
+import { ConsoleTransport } from '@supernova/common/transports';
+import { IEventBus } from '@supernova/events/IBus';
+import { IKernel, IKernelPlugin } from '@supernova/runtime/kernel';
+
+import { IConfigManager } from '../../../packages/common/src/config';
+import { UniversalAgent, UniversalAgentOptions } from './UniversalAgent';
+
+export const DEFAULT_AGENT_MANAGER_NAME = 'agent_manager';
 
 /**
- * 代理人管理器 (AgentManager)
- * 負責所有 Agent 的生命週期、活躍池管理以及與倉儲層的存取 (Dehydrate / Rehydrate)
+ * AgentManager
+ * 實作 IKernelPlugin (extends ILifecycle)，負責：
+ * 1. 自動從 Kernel 注入依賴 (LLMProvider, EventBus, ConfigManager)
+ * 2. 集中管理並託管所有 UniversalAgent 實例之生命週期
+ * 3. 向 Kernel 註冊 'agent_manager' 服務
  */
-export class AgentManager implements ILifecycle {
-    private readonly logger = new LogManager({ type: 'SYSTEM', name: 'AgentManager' }).addTransport(new ConsoleTransport('DEBUG'));
+export class AgentManager implements IKernelPlugin {
+    public readonly name = DEFAULT_AGENT_MANAGER_NAME;
 
-    // 記憶體中的活躍 Agent 池 (Key: agentId)
-    private readonly activeAgents: Map<string, BaseAgent> = new Map();
-    private readonly toolRegistry: ToolRegistry;
-    private readonly sessionAgents: Map<string, Set<string>> = new Map();
+    private kernel?: IKernel;
+    private eventBus?: IEventBus;
+    private llmProvider?: ILLMProvider;
+    private configManager?: IConfigManager;
 
-    private addAgentToPool(agent: BaseAgent) {
-        this.activeAgents.set(agent.id, agent);
-        if (!this.sessionAgents.has(agent.sessionId)) {
-            this.sessionAgents.set(agent.sessionId, new Set());
-        }
-        this.sessionAgents.get(agent.sessionId)!.add(agent.id);
+    /** 託管之 Agent 實例池 (agentId -> UniversalAgent) */
+    private readonly agents = new Map<string, UniversalAgent>();
+
+    private readonly logger = new LogManager({ type: 'SYSTEM', name: 'AgentManager' }).addTransport(
+        new ConsoleTransport('DEBUG')
+    );
+
+    /**
+     * 安裝外掛時注入宿主內核實例
+     */
+    public async install(kernel: IKernel): Promise<void> {
+        this.kernel = kernel;
     }
 
-    private removeAgentFromPool(agentId: string) {
-        const agent = this.activeAgents.get(agentId);
-        if (agent) {
-            this.activeAgents.delete(agentId);
-            const sessionSet = this.sessionAgents.get(agent.sessionId);
-            if (sessionSet) {
-                sessionSet.delete(agentId);
-                if (sessionSet.size === 0) {
-                    this.sessionAgents.delete(agent.sessionId);
-                }
-            }
-        }
-    }
-
-    constructor(
-        private readonly config: Config,
-        private readonly stateRepo: IAgentStateRepository,
-        private readonly eventBus: IEventBus,
-        private readonly dataBlockRepo: IDataBlockRepository,
-        private readonly workspaceManager: IWorkspaceManager,
-        private readonly llmProvider: LLMProvider,
-        private readonly taskManager: ITaskManager,
-        private readonly codeSkillRepo: ICodeSkillRepository,
-        private readonly taskPlanningService: ITaskPlanningService
-    ) {
-        this.toolRegistry = new ToolRegistry(this.workspaceManager, this, this.taskManager, this.codeSkillRepo, this.taskPlanningService);
-    }
-
-    public getToolRegistry(): ToolRegistry {
-        return this.toolRegistry;
-    }
-
-    // ==========================================
-    // 生命週期 (ILifecycle)
-    // ==========================================
-
+    /**
+     * 接收 Kernel 依賴並準備運行環境
+     */
     public async initialize(): Promise<void> {
-        this.logger.info('Initialized.');
+        this.logger.info('Initializing AgentPlugin...');
 
-        // 註冊全局 Hook，在每個 Agent 思考前注入隊友狀態
-        this.eventBus.subscribe(HookEvent.BeforeAgentStep, async (event: IEvent<HookEvent.BeforeAgentStep>) => {
-            const payload = event.payload;
-            if (!payload || !payload.agentId || !payload.injectedPrompts) return;
-
-            const agentId = payload.agentId;
-            const agent = this.activeAgents.get(agentId);
-            if (!agent) return;
-
-            const teamMembers = [];
-            const peers = this.sessionAgents.get(agent.sessionId);
-            if (peers) {
-                for (const id of peers) {
-                    if (id !== agentId) {
-                        const a = this.activeAgents.get(id);
-                        if (a) teamMembers.push(`- [${id}] (Type: ${a.type})`);
-                    }
-                }
+        if (this.kernel) {
+            // 從 Kernel 獲取相依核心服務
+            if (this.kernel.hasService('events')) {
+                this.eventBus = this.kernel.getService<IEventBus>('events');
             }
-
-            if (teamMembers.length > 0) {
-                payload.injectedPrompts.push({
-                    index: PromptSectionIndex.ENVIRONMENT_STATE,
-                    content: `[NETWORK STATE]\nActive Agents in your session that you can communicate with:\n${teamMembers.join('\n')}`
-                });
+            if (this.kernel.hasService('llm')) {
+                this.llmProvider = this.kernel.getService<ILLMProvider>('llm');
             }
+            if (this.kernel.hasService('config')) {
+                this.configManager = this.kernel.getService<IConfigManager>('config');
+            }
+        }
 
-        });
+        this.logger.info('AgentPlugin initialized successfully.');
     }
 
+    /**
+     * 啟動外掛並啟動所有受託管之 Agent
+     */
     public async start(): Promise<void> {
-        this.logger.info('Started.');
+        this.logger.info('Starting AgentPlugin...');
+        for (const agent of this.agents.values()) {
+            await agent.start();
+        }
     }
 
+    /**
+     * 優雅停止所有託管之 Agent
+     */
     public async stop(): Promise<void> {
-        this.logger.debug('Stopping... Dehydrating all active agents.');
-        // 優雅停機時，掛起並存檔所有 Agent
-        const promises: Promise<void>[] = [];
-        for (const agentId of this.activeAgents.keys()) {
-            promises.push(this.dehydrate(agentId));
+        this.logger.info('Stopping AgentPlugin and terminating all active agents...');
+        for (const agent of this.agents.values()) {
+            try {
+                await agent.stop();
+            } catch (err) {
+                this.logger.error(`Error stopping agent [${agent.id}]: ${String(err)}`);
+            }
         }
-        await Promise.all(promises);
-        this.logger.debug('All active agents dehydrated successfully.');
-    }
-
-    // ==========================================
-    // 核心操作 (Spawn, Dehydrate, Rehydrate)
-    // ==========================================
-
-    /**
-     * 根據 AgentType 實例化對應的 Agent 類別
-     */
-    private createAgentInstance(
-        type: AgentType,
-        id: string,
-        sessionId: string,
-        options?: Partial<AgentOptions>
-    ): BaseAgent {
-        const mergedOptions: AgentOptions = {
-            ...options,
-            llmProvider: this.llmProvider,
-            eventBus: this.eventBus,
-            config: this.config,
-            dataBlockRepo: this.dataBlockRepo,
-            workspaceManager: this.workspaceManager,
-            codeSkillRepo: this.codeSkillRepo
-        };
-        switch (type) {
-            case AgentType.MAIN:
-                return new MainAgent(id, sessionId, mergedOptions);
-            case AgentType.TASK:
-                return new TaskAgent(id, sessionId, mergedOptions);
-            case AgentType.EMBODIED:
-                return new EmbodiedAgent(id, sessionId, mergedOptions);
-            default:
-                throw new Error(`Unsupported AgentType: ${type}`);
-        }
+        this.agents.clear();
+        this.logger.info('AgentPlugin stopped.');
     }
 
     /**
-     * 建立並註冊一個全新的 Agent
+     * 建立並託管一個新的 UniversalAgent 實例
+     * @param id Agent 唯一 ID
+     * @param options Agent 初始化選項
      */
-    public async spawnAgent(
-        type: AgentType,
-        id: string,
-        sessionId: string,
-        options?: Partial<AgentOptions>
-    ): Promise<BaseAgent> {
-        if (this.activeAgents.has(id)) {
-            throw new Error(`Agent with ID ${id} is already active.`);
+    public createAgent(id: string, options?: UniversalAgentOptions): UniversalAgent {
+        if (this.agents.has(id)) {
+            throw new Error(`Agent with ID [${id}] already exists in AgentPlugin`);
         }
 
-        const toolNamesToLoad = options?.allowedTools ?? this.getDefaultTools(type);
-        if ((type === AgentType.TASK || options?.isTemp || options?.assignedTaskId) && !toolNamesToLoad.includes('update_task_status')) {
-            toolNamesToLoad.push('update_task_status');
+        if (!this.eventBus) {
+            throw new Error('EventBus is not available in AgentPlugin. Ensure "events" service is registered in Kernel.');
         }
 
-        const agent = this.createAgentInstance(type, id, sessionId, {
-            ...options,
-            allowedTools: toolNamesToLoad
-        });
-
-        try {
-            // 掛載工作區與工具
-            const workspaceType = options?.workspaceType || 'PERSISTENT';
-            await this.workspaceManager.initWorkspace(sessionId, id, workspaceType);
-
-            const tools: BaseTool[] = [];
-            tools.push(...this.toolRegistry.getTools(toolNamesToLoad));
-
-            agent.updateTools(tools);
-
-            // 初始化完成，切換為就緒狀態並正式加入活躍池
-            agent.setReady();
-            this.addAgentToPool(agent);
-
-            // 初始存檔 (需確保已經在 activeAgents 內)
-            await this.saveAgent(id);
-
-            this.logger.debug(`Spawned new agent ${id} of type ${type}`);
-            return agent;
-        } catch (err) {
-            await agent.destroy();
-            this.removeAgentFromPool(id);
-            throw err;
-        }
-    }
-
-    /**
-     * 脫水 (掛起並寫入持久化)
-     */
-    public async dehydrate(agentId: string): Promise<void> {
-        const agent = this.activeAgents.get(agentId);
-        if (!agent) {
-            this.logger.warn(`Cannot dehydrate agent ${agentId}, not found in active pool.`);
-            return;
+        if (!this.llmProvider) {
+            throw new Error('LLMProvider is not available in AgentPlugin. Ensure "llm" service is registered in Kernel.');
         }
 
-        // 呼叫實體方法進入掛起狀態，但不直接做檔案 I/O
-        agent.suspend();
+        const agent = new UniversalAgent(
+            id,
+            this.eventBus,
+            this.llmProvider,
+            {
+                config: this.configManager,
+                ...options,
+            }
+        );
 
-        // 寫入持久化
-        try {
-            await this.saveAgent(agentId);
-        } finally {
-            // 實體銷毀並從池中移除
-            await agent.destroy();
-            this.removeAgentFromPool(agentId);
-        }
-        this.logger.debug(`Agent ${agentId} dehydrated.`);
-    }
-
-    /**
-     * 儲存特定 Agent 的狀態快照，但不掛起/銷毀它
-     * 適用於對話進行中、工具執行完畢後的即時存檔
-     */
-    public async saveAgent(agentId: string): Promise<void> {
-        const agent = this.activeAgents.get(agentId);
-        if (!agent) {
-            this.logger.warn(`Cannot save agent ${agentId}, not found in active pool.`);
-            return;
-        }
-
-        const data = agent.serialize();
-        await this.stateRepo.saveAgentState(agent.sessionId, agentId, data);
-        this.logger.debug(`Agent ${agentId} state saved.`);
-    }
-
-    /**
-     * 徹底銷毀 (用於 GC，例如分身執行完畢後消散)
-     * 不寫入狀態快照，直接從記憶體抹除實體
-     */
-    public async terminateAgent(agentId: string): Promise<void> {
-        const agent = this.activeAgents.get(agentId);
-        if (!agent) {
-            this.logger.warn(`Cannot terminate agent ${agentId}, not found in active pool.`);
-            return;
-        }
-
-        // 呼叫實體的 destroy 清理內部訂閱與定時器
-        await agent.destroy();
-
-        // 從活躍池中移除
-        this.removeAgentFromPool(agentId);
-        this.logger.debug(`Agent ${agentId} terminated (GC).`);
-    }
-
-    public getAgent(agentId: string): BaseAgent | undefined {
-        return this.activeAgents.get(agentId);
-    }
-
-    /**
-     * 喚醒 (從持久化讀取並還原到記憶體)
-     */
-    public async rehydrate(agentId: string, sessionId: string, options?: any): Promise<BaseAgent> {
-        if (this.activeAgents.has(agentId)) {
-            this.logger.warn(`Agent ${agentId} is already active.`);
-            return this.activeAgents.get(agentId)!;
-        }
-
-        // 從儲存庫讀取
-        const data = await this.stateRepo.loadAgentState(sessionId, agentId);
-
-        if (!data) {
-            throw new Error(`Failed to rehydrate agent ${agentId}: State data not found.`);
-        }
-
-        // 透過靜態載入建立實例
-        const agent = this.createAgentInstance(data.type, data.id, data.sessionId, options);
-
-        // 注入狀態
-        agent.hydrate(data);
-
-        // 掛載工作區與工具
-        await this.workspaceManager.initWorkspace(sessionId, agentId, data.workspaceType || 'PERSISTENT');
-
-        const tools: BaseTool[] = [];
-        const toolNamesToLoad = (data as any).allowedTools ?? this.getDefaultTools(data.type);
-        if ((data.type === AgentType.TASK || data.isTemp || data.assignedTaskId) && !toolNamesToLoad.includes('update_task_status')) {
-            toolNamesToLoad.push('update_task_status');
-        }
-        tools.push(...this.toolRegistry.getTools(toolNamesToLoad));
-
-        agent.updateTools(tools);
-        agent.setReady();
-
-        // 完全就緒後才放入活躍池
-        this.addAgentToPool(agent);
-
-        this.logger.debug(`Agent ${agentId} rehydrated successfully.`);
+        this.agents.set(id, agent);
+        this.logger.debug(`Created and registered agent [${id}]`);
         return agent;
     }
 
-    public async dehydrateSession(sessionId: string): Promise<void> {
-        const agentIds = this.sessionAgents.get(sessionId);
-        if (!agentIds || agentIds.size === 0) return;
-
-        // 拷貝一份避免迭代中修改 Set
-        const promises = Array.from(agentIds).map(id => this.dehydrate(id));
-        await Promise.all(promises);
-        this.logger.info(`All agents in session ${sessionId} have been dehydrated.`);
+    /**
+     * 獲取特定 Agent
+     */
+    public getAgent(id: string): UniversalAgent | undefined {
+        return this.agents.get(id);
     }
 
-    public getDefaultTools(type: AgentType): string[] {
-        if (type === AgentType.MAIN) {
-            return ['toggle_projection', 'read_file', 'write_file', 'list_files', 'run_bash', 'read_blob', 'send_message', 'spawn_agent', 'assign_task', 'plan_tasks', 'strategize_and_plan', 'tavily_search', 'tavily_extract'];
-        }
-        if (type === AgentType.TASK) {
-            return ['read_file', 'write_file', 'list_files', 'run_bash', 'read_blob', 'send_message'];
-        }
-        if (type === AgentType.EMBODIED) {
-            return ['send_message', 'create_code_skill', 'read_code_skill', 'rollback_code_skill', 'list_skill_versions', 'delete_code_skill', 'test_code_skill'];
-        }
-        return ['send_message'];
+    /**
+     * 獲取所有已註冊的 Agent 實例清單
+     */
+    public getAllAgents(): UniversalAgent[] {
+        return Array.from(this.agents.values());
     }
 
-    public getAllAvailableToolNames(): string[] {
-        return this.toolRegistry.getTools().map(t => t.name);
+    /**
+     * 銷毀並停止特定 Agent
+     */
+    public async removeAgent(id: string): Promise<boolean> {
+        const agent = this.agents.get(id);
+        if (!agent) {
+            return false;
+        }
+
+        await agent.stop();
+        this.agents.delete(id);
+        this.logger.debug(`Removed agent [${id}]`);
+        return true;
     }
 }
